@@ -25,9 +25,9 @@
 import type { Loop, Mesh, Piece, Pt } from '../types';
 import { traceContours } from './contours';
 import { binarize, cleanupMask, pad, type Mask } from './image';
-import { dedupe, orient, pointInPolygon, resample, simplify, smooth } from './polygon';
+import { area, dedupe, orient, pointInPolygon, resample, simplify, smooth } from './polygon';
 import { emptyMesh, extrudeRegion, merge } from './mesh';
-import { offsetRegions, sanitize } from './clipper';
+import { intersect, offsetRegions, sanitize } from './clipper';
 import { boxOf } from './shapes';
 
 export interface WatermarkOpts {
@@ -222,27 +222,177 @@ interface PlacedText {
   holes: Pt[][]; // CW
 }
 
+/** Área de un conjunto de regiones: exteriores menos agujeros. */
+function regionsArea(regions: { outer: Pt[]; holes: Pt[][] }[]): number {
+  let a = 0;
+  for (const r of regions) {
+    a += Math.abs(area(r.outer));
+    for (const h of r.holes) a -= Math.abs(area(h));
+  }
+  return a;
+}
+
+/** Escalas que se prueban antes de rendirse: de tamaño completo a la mitad. */
+const FITS = [1, 0.9, 0.8, 0.7, 0.6, 0.5];
+
+/** Reparte las palabras en `n` líneas de anchos parecidos, o null si no dan. */
+function splitLines(text: string, n: number): string[] | null {
+  const clean = text.trim();
+  if (n === 1) return [clean];
+
+  const words = clean.split(/\s+/);
+  if (words.length < n) return null;
+
+  const target = clean.length / n;
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of words) {
+    const joined = cur ? `${cur} ${w}` : w;
+    if (cur && lines.length < n - 1 && joined.length > target) {
+      lines.push(cur);
+      cur = w;
+    } else {
+      cur = joined;
+    }
+  }
+  lines.push(cur);
+  return lines.length === n ? lines : null;
+}
+
+interface TextBlock {
+  loops: Loop[]; // centrado en el origen
+  w: number;
+  h: number;
+}
+
+/** El texto compuesto en una o varias líneas apiladas, centrado en el origen. */
+function textBlock(lines: string[], heightMm: number, raster: (t: string) => Mask): TextBlock | null {
+  const pitch = heightMm * 1.3; // interlineado
+  const all: Loop[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const loops = textLoops(lines[i], heightMm, raster);
+    if (!loops.length) return null;
+    const dy = ((lines.length - 1) / 2 - i) * pitch;
+    for (const l of loops) {
+      all.push({ hole: l.hole, pts: l.pts.map(([x, y]) => [x, y + dy] as Pt) });
+    }
+  }
+
+  const b = boxOf(all);
+  return {
+    loops: all.map((l) => ({ hole: l.hole, pts: l.pts.map(([x, y]) => [x - b.cx, y - b.cy] as Pt) })),
+    w: b.w,
+    h: b.h,
+  };
+}
+
+/**
+ * Busca dónde cabe ENTERO un rectángulo de texto dentro del material. La
+ * silueta manda: en media mariposa el texto no puede ir centrado en el
+ * rectángulo envolvente, porque la mitad caería en el aire y se grabaría medio
+ * texto. Se barre la planta de abajo arriba (la marca, cuanto más discreta,
+ * mejor) y del centro hacia los lados.
+ */
+function scanSpot(
+  safe: { outer: Pt[]; holes: Pt[][] }[],
+  b: Bounds,
+  w: number,
+  h: number,
+): { cx: number; cy: number } | null {
+  const spanW = b.maxX - b.minX;
+  const spanH = b.maxY - b.minY;
+  if (w > spanW || h > spanH) return null;
+
+  const rowStep = Math.max(h * 0.75, (spanH - h) / 10);
+  for (let cy = b.minY + h / 2; cy <= b.maxY - h / 2 + 1e-6; cy += rowStep) {
+    const slack = (spanW - w) / 2;
+    const center = (b.minX + b.maxX) / 2;
+    const xs: number[] = [center];
+    for (let s = 1; s <= 4; s++) {
+      const d = slack * (s / 4);
+      xs.push(center - d, center + d);
+    }
+
+    for (const cx of xs) {
+      const rect: Pt[] = [
+        [cx - w / 2, cy - h / 2],
+        [cx + w / 2, cy - h / 2],
+        [cx + w / 2, cy + h / 2],
+        [cx - w / 2, cy + h / 2],
+      ];
+      // Cabe si la intersección con el material es el rectángulo entero.
+      const inside = intersect(safe, [rect]);
+      if (regionsArea(inside) >= w * h * 0.995) return { cx, cy };
+    }
+  }
+  return null;
+}
+
 /**
  * Contornos del texto ya escalados y colocados sobre la planta de la pieza.
- * Con `mirror` el texto se espeja en X: es lo que toca cuando se graba en la
- * cara de abajo, para que se lea bien al dar la vuelta a la pieza.
+ * Con placa conocida se busca un hueco de verdad, ajustado a la silueta:
+ * primero el texto entero en una línea, luego partido en dos y en tres (alguna
+ * palabra baja de línea antes que encoger), y solo después se reduce el tamaño.
+ * Si ni a la mitad cabe entero, la pieza se queda sin marca: mejor eso que
+ * medio texto. Con `mirror` el texto se espeja en X, que es lo que toca al
+ * grabar la cara de abajo para que se lea bien al dar la vuelta a la pieza.
  */
 function placeText(piece: Piece, opts: WatermarkOpts, mirror: boolean): PlacedText | null {
-  const loops = textLoops(opts.text, opts.heightMm, opts.raster ?? blockTextMask);
-  if (!loops.length) return null;
+  const raster = opts.raster ?? blockTextMask;
+  if (!opts.text.trim()) return null;
 
-  const fp = piece.plate ? plateBounds(piece.plate.regions) : footprint(piece.mesh);
-  if (!Number.isFinite(fp.minX)) return null;
-  const pieceW = fp.maxX - fp.minX;
-  const textBox = boxOf(loops);
+  let loops: Loop[];
+  let fit: number;
+  let cx: number;
+  let cy: number;
 
-  // Si el texto no cabe a lo ancho, se reduce en bloque.
-  const maxW = pieceW * 0.82;
-  const fit = textBox.w > maxW ? maxW / textBox.w : 1;
+  if (piece.plate) {
+    // Margen de respeto al borde: el texto no roza el canto de la pieza.
+    const safe = offsetRegions(
+      piece.plate.regions.map((r) => r.outer),
+      piece.plate.regions.flatMap((r) => r.holes),
+      -1.2,
+    );
+    if (!safe.length) return null;
+    const bounds = plateBounds(safe);
 
-  const cx = (fp.minX + fp.maxX) / 2;
-  // Pegado al borde inferior de la planta, con un margen.
-  const cy = fp.minY + opts.heightMm * 0.5 * fit + 2;
+    const blocks: TextBlock[] = [];
+    for (const n of [1, 2, 3]) {
+      const lines = splitLines(opts.text, n);
+      if (!lines) continue;
+      const block = textBlock(lines, opts.heightMm, raster);
+      if (block) blocks.push(block);
+    }
+    if (!blocks.length) return null;
+
+    let placed: { block: TextBlock; fit: number; cx: number; cy: number } | null = null;
+    for (const f of FITS) {
+      for (const block of blocks) {
+        const spot = scanSpot(safe, bounds, block.w * f, block.h * f);
+        if (spot) {
+          placed = { block, fit: f, ...spot };
+          break;
+        }
+      }
+      if (placed) break;
+    }
+    if (!placed) return null;
+
+    loops = placed.block.loops;
+    ({ fit, cx, cy } = placed);
+  } else {
+    // Sin placa (relieve a ciegas): borde inferior del envolvente, como antes.
+    const block = textBlock([opts.text], opts.heightMm, raster);
+    if (!block) return null;
+    const fp = footprint(piece.mesh);
+    if (!Number.isFinite(fp.minX)) return null;
+    const maxW = (fp.maxX - fp.minX) * 0.82;
+    loops = block.loops;
+    fit = block.w > maxW ? maxW / block.w : 1;
+    cx = (fp.minX + fp.maxX) / 2;
+    cy = fp.minY + opts.heightMm * 0.5 * fit + 2;
+  }
 
   const place = (pts: Pt[]): Pt[] => {
     const out = pts.map(([x, y]) => [x * fit + cx, y * fit + cy] as Pt);

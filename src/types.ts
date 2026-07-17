@@ -106,6 +106,9 @@ export type ProductId =
   | 'figure-box'
   | 'puzzle';
 
+/** Formas de contorno para las placas. 'image' sigue la silueta del dibujo. */
+export type MoldShape = 'image' | 'rounded' | 'square' | 'circle' | 'heart';
+
 /** Qué controles enseña cada producto. La UI se dibuja sola desde aquí. */
 export type Field = keyof Params;
 
@@ -164,6 +167,8 @@ export interface Params {
   thickness: number;
   border: number;
   cornerRadius: number;
+  /** Contorno del molde en las placas: seguir la imagen o una forma estándar. */
+  moldShape: MoldShape;
 
   // Grabado en hueco
   engraveDepth: number;
@@ -250,6 +255,9 @@ export const DEFAULTS: Params = {
   thickness: 3,
   border: 4,
   cornerRadius: 6,
+  // Por defecto el molde sigue la silueta de la imagen subida: es lo que la
+  // usuaria espera («que se adapte a la imagen»), no un rectángulo fijo.
+  moldShape: 'image',
 
   engraveDepth: 0.8,
 
@@ -293,11 +301,14 @@ export const DEFAULTS: Params = {
   lidLip: 3,
 };
 
+/** Un metadato de control: deslizador (rango), interruptor o desplegable. */
+export type FieldMeta =
+  | { label: string; unit?: string; min: number; max: number; step: number }
+  | { toggle: true; label: string }
+  | { select: true; label: string; options: { value: string; label: string }[] };
+
 /** Etiquetas y rangos de cada control. Un sitio, no cinco. */
-export const FIELD_META: Record<
-  Field,
-  { label: string; unit?: string; min: number; max: number; step: number } | { toggle: true; label: string }
-> = {
+export const FIELD_META: Record<Field, FieldMeta> = {
   product: { toggle: true, label: '' },
 
   threshold: { label: 'Umbral', min: 8, max: 248, step: 1 },
@@ -329,6 +340,17 @@ export const FIELD_META: Record<
   thickness: { label: 'Grosor', unit: 'mm', min: 1, max: 12, step: 0.2 },
   border: { label: 'Marco', unit: 'mm', min: 0, max: 20, step: 0.5 },
   cornerRadius: { label: 'Radio de esquina', unit: 'mm', min: 0, max: 25, step: 0.5 },
+  moldShape: {
+    select: true,
+    label: 'Forma del molde',
+    options: [
+      { value: 'image', label: 'Silueta (imagen)' },
+      { value: 'rounded', label: 'Rectángulo redondeado' },
+      { value: 'square', label: 'Cuadrado' },
+      { value: 'circle', label: 'Círculo' },
+      { value: 'heart', label: 'Corazón' },
+    ],
+  },
 
   engraveDepth: { label: 'Profundidad del grabado', unit: 'mm', min: 0.2, max: 4, step: 0.1 },
 

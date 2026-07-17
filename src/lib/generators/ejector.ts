@@ -70,31 +70,40 @@ export function buildEjector(
   const faceR = offsetRegions(profile, [], -(half + p.ejectorClearance));
   if (!faceR.length) return [];
 
-  const parts: Mesh[] = [solidOf(faceR, 0, p.plungerThickness)];
+  const base = solidOf(faceR, 0, p.plungerThickness);
 
-  // El relieve mira hacia abajo en la pieza real, pero se genera hacia arriba y
-  // el usuario la imprime con la cara buena contra la cama: sin soportes.
-  parts.push(...reliefSolids(detail, p, p.plungerThickness - 0.01, p.reliefHeight));
+  // El dibujo (relieve) va en la cara de arriba, que es la que estampa. El
+  // vástago y el pomo se llevan a la cara CONTRARIA (por debajo del émbolo), no
+  // encima del dibujo: así el mango no tapa lo que tiene que marcar.
+  const extras: Mesh[] = [...reliefSolids(detail, p, p.plungerThickness - 0.01, p.reliefHeight)];
 
   const c = centroid(faceR[0].outer);
-  const zRel = p.plungerThickness + p.reliefHeight;
-  const rodTop = zRel + p.rodHeight;
 
   const rod = emptyMesh();
-  cylinder(rod, c[0], c[1], p.rodDiameter / 2, zRel - 0.01, rodTop, 40);
-  parts.push(rod);
+  cylinder(rod, c[0], c[1], p.rodDiameter / 2, -p.rodHeight, 0.01, 40);
+  extras.push(rod);
 
   const knob = emptyMesh();
-  cylinder(knob, c[0], c[1], p.rodDiameter, rodTop - 0.01, rodTop + 4, 40);
-  parts.push(knob);
+  cylinder(knob, c[0], c[1], p.rodDiameter, -p.rodHeight - 4, -p.rodHeight + 0.01, 40);
+  extras.push(knob);
 
   const pieces: Piece[] = [];
   if (body.positions.length) {
     pieces.push({ id: 'ejector-body', label: 'Cuerpo', role: 'blade', mesh: body });
   }
-  const plunger = merge(...parts);
+  const overlay = merge(...extras);
+  const plunger = merge(base, overlay);
   if (plunger.positions.length) {
-    pieces.push({ id: 'ejector-plunger', label: 'Émbolo', role: 'icing', mesh: plunger });
+    // La placa del émbolo es reconstruible: la marca de agua se graba en su
+    // cara inferior (la del vástago), nunca sobre el dibujo estampado.
+    pieces.push({
+      id: 'ejector-plunger',
+      label: 'Émbolo',
+      role: 'icing',
+      mesh: plunger,
+      plate: { regions: faceR, zLo: 0, zHi: p.plungerThickness },
+      overlay,
+    });
   }
   return pieces;
 }

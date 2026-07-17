@@ -36,6 +36,24 @@ function Control({ field, p, set }: { field: Field; p: Params; set: Props['set']
     );
   }
 
+  if ('select' in meta) {
+    const value = p[field] as unknown as string;
+    return (
+      <label className="field select">
+        <span className="field-head">
+          <span>{meta.label}</span>
+        </span>
+        <select value={value} onChange={(e) => set(field, e.target.value as never)}>
+          {meta.options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
   const value = p[field] as unknown as number;
   return (
     <label className="field">

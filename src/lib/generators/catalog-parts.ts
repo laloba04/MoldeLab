@@ -7,10 +7,10 @@
  * que se solapan la resuelve el laminador.
  */
 
-import type { Loop, Mesh, Params, Piece, Pt } from '../../types';
+import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
 import { offsetRegions, sanitize, type Region } from '../clipper';
-import { boxOf, circle, roundedRect, shiftLoops, spikes } from '../shapes';
+import { boxOf, circle, heart, roundedRect, shiftLoops, spikes } from '../shapes';
 
 const outerOf = (loops: Loop[]) => loops.filter((l) => !l.hole).map((l) => l.pts);
 const holesOf = (loops: Loop[]) => loops.filter((l) => l.hole).map((l) => l.pts);
@@ -363,13 +363,60 @@ export function buildExtrude(loops: Loop[], p: Params): Piece[] {
   });
 }
 
-export function buildReliefPlate(loops: Loop[], detail: Loop[], p: Params, round = false): Piece[] {
+/**
+ * Contorno de la placa según la «forma del molde» elegida. 'image' sigue la
+ * silueta del dibujo (para que no salga siempre en placa); el resto son formas
+ * estándar ajustadas a la caja de la imagen más el marco.
+ */
+export function moldBase(loops: Loop[], p: Params, shape: MoldShape): Region[] {
   const box = boxOf(loops);
-  const shape = round
-    ? circle(box.cx, box.cy, Math.max(box.w, box.h) / 2 + p.border, 72)
-    : roundedRect(box.cx, box.cy, box.w + p.border * 2, box.h + p.border * 2, p.cornerRadius);
+  const w = box.w + p.border * 2;
+  const h = box.h + p.border * 2;
+  switch (shape) {
+    case 'image':
+      // La placa es la propia silueta, engordada por el marco.
+      return regionsOf(loops, p.border);
+    case 'circle':
+      // El círculo debe contener la diagonal del dibujo, no solo el lado mayor.
+      return sanitize([circle(box.cx, box.cy, Math.hypot(w, h) / 2, 72)], []);
+    case 'heart': {
+      // El corazón abraza el dibujo: su cuerpo (la zona ancha) mide ~0,7 del
+      // total, así que se escala para que la caja del dibujo entre justa ahí, y
+      // se recoloca por su centroide (su masa visual cae más abajo que su caja).
+      const side = Math.max(w, h) / 0.7;
+      const pts = heart(box.cx, box.cy, side, side);
+      const ctr = polyCentroid(pts);
+      const centered = pts.map(([x, y]) => [x + (box.cx - ctr[0]), y + (box.cy - ctr[1])] as Pt);
+      return sanitize([centered], []);
+    }
+    case 'square':
+      return sanitize([roundedRect(box.cx, box.cy, w, h, 0)], []);
+    case 'rounded':
+    default:
+      return sanitize([roundedRect(box.cx, box.cy, w, h, p.cornerRadius)], []);
+  }
+}
 
-  const base = sanitize([shape], []);
+/** Centroide (centro de masa) de un polígono simple. */
+function polyCentroid(pts: Pt[]): Pt {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0, n = pts.length; i < n; i++) {
+    const [x0, y0] = pts[i];
+    const [x1, y1] = pts[(i + 1) % n];
+    const f = x0 * y1 - x1 * y0;
+    a += f;
+    cx += (x0 + x1) * f;
+    cy += (y0 + y1) * f;
+  }
+  if (Math.abs(a) < 1e-9) return [pts[0][0], pts[0][1]];
+  return [cx / (3 * a), cy / (3 * a)];
+}
+
+export function buildReliefPlate(loops: Loop[], detail: Loop[], p: Params, round = false): Piece[] {
+  // El posavasos nace redondo mientras el usuario no elija forma; el resto de
+  // placas siguen la silueta de la imagen por defecto.
+  const shape: MoldShape = round && p.moldShape === 'image' ? 'circle' : p.moldShape;
+  const base = moldBase(loops, p, shape);
   const overlay = merge(...reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight));
 
   return piece('plate', round ? 'Posavasos' : 'Placa', 'body', merge(solid(base, 0, p.thickness), overlay), {

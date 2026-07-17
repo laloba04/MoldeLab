@@ -138,6 +138,34 @@ export function spikes(box: Box, count: number, width: number, length: number): 
   return out;
 }
 
+/**
+ * Corazón centrado en (cx,cy) que cabe en un ancho `w` y alto `h`.
+ * Curva paramétrica clásica, reescalada a la caja pedida. CCW para el mallador.
+ */
+export function heart(cx: number, cy: number, w: number, h: number, seg = 72): Pt[] {
+  const raw: Pt[] = [];
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < seg; i++) {
+    const t = (i / seg) * Math.PI * 2;
+    const x = 16 * Math.sin(t) ** 3;
+    const y =
+      13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+    raw.push([x, y]);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const sx = w / (maxX - minX);
+  const sy = h / (maxY - minY);
+  const mx = (minX + maxX) / 2;
+  const my = (minY + maxY) / 2;
+  return orient(
+    raw.map(([x, y]) => [cx + (x - mx) * sx, cy + (y - my) * sy] as Pt),
+    true,
+  );
+}
+
 /** Estadio: rectángulo con los extremos en semicírculo. El agujero del abridor. */
 export function stadium(cx: number, cy: number, w: number, h: number, seg = 16): Pt[] {
   const r = h / 2;

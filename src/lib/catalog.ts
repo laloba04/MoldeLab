@@ -329,8 +329,8 @@ export const PRODUCTS: Entry[] = [
     id: 'relief-plate',
     category: 'personalizados',
     label: 'Placa con relieve',
-    hint: 'El dibujo levantado sobre una placa.',
-    fields: [...PLATE_FIELDS, ...RELIEF_FIELDS],
+    hint: 'El dibujo levantado sobre una placa. Elige la forma del molde.',
+    fields: [...SIZE, 'thickness', 'border', 'moldShape', 'cornerRadius', ...RELIEF_FIELDS],
     build: (s, p) => buildReliefPlate(s.loops, s.detail, p),
   },
   {
@@ -353,8 +353,8 @@ export const PRODUCTS: Entry[] = [
     id: 'coaster',
     category: 'personalizados',
     label: 'Posavasos',
-    hint: 'Disco con el dibujo en relieve.',
-    fields: [...SIZE, 'thickness', 'border', ...RELIEF_FIELDS],
+    hint: 'Disco con el dibujo en relieve. Cambia la forma si quieres.',
+    fields: [...SIZE, 'thickness', 'border', 'moldShape', ...RELIEF_FIELDS],
     build: (s, p) => buildReliefPlate(s.loops, s.detail, p, true),
   },
   {

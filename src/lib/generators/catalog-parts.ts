@@ -48,12 +48,20 @@ export function reliefSolids(detail: Loop[], p: Params, z0: number, height: numb
   const dHoles = holesOf(detail);
   if (!dOuter.length || height <= 0) return [];
 
+  // "Engrosar trazo": un offset positivo engorda las líneas del dibujo antes de
+  // extruir; uno negativo las afina. Es la perilla que en un generador SVG se
+  // llama "engrossar linhas" — aquí en milímetros, y de paso vale para adelgazar.
+  // El ángulo de salida (taper) se resta encima, escalón a escalón.
+  const base = p.strokeWidth || 0;
   const steps = p.reliefTaper > 0.01 ? STEPS : 1;
   const dz = height / steps;
   const out: Mesh[] = [];
 
   for (let s = 0; s < steps; s++) {
-    const regions = offsetRegions(dOuter, dHoles, -p.reliefTaper * s);
+    const delta = base - p.reliefTaper * s;
+    // Con delta 0 exacto, saltarse Clipper preserva los puntos originales.
+    const regions =
+      Math.abs(delta) < 1e-6 ? sanitize(dOuter, dHoles) : offsetRegions(dOuter, dHoles, delta);
     const zLo = z0 + dz * s - (s === 0 ? 0.01 : 0);
     const zHi = z0 + dz * (s + 1);
     for (const r of regions) out.push(solid([r], zLo, zHi));

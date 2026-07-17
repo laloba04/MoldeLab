@@ -57,7 +57,7 @@ const STAMP_FIELDS = [...SIZE, 'stampBase', 'reliefHeight', 'reliefTaper', 'hand
 
 const PLATE_FIELDS = [...SIZE, 'thickness', 'border', 'cornerRadius'] as const;
 
-const RELIEF_FIELDS = ['reliefHeight', 'reliefTaper'] as const;
+const RELIEF_FIELDS = ['reliefHeight', 'reliefTaper', 'strokeWidth'] as const;
 
 const EJECTOR_FIELDS = [
   ...SIZE,
@@ -89,7 +89,7 @@ export const PRODUCTS: Entry[] = [
     category: 'reposteria',
     label: 'Cortador con estampa',
     hint: 'Corta y marca el dibujo de una vez.',
-    fields: [...CUTTER_FIELDS, 'stampBase', 'reliefHeight', 'reliefTaper'],
+    fields: [...CUTTER_FIELDS, 'stampBase', 'reliefHeight', 'reliefTaper', 'strokeWidth'],
     build: (s, p) => [
       ...cutterPieces(s.loops, p),
       ...stampPieces(s.loops, s.detail, p),

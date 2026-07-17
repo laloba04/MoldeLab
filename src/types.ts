@@ -156,6 +156,7 @@ export interface Params {
   stampBase: number;
   reliefHeight: number;
   reliefTaper: number;
+  strokeWidth: number;
   handle: boolean;
   handleHeight: number;
 
@@ -242,6 +243,7 @@ export const DEFAULTS: Params = {
   stampBase: 2,
   reliefHeight: 1.2,
   reliefTaper: 0.25,
+  strokeWidth: 0,
   handle: false,
   handleHeight: 18,
 
@@ -320,6 +322,7 @@ export const FIELD_META: Record<
   stampBase: { label: 'Base', unit: 'mm', min: 1, max: 6, step: 0.2 },
   reliefHeight: { label: 'Altura del relieve', unit: 'mm', min: 0.3, max: 4, step: 0.1 },
   reliefTaper: { label: 'Ángulo de salida', unit: 'mm', min: 0, max: 0.8, step: 0.05 },
+  strokeWidth: { label: 'Engrosar trazo', unit: 'mm', min: -1, max: 2, step: 0.1 },
   handle: { toggle: true, label: 'Añadir tirador' },
   handleHeight: { label: 'Alto del tirador', unit: 'mm', min: 8, max: 40, step: 1 },
 

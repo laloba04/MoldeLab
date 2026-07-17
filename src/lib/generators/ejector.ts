@@ -19,7 +19,7 @@ import type { Loop, Mesh, Params, Piece, Pt } from '../../types';
 import { cylinder, emptyMesh, extrudeRegion, merge } from '../mesh';
 import { offsetRegions, sanitize } from '../clipper';
 import { boxOf, circle, roundedRect } from '../shapes';
-import { reliefSolids } from './catalog-parts';
+import { fitDetailToBase, reliefSolids } from './catalog-parts';
 
 export type EjectorShape = 'silhouette' | 'round' | 'square';
 
@@ -72,10 +72,16 @@ export function buildEjector(
 
   const base = solidOf(faceR, 0, p.plungerThickness);
 
+  // En redondo/cuadrado la cara del émbolo es más pequeña que la imagen, así que
+  // el dibujo se encoge para caber ENTERO dentro (nada fuera del círculo). En
+  // silueta la cara ya sigue la imagen, así que va a tamaño natural.
+  const fitted = shape === 'silhouette' ? detail : fitDetailToBase(detail, faceR);
+  const clip = shape === 'silhouette' ? undefined : faceR.map((r) => r.outer);
+
   // El dibujo (relieve) va en la cara de arriba, que es la que estampa. El
   // vástago y el pomo se llevan a la cara CONTRARIA (por debajo del émbolo), no
   // encima del dibujo: así el mango no tapa lo que tiene que marcar.
-  const extras: Mesh[] = [...reliefSolids(detail, p, p.plungerThickness - 0.01, p.reliefHeight)];
+  const extras: Mesh[] = [...reliefSolids(fitted, p, p.plungerThickness - 0.01, p.reliefHeight, clip)];
 
   const c = centroid(faceR[0].outer);
 

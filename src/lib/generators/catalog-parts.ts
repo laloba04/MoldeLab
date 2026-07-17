@@ -9,7 +9,8 @@
 
 import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
-import { offsetRegions, sanitize, type Region } from '../clipper';
+import { intersect, offsetRegions, sanitize, type Region } from '../clipper';
+import { pointInPolygon } from '../polygon';
 import { boxOf, circle, heart, roundedRect, shiftLoops, spikes } from '../shapes';
 
 const outerOf = (loops: Loop[]) => loops.filter((l) => !l.hole).map((l) => l.pts);
@@ -42,8 +43,19 @@ function piece(
 
 const STEPS = 3;
 
-/** Relieve escalonado. Cada escalón es un sólido cerrado por su cuenta. */
-export function reliefSolids(detail: Loop[], p: Params, z0: number, height: number): Mesh[] {
+/**
+ * Relieve escalonado. Cada escalón es un sólido cerrado por su cuenta.
+ * Si se pasa `clip` (el contorno de la placa), el relieve se recorta a él, para
+ * que el dibujo no sobresalga cuando la forma del molde es más pequeña que la
+ * imagen (p. ej. un corazón que no cubre todo el dibujo).
+ */
+export function reliefSolids(
+  detail: Loop[],
+  p: Params,
+  z0: number,
+  height: number,
+  clip?: Pt[][],
+): Mesh[] {
   const dOuter = outerOf(detail);
   const dHoles = holesOf(detail);
   if (!dOuter.length || height <= 0) return [];
@@ -60,8 +72,9 @@ export function reliefSolids(detail: Loop[], p: Params, z0: number, height: numb
   for (let s = 0; s < steps; s++) {
     const delta = base - p.reliefTaper * s;
     // Con delta 0 exacto, saltarse Clipper preserva los puntos originales.
-    const regions =
+    let regions =
       Math.abs(delta) < 1e-6 ? sanitize(dOuter, dHoles) : offsetRegions(dOuter, dHoles, delta);
+    if (clip) regions = intersect(regions, clip);
     const zLo = z0 + dz * s - (s === 0 ? 0.01 : 0);
     const zHi = z0 + dz * (s + 1);
     for (const r of regions) out.push(solid([r], zLo, zHi));
@@ -380,14 +393,11 @@ export function moldBase(loops: Loop[], p: Params, shape: MoldShape): Region[] {
       // El círculo debe contener la diagonal del dibujo, no solo el lado mayor.
       return sanitize([circle(box.cx, box.cy, Math.hypot(w, h) / 2, 72)], []);
     case 'heart': {
-      // El corazón abraza el dibujo: su cuerpo (la zona ancha) mide ~0,7 del
-      // total, así que se escala para que la caja del dibujo entre justa ahí, y
-      // se recoloca por su centroide (su masa visual cae más abajo que su caja).
-      const side = Math.max(w, h) / 0.7;
-      const pts = heart(box.cx, box.cy, side, side);
-      const ctr = polyCentroid(pts);
-      const centered = pts.map(([x, y]) => [x + (box.cx - ctr[0]), y + (box.cy - ctr[1])] as Pt);
-      return sanitize([centered], []);
+      // Corazón centrado por su caja en el medio de la imagen (heart() ya
+      // centra por su caja). Nada de recolocar por el centro de masa: en un
+      // corazón cae arriba, entre los lóbulos, y descentraría el dibujo. Mide
+      // algo más que el dibujo para que este quepa en su cuerpo y lo llene.
+      return sanitize([heart(box.cx, box.cy, w * 1.7, h * 1.7)], []);
     }
     case 'square':
       return sanitize([roundedRect(box.cx, box.cy, w, h, 0)], []);
@@ -397,19 +407,49 @@ export function moldBase(loops: Loop[], p: Params, shape: MoldShape): Region[] {
   }
 }
 
-/** Centroide (centro de masa) de un polígono simple. */
-function polyCentroid(pts: Pt[]): Pt {
-  let a = 0, cx = 0, cy = 0;
-  for (let i = 0, n = pts.length; i < n; i++) {
-    const [x0, y0] = pts[i];
-    const [x1, y1] = pts[(i + 1) % n];
-    const f = x0 * y1 - x1 * y0;
-    a += f;
-    cx += (x0 + x1) * f;
-    cy += (y0 + y1) * f;
+/**
+ * Encoge y centra el dibujo para que quepa ENTERO dentro de la placa: ni
+ * sobresale flotando, ni se corta. Busca (binario) la mayor escala con la que
+ * todo el contorno del dibujo cae dentro de la forma del molde. Si ya cabía a
+ * tamaño natural, no lo toca.
+ */
+export function fitDetailToBase(detail: Loop[], base: Region[]): Loop[] {
+  const outerPts = detail.filter((l) => !l.hole).flatMap((l) => l.pts);
+  if (!outerPts.length || !base.length) return detail;
+
+  const dbox = boxOf(detail);
+  // Se centra en el MEDIO real de la placa (centro de su caja), no en su centro
+  // de masa: en un corazón el centro de masa cae arriba y descentra el dibujo.
+  const bbox = boxOf(base.map((r) => ({ pts: r.outer, hole: false })));
+  const bc: Pt = [bbox.cx, bbox.cy];
+
+  const inside = (x: number, y: number): boolean => {
+    for (const r of base) {
+      if (pointInPolygon([x, y], r.outer)) {
+        for (const h of r.holes) if (pointInPolygon([x, y], h)) return false;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  let lo = 0;
+  let hi = 1.5;
+  for (let it = 0; it < 20; it++) {
+    const s = (lo + hi) / 2;
+    const fits = outerPts.every(([x, y]) =>
+      inside(bc[0] + (x - dbox.cx) * s, bc[1] + (y - dbox.cy) * s),
+    );
+    if (fits) lo = s;
+    else hi = s;
   }
-  if (Math.abs(a) < 1e-9) return [pts[0][0], pts[0][1]];
-  return [cx / (3 * a), cy / (3 * a)];
+
+  if (lo >= 1) return detail; // ya cabía entero a su tamaño
+  const s = lo * 0.95; // un pelín de margen para no rozar el borde
+  return detail.map((l) => ({
+    hole: l.hole,
+    pts: l.pts.map(([x, y]) => [bc[0] + (x - dbox.cx) * s, bc[1] + (y - dbox.cy) * s] as Pt),
+  }));
 }
 
 export function buildReliefPlate(loops: Loop[], detail: Loop[], p: Params, round = false): Piece[] {
@@ -417,7 +457,12 @@ export function buildReliefPlate(loops: Loop[], detail: Loop[], p: Params, round
   // placas siguen la silueta de la imagen por defecto.
   const shape: MoldShape = round && p.moldShape === 'image' ? 'circle' : p.moldShape;
   const base = moldBase(loops, p, shape);
-  const overlay = merge(...reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight));
+  // En 'silueta' la placa YA es la forma del dibujo: el dibujo va a tamaño
+  // natural, sin tocarlo. En las formas estándar (corazón, círculo…) se encoge
+  // para caber entero, centrado; el recorte queda solo como red de seguridad.
+  const fitted = shape === 'image' ? detail : fitDetailToBase(detail, base);
+  const clip = shape === 'image' ? undefined : base.map((r) => r.outer);
+  const overlay = merge(...reliefSolids(fitted, p, p.thickness - 0.01, p.reliefHeight, clip));
 
   return piece('plate', round ? 'Posavasos' : 'Placa', 'body', merge(solid(base, 0, p.thickness), overlay), {
     plate: { regions: base, zLo: 0, zHi: p.thickness },

@@ -12,24 +12,43 @@ function geomOf(positions: number[]): THREE.BufferGeometry {
   return g;
 }
 
+type ViewMode = 'solid' | 'xray' | 'wire';
+
+/** Propiedades del material según el modo de vista. */
+function matProps(mode: ViewMode) {
+  if (mode === 'xray') return { transparent: true, opacity: 0.4, depthWrite: false } as const;
+  if (mode === 'wire') return { wireframe: true } as const;
+  return {} as const;
+}
+
 function PieceMesh({
   piece,
   offset,
   bgColor,
   traceColor,
+  hideTrace,
+  viewMode,
 }: {
   piece: Piece;
   offset: number;
   bgColor: string;
   traceColor: string;
+  hideTrace: boolean;
+  viewMode: ViewMode;
 }) {
   // El cortador conserva su cian (corta); el resto usa el color de fondo.
   const baseColor = piece.role === 'blade' ? '#1bc5d4' : bgColor;
+  const overlayLen = piece.overlay?.positions.length ?? 0;
 
-  const baseGeom = useMemo(() => geomOf(piece.mesh.positions), [piece.mesh]);
+  // Con «ocultar trazo» se pinta solo la placa: la cola de posiciones (el
+  // relieve) se recorta, porque va fusionada dentro de piece.mesh.
+  const baseGeom = useMemo(() => {
+    const p = piece.mesh.positions;
+    return geomOf(hideTrace && overlayLen ? p.slice(0, p.length - overlayLen) : p);
+  }, [piece.mesh, hideTrace, overlayLen]);
   const overlayGeom = useMemo(
-    () => (piece.overlay?.positions.length ? geomOf(piece.overlay.positions) : null),
-    [piece.overlay],
+    () => (!hideTrace && overlayLen ? geomOf(piece.overlay!.positions) : null),
+    [piece.overlay, hideTrace, overlayLen],
   );
 
   const ref = useRef<THREE.Group>(null);
@@ -39,6 +58,8 @@ function PieceMesh({
     ref.current.position.x += (offset - ref.current.position.x) * Math.min(1, dt * 6);
   });
 
+  const extra = matProps(viewMode);
+
   return (
     <group ref={ref}>
       <mesh geometry={baseGeom} castShadow receiveShadow>
@@ -47,6 +68,7 @@ function PieceMesh({
           metalness={0.15}
           roughness={0.5}
           side={THREE.DoubleSide}
+          {...extra}
         />
       </mesh>
       {/* El relieve se repinta encima con el color del trazo. polygonOffset lo
@@ -61,6 +83,7 @@ function PieceMesh({
             polygonOffset
             polygonOffsetFactor={-2}
             polygonOffsetUnits={-2}
+            {...extra}
           />
         </mesh>
       )}
@@ -74,12 +97,16 @@ export function Viewer({
   mark,
   bgColor,
   traceColor,
+  hideTrace = false,
+  viewMode = 'solid',
 }: {
   pieces: Piece[];
   exploded: boolean;
   mark?: string | null;
   bgColor: string;
   traceColor: string;
+  hideTrace?: boolean;
+  viewMode?: ViewMode;
 }) {
   // Las piezas se separan en fila, no en montón.
   const span = useMemo(() => {
@@ -130,6 +157,8 @@ export function Viewer({
           offset={exploded && pieces.length > 1 ? (i - (pieces.length - 1) / 2) * span : 0}
           bgColor={bgColor}
           traceColor={traceColor}
+          hideTrace={hideTrace}
+          viewMode={viewMode}
         />
       ))}
 

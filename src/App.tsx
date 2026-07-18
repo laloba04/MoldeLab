@@ -9,7 +9,37 @@ import { toStl, toZip } from './lib/stl';
 import { isEmbedded, saveBlob } from './lib/save';
 import { to3mf } from './lib/threemf';
 import { applyWatermark, canWatermark, rasterizeText } from './lib/watermark';
-import { triangleCount } from './lib/mesh';
+import { translate, triangleCount } from './lib/mesh';
+
+/**
+ * Coloca las piezas en fila sobre la cama, sin solaparse: los productos de
+ * varias piezas se generan todas centradas en el origen y en un solo archivo
+ * (3MF) saldrían apiladas una encima de otra. Aquí se separan a lo ancho.
+ */
+function spreadPieces(pieces: Piece[]): Piece[] {
+  if (pieces.length < 2) return pieces;
+  const gap = 6;
+  const info = pieces.map((p) => {
+    let minX = Infinity, maxX = -Infinity;
+    const q = p.mesh.positions;
+    for (let i = 0; i < q.length; i += 3) {
+      if (q[i] < minX) minX = q[i];
+      if (q[i] > maxX) maxX = q[i];
+    }
+    return { minX, w: maxX - minX };
+  });
+  const total = info.reduce((s, b) => s + b.w, 0) + gap * (pieces.length - 1);
+  let cursor = -total / 2;
+  return pieces.map((p, i) => {
+    const dx = cursor - info[i].minX;
+    cursor += info[i].w + gap;
+    return {
+      ...p,
+      mesh: translate(p.mesh, dx, 0, 0),
+      overlay: p.overlay ? translate(p.overlay, dx, 0, 0) : undefined,
+    };
+  });
+}
 import { Viewer } from './components/Viewer';
 import { Controls } from './components/Controls';
 
@@ -23,11 +53,17 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [exploded, setExploded] = useState(true);
   const [fmt, setFmt] = useState<'3mf' | 'stl'>('3mf');
+  // Al descargar varias piezas: separadas en fila (para imprimir) o juntas.
+  const [separate, setSeparate] = useState(true);
   const [mark, setMark] = useState('Barakaldesa Manitas 3D');
   const [markOn, setMarkOn] = useState(false);
   // Colores del visor y del 3MF: fondo = placa, trazo = relieve.
   const [bgColor, setBgColor] = useState('#e4d5c1');
   const [traceColor, setTraceColor] = useState('#8a5038');
+  // Ocultar el relieve para ver la placa lisa.
+  const [hideTrace, setHideTrace] = useState(false);
+  // Modo de vista del modelo: sólido, rayos X (transparente) o alámbrico.
+  const [viewMode, setViewMode] = useState<'solid' | 'xray' | 'wire'>('solid');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const set = useCallback(<K extends keyof Params>(k: K, v: Params[K]) => {
@@ -176,7 +212,26 @@ export default function App() {
     [marked, silhouette],
   );
 
+  // Medidas reales de la pieza (caja envolvente en mm): ancho × largo × alto.
+  const dims = useMemo(() => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of marked) {
+      const q = p.mesh.positions;
+      for (let i = 0; i < q.length; i += 3) {
+        if (q[i] < minX) minX = q[i];
+        if (q[i] > maxX) maxX = q[i];
+        if (q[i + 1] < minY) minY = q[i + 1];
+        if (q[i + 1] > maxY) maxY = q[i + 1];
+        if (q[i + 2] < minZ) minZ = q[i + 2];
+        if (q[i + 2] > maxZ) maxZ = q[i + 2];
+      }
+    }
+    if (!Number.isFinite(minX)) return null;
+    return { w: maxX - minX, l: maxY - minY, h: maxZ - minZ };
+  }, [marked]);
+
   const markable = pieces.some(canWatermark);
+  const hasTrace = marked.some((p) => (p.overlay?.positions.length ?? 0) > 0);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -191,8 +246,9 @@ export default function App() {
     // objetos, con nombre y en milímetros. Lo que el STL nunca pudo.
     let blob: Blob;
     let name: string;
+    const forExport = separate ? spreadPieces(marked) : marked;
     if (fmt === '3mf') {
-      blob = to3mf(marked, { bg: bgColor, trace: traceColor });
+      blob = to3mf(forExport, { bg: bgColor, trace: traceColor });
       name = `moldelab-${params.product}.3mf`;
     } else if (marked.length === 1) {
       blob = toStl(marked[0].mesh, `MoldeLab ${marked[0].label}`);
@@ -264,6 +320,17 @@ export default function App() {
               <input type="color" value={traceColor} onChange={(e) => setTraceColor(e.target.value)} />
               <span>Trazo (el dibujo)</span>
             </label>
+            {hasTrace && (
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={hideTrace}
+                  onChange={(e) => setHideTrace(e.target.checked)}
+                />
+                <span />
+                Ocultar trazo (ver la placa lisa)
+              </label>
+            )}
           </div>
         )}
 
@@ -289,6 +356,17 @@ export default function App() {
 
         {pieces.length > 0 && (
           <footer className="actions">
+            {pieces.length > 1 && fmt === '3mf' && (
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={separate}
+                  onChange={(e) => setSeparate(e.target.checked)}
+                />
+                <span />
+                Separar las piezas en la cama
+              </label>
+            )}
             <div className="fmt" role="radiogroup" aria-label="Formato de descarga">
               <button
                 role="radio"
@@ -336,6 +414,8 @@ export default function App() {
               mark={markOn ? mark : null}
               bgColor={bgColor}
               traceColor={traceColor}
+              hideTrace={hideTrace}
+              viewMode={viewMode}
             />
             <div className="hud">
               {pieces.length > 1 && (
@@ -343,7 +423,21 @@ export default function App() {
                   <Layers size={14} /> {exploded ? 'Juntar' : 'Separar'}
                 </button>
               )}
+              <button
+                className="chip"
+                onClick={() =>
+                  setViewMode((m) => (m === 'solid' ? 'xray' : m === 'xray' ? 'wire' : 'solid'))
+                }
+                title="Cambiar cómo se ve el modelo"
+              >
+                {viewMode === 'solid' ? 'Sólido' : viewMode === 'xray' ? 'Rayos X' : 'Alámbrico'}
+              </button>
               <span className="chip readout">{product.label}</span>
+              {dims && (
+                <span className="chip readout" title="Ancho × Largo × Alto">
+                  {dims.w.toFixed(1)} × {dims.l.toFixed(1)} × {dims.h.toFixed(1)} mm
+                </span>
+              )}
               <span className="chip readout">
                 {stats.tris.toLocaleString('es-ES')} triángulos
               </span>

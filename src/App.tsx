@@ -25,6 +25,9 @@ export default function App() {
   const [fmt, setFmt] = useState<'3mf' | 'stl'>('3mf');
   const [mark, setMark] = useState('Barakaldesa Manitas 3D');
   const [markOn, setMarkOn] = useState(false);
+  // Colores del visor y del 3MF: fondo = placa, trazo = relieve.
+  const [bgColor, setBgColor] = useState('#e4d5c1');
+  const [traceColor, setTraceColor] = useState('#8a5038');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const set = useCallback(<K extends keyof Params>(k: K, v: Params[K]) => {
@@ -189,7 +192,7 @@ export default function App() {
     let blob: Blob;
     let name: string;
     if (fmt === '3mf') {
-      blob = to3mf(marked);
+      blob = to3mf(marked, { bg: bgColor, trace: traceColor });
       name = `moldelab-${params.product}.3mf`;
     } else if (marked.length === 1) {
       blob = toStl(marked[0].mesh, `MoldeLab ${marked[0].label}`);
@@ -249,6 +252,20 @@ export default function App() {
         )}
 
         <Controls p={params} set={set} reset={reset} />
+
+        {pieces.length > 0 && (
+          <div className="colors">
+            <h3>Colores</h3>
+            <label className="color-row">
+              <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} />
+              <span>Fondo (la placa)</span>
+            </label>
+            <label className="color-row">
+              <input type="color" value={traceColor} onChange={(e) => setTraceColor(e.target.value)} />
+              <span>Trazo (el dibujo)</span>
+            </label>
+          </div>
+        )}
 
         {pieces.length > 0 && markable && (
           <div className="mark-box">
@@ -313,7 +330,13 @@ export default function App() {
         )}
         {source ? (
           <>
-            <Viewer pieces={marked} exploded={exploded} mark={markOn ? mark : null} />
+            <Viewer
+              pieces={marked}
+              exploded={exploded}
+              mark={markOn ? mark : null}
+              bgColor={bgColor}
+              traceColor={traceColor}
+            />
             <div className="hud">
               {pieces.length > 1 && (
                 <button className="chip" onClick={() => setExploded((v) => !v)}>

@@ -27,17 +27,15 @@ interface Indexed {
 /** 1 µm de cuantización: por debajo de cualquier impresora y del float32 del STL. */
 const q = (v: number) => Math.round(v * 1000) / 1000;
 
-function weld(mesh: Mesh): Indexed {
+/** Suelda los vértices de un tramo de `positions` [from, to). */
+function weld(positions: number[], from = 0, to = positions.length): Indexed {
   const index = new Map<string, number>();
   const verts: string[] = [];
   const tris: [number, number, number][] = [];
-  const p = mesh.positions;
+  const p = positions;
 
   const idOf = (i: number): number => {
-    const x = q(p[i]);
-    const y = q(p[i + 1]);
-    const z = q(p[i + 2]);
-    const key = `${x} ${y} ${z}`;
+    const key = `${q(p[i])} ${q(p[i + 1])} ${q(p[i + 2])}`;
     let id = index.get(key);
     if (id === undefined) {
       id = verts.length;
@@ -47,7 +45,7 @@ function weld(mesh: Mesh): Indexed {
     return id;
   };
 
-  for (let i = 0; i < p.length; i += 9) {
+  for (let i = from; i < to; i += 9) {
     const a = idOf(i);
     const b = idOf(i + 3);
     const c = idOf(i + 6);
@@ -58,42 +56,88 @@ function weld(mesh: Mesh): Indexed {
   return { verts, tris };
 }
 
+/** Un color '#rrggbb' al formato displaycolor del 3MF ('#RRGGBBFF'). */
+function displayColor(hex: string): string {
+  const h = hex.replace('#', '').toUpperCase();
+  return `#${(h.length === 6 ? h : 'CCCCCC') + 'FF'}`;
+}
+
+/** Un objeto <mesh> del 3MF a partir de un tramo de posiciones. */
+function meshObject(id: number, name: string, positions: number[], from: number, to: number, matAttr: string): string {
+  const { verts, tris } = weld(positions, from, to);
+  const vx = verts
+    .map((v) => {
+      const [x, y, z] = v.split(' ');
+      return `<vertex x="${x}" y="${y}" z="${z}"/>`;
+    })
+    .join('');
+  const tr = tris.map(([a, b, c]) => `<triangle v1="${a}" v2="${b}" v3="${c}"/>`).join('');
+  return (
+    `<object id="${id}" type="model" name="${xmlName(name)}"${matAttr}><mesh>` +
+    `<vertices>${vx}</vertices><triangles>${tr}</triangles></mesh></object>`
+  );
+}
+
 const xmlName = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
 /**
  * Todas las piezas en UN archivo .3mf, como objetos independientes.
  * El sentido de giro es el mismo que en el STL: CCW visto desde fuera.
  */
-export function to3mf(pieces: Piece[]): Blob {
+export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): Blob {
   const objects: string[] = [];
   const items: string[] = [];
 
-  pieces.forEach((pc, i) => {
-    const { verts, tris } = weld(pc.mesh);
-    const id = i + 1;
+  // El id 1 lo ocupa el grupo de materiales (fondo y trazo); los objetos van
+  // después. Sin colores es un 3MF liso, como antes.
+  const matId = 1;
+  let nextId = colors ? 2 : 1;
 
-    const vx = verts
-      .map((v) => {
-        const [x, y, z] = v.split(' ');
-        return `<vertex x="${x}" y="${y}" z="${z}"/>`;
-      })
-      .join('');
-    const tr = tris.map(([a, b, c]) => `<triangle v1="${a}" v2="${b}" v3="${c}"/>`).join('');
+  for (const pc of pieces) {
+    const hasOverlay = colors && pc.overlay && pc.overlay.positions.length > 0;
+    const overlayStart = pc.mesh.positions.length - (pc.overlay?.positions.length ?? 0);
 
-    objects.push(
-      `<object id="${id}" type="model" name="${xmlName(pc.label)}"><mesh>` +
-        `<vertices>${vx}</vertices><triangles>${tr}</triangles>` +
-        `</mesh></object>`,
-    );
-    items.push(`<item objectid="${id}"/>`);
-  });
+    if (hasOverlay) {
+      // Dos partes con material propio: la placa (fondo) y el relieve (trazo).
+      // Un objeto contenedor las une con <components>: así el laminador ve una
+      // pieza con dos partes y le asigna a cada una su filamento/color.
+      const baseId = nextId++;
+      const reliefId = nextId++;
+      const groupId = nextId++;
+      objects.push(
+        meshObject(baseId, `${pc.label} · fondo`, pc.mesh.positions, 0, overlayStart, ` pid="${matId}" pindex="0"`),
+      );
+      objects.push(
+        meshObject(reliefId, `${pc.label} · trazo`, pc.mesh.positions, overlayStart, pc.mesh.positions.length, ` pid="${matId}" pindex="1"`),
+      );
+      objects.push(
+        `<object id="${groupId}" type="model" name="${xmlName(pc.label)}"><components>` +
+          `<component objectid="${baseId}"/><component objectid="${reliefId}"/>` +
+          `</components></object>`,
+      );
+      items.push(`<item objectid="${groupId}"/>`);
+    } else {
+      // Sin relieve (o sin colores): un solo objeto. Con colores, todo al fondo.
+      const id = nextId++;
+      const matAttr = colors ? ` pid="${matId}" pindex="0"` : '';
+      objects.push(meshObject(id, pc.label, pc.mesh.positions, 0, pc.mesh.positions.length, matAttr));
+      items.push(`<item objectid="${id}"/>`);
+    }
+  }
+
+  const materials = colors
+    ? `<basematerials id="${matId}">` +
+      `<base name="Fondo" displaycolor="${displayColor(colors.bg)}"/>` +
+      `<base name="Trazo" displaycolor="${displayColor(colors.trace)}"/>` +
+      `</basematerials>`
+    : '';
 
   const model =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<model unit="millimeter" xml:lang="es-ES" ` +
     `xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">` +
     `<metadata name="Application">MoldeLab</metadata>` +
-    `<resources>${objects.join('')}</resources>` +
+    `<resources>${materials}${objects.join('')}</resources>` +
     `<build>${items.join('')}</build>` +
     `</model>`;
 

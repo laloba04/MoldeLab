@@ -610,6 +610,61 @@ button.ghost:hover {
   user-select: none;
 }
 
+.colors {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.colors h3 {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.color-row input[type='color'] {
+  width: 34px;
+  height: 24px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+.color-row input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+.color-row input[type='color']::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+/* El desplegable de «Forma del molde» y otros selects. */
+.field.select select {
+  padding: 7px 9px;
+  background: var(--bed);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 12.5px;
+  outline: none;
+  cursor: pointer;
+}
+.field.select select:focus {
+  border-color: var(--blade);
+}
+
 .mark-box {
   display: flex;
   flex-direction: column;

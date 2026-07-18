@@ -4,23 +4,35 @@ import { Grid, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Piece } from '../types';
 
-/** El color dice qué hace la pieza: cian corta, rosa marca, gris sostiene. */
-const COLORS: Record<Piece['role'], string> = {
-  blade: '#1bc5d4',
-  icing: '#ff5fa2',
-  body: '#93a3b3',
-};
+function geomOf(positions: number[]): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.computeVertexNormals();
+  g.computeBoundingBox();
+  return g;
+}
 
-function PieceMesh({ piece, offset }: { piece: Piece; offset: number }) {
-  const geom = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(piece.mesh.positions, 3));
-    g.computeVertexNormals();
-    g.computeBoundingBox();
-    return g;
-  }, [piece.mesh]);
+function PieceMesh({
+  piece,
+  offset,
+  bgColor,
+  traceColor,
+}: {
+  piece: Piece;
+  offset: number;
+  bgColor: string;
+  traceColor: string;
+}) {
+  // El cortador conserva su cian (corta); el resto usa el color de fondo.
+  const baseColor = piece.role === 'blade' ? '#1bc5d4' : bgColor;
 
-  const ref = useRef<THREE.Mesh>(null);
+  const baseGeom = useMemo(() => geomOf(piece.mesh.positions), [piece.mesh]);
+  const overlayGeom = useMemo(
+    () => (piece.overlay?.positions.length ? geomOf(piece.overlay.positions) : null),
+    [piece.overlay],
+  );
+
+  const ref = useRef<THREE.Group>(null);
 
   useFrame((_, dt) => {
     if (!ref.current) return;
@@ -28,14 +40,31 @@ function PieceMesh({ piece, offset }: { piece: Piece; offset: number }) {
   });
 
   return (
-    <mesh ref={ref} geometry={geom} castShadow receiveShadow>
-      <meshStandardMaterial
-        color={COLORS[piece.role]}
-        metalness={0.15}
-        roughness={0.45}
-        side={THREE.DoubleSide}
-      />
-    </mesh>
+    <group ref={ref}>
+      <mesh geometry={baseGeom} castShadow receiveShadow>
+        <meshStandardMaterial
+          color={baseColor}
+          metalness={0.15}
+          roughness={0.5}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* El relieve se repinta encima con el color del trazo. polygonOffset lo
+          adelanta un pelín para que gane al fondo sin parpadear (z-fighting). */}
+      {overlayGeom && (
+        <mesh geometry={overlayGeom} castShadow>
+          <meshStandardMaterial
+            color={traceColor}
+            metalness={0.15}
+            roughness={0.5}
+            side={THREE.DoubleSide}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
+        </mesh>
+      )}
+    </group>
   );
 }
 
@@ -43,10 +72,14 @@ export function Viewer({
   pieces,
   exploded,
   mark,
+  bgColor,
+  traceColor,
 }: {
   pieces: Piece[];
   exploded: boolean;
   mark?: string | null;
+  bgColor: string;
+  traceColor: string;
 }) {
   // Las piezas se separan en fila, no en montón.
   const span = useMemo(() => {
@@ -95,6 +128,8 @@ export function Viewer({
           key={p.id}
           piece={p}
           offset={exploded && pieces.length > 1 ? (i - (pieces.length - 1) / 2) * span : 0}
+          bgColor={bgColor}
+          traceColor={traceColor}
         />
       ))}
 

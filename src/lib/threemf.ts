@@ -10,14 +10,14 @@
  *    como objetos separados en el mismo archivo, y el laminador los recibe ya
  *    nombrados y colocados. No hace falta el ZIP de STLs sueltos.
  *
- * Color en Bambu/Orca: NO se hace con materiales del 3MF estándar (Bambu los
- * ignora). Se hace a su manera:
- *   1. Cada triángulo del relieve lleva `paint_color="8"` (pintado a la ranura
- *      de filamento 2); la placa va sin pintar y usa el filamento 1.
- *   2. `Metadata/project_settings.config` declara los dos filamentos y sus
- *      colores (fondo, trazo): de ahí saca Bambu los colores.
- *   3. `Metadata/model_settings.config` asigna el filamento base 1 a cada pieza.
- * (Formato según wiki de Bambu y análisis de sus 3MF. Ver #18.)
+ * Color: se usa el "Face Coloring" del 3MF estándar (extensión de color oficial
+ * del 3MF Consortium), que es lo que Bambu Studio reconoce y ofrece emparejar
+ * con sus filamentos al importar (ventana "Standard 3MF Color Parsing"):
+ *   - Un `<m:colorgroup>` con dos colores: 0 = fondo, 1 = trazo.
+ *   - Cada triángulo apunta a su color con `pid`/`p1`; el objeto lleva el fondo
+ *     por defecto (`pindex="0"`) y los triángulos del relieve el trazo (`p1=1`).
+ * OJO: hay que usar la extensión de COLOR (`m:colorgroup`), no `basematerials`,
+ * que Bambu trata como ranura de filamento sin color. Ver #18.
  *
  * Las mallas internas son sopa de triángulos (9 floats por triángulo); el 3MF
  * exige vértices indexados, así que aquí se sueldan: los vértices se cuantizan
@@ -81,7 +81,6 @@ const hex = (h: string) => `#${h.replace('#', '').toUpperCase().slice(0, 6).padE
 export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): Blob {
   const objects: string[] = [];
   const items: string[] = [];
-  const settings: string[] = []; // model_settings.config, por pieza
 
   pieces.forEach((pc, idx) => {
     const id = idx + 1;
@@ -95,33 +94,41 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
         return `<vertex x="${x}" y="${y}" z="${z}"/>`;
       })
       .join('');
-    // Relieve pintado a la ranura 2 ("8"); la placa sin pintar usa la 1.
+    // Color estándar del 3MF (extensión de color): la placa apunta al color 0
+    // (fondo) y el relieve al color 1 (trazo). Bambu lo lee como colores reales.
     const tr = tris
       .map(([a, b, c, relieve]) =>
-        relieve && colors
-          ? `<triangle v1="${a}" v2="${b}" v3="${c}" paint_color="8"/>`
+        colors
+          ? `<triangle v1="${a}" v2="${b}" v3="${c}" pid="1" p1="${relieve ? 1 : 0}"/>`
           : `<triangle v1="${a}" v2="${b}" v3="${c}"/>`,
       )
       .join('');
 
+    // El objeto declara su color por defecto (fondo); el relieve lo cambia.
+    const objAttr = colors ? ` pid="1" pindex="0"` : '';
     objects.push(
-      `<object id="${id}" type="model" name="${xmlName(pc.label)}"><mesh>` +
+      `<object id="${id}" type="model" name="${xmlName(pc.label)}"${objAttr}><mesh>` +
         `<vertices>${vx}</vertices><triangles>${tr}</triangles></mesh></object>`,
     );
     items.push(`<item objectid="${id}"/>`);
-    settings.push(
-      `<object id="${id}"><metadata key="name" value="${xmlName(pc.label)}"/>` +
-        `<metadata key="extruder" value="1"/></object>`,
-    );
   });
+
+  // Grupo de COLOR (no de material): es lo que el "Standard 3MF Import Color"
+  // de Bambu lee como colores de verdad. displaycolor en formato #RRGGBBFF.
+  const colorGroup = colors
+    ? `<m:colorgroup id="1">` +
+      `<m:color color="${hex(colors.bg)}FF"/>` +
+      `<m:color color="${hex(colors.trace)}FF"/>` +
+      `</m:colorgroup>`
+    : '';
 
   const model =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<model unit="millimeter" xml:lang="es-ES" ` +
     `xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" ` +
-    `xmlns:BambuStudio="http://schemas.bambulab.com/package/2021">` +
+    `xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">` +
     `<metadata name="Application">MoldeLab</metadata>` +
-    `<resources>${objects.join('')}</resources>` +
+    `<resources>${colorGroup}${objects.join('')}</resources>` +
     `<build>${items.join('')}</build>` +
     `</model>`;
 
@@ -130,7 +137,6 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
     `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
     `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
     `<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>` +
-    `<Default Extension="config" ContentType="text/xml"/>` +
     `</Types>`;
 
   const rels =
@@ -140,35 +146,17 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
     `Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>` +
     `</Relationships>`;
 
-  const files: Record<string, Uint8Array> = {
-    '[Content_Types].xml': strToU8(contentTypes),
-    '_rels/.rels': strToU8(rels),
-    '3D/3dmodel.model': strToU8(model),
-  };
-
-  // Los archivos propios de Bambu: sin ellos el laminador solo lee geometría.
-  if (colors) {
-    files['Metadata/model_settings.config'] = strToU8(
-      `<?xml version="1.0" encoding="UTF-8"?><config>${settings.join('')}</config>`,
-    );
-    // De aquí saca Bambu los colores (filament_colour es la fuente autoritativa).
-    // Dos filamentos: 1 = fondo, 2 = trazo. PLA genérico ("GFL99").
-    files['Metadata/project_settings.config'] = strToU8(
-      JSON.stringify({
-        filament_colour: [hex(colors.bg), hex(colors.trace)],
-        filament_type: ['PLA', 'PLA'],
-        filament_ids: ['GFL99', 'GFL99'],
-        filament_settings_id: ['Generic PLA', 'Generic PLA'],
-        filament_density: ['1.24', '1.24'],
-        filament_diameter: ['1.75', '1.75'],
-        nozzle_diameter: ['0.4'],
-        version: '01.09.00.00',
-      }),
-    );
-  }
-
-  // El XML comprime de maravilla; aquí sí merece la pena el nivel 6.
-  const zip = zipSync(files, { level: 6 });
+  // 3MF estándar con color por cara (Face Coloring). Sin los .config propios de
+  // Bambu a propósito: así lo trata como 3MF estándar y abre su ventana de
+  // "Standard 3MF Color Parsing", que reconoce los colores del archivo.
+  const zip = zipSync(
+    {
+      '[Content_Types].xml': strToU8(contentTypes),
+      '_rels/.rels': strToU8(rels),
+      '3D/3dmodel.model': strToU8(model),
+    },
+    { level: 6 },
+  );
 
   return new Blob([zip.buffer as ArrayBuffer], {
     type: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',

@@ -5,11 +5,20 @@ import { loadImageData } from './lib/image';
 import { buildPieces, vectorize } from './lib/pipeline';
 import { byId } from './lib/catalog';
 import { arcTextImage, imageWithText, qrImage, textImage } from './lib/sources';
-import { toStl, toZip } from './lib/stl';
+import { toStl } from './lib/stl';
+import { toObj, toSvg, zipFiles } from './lib/formats';
 import { isEmbedded, saveBlob } from './lib/save';
 import { to3mf } from './lib/threemf';
 import { applyWatermark, canWatermark, rasterizeText } from './lib/watermark';
 import { translate, triangleCount } from './lib/mesh';
+
+type Fmt = '3mf' | 'stl' | 'obj' | 'svg';
+const FORMATS: { id: Fmt; label: string; hint: string }[] = [
+  { id: '3mf', label: '3MF (color)', hint: 'Todas las piezas y los colores, para Bambu/Orca.' },
+  { id: 'stl', label: 'STL', hint: 'El clásico. Varias piezas van en un ZIP.' },
+  { id: 'obj', label: 'OBJ', hint: 'Malla 3D genérica (Blender, Meshmixer…).' },
+  { id: 'svg', label: 'SVG (corte láser)', hint: 'El contorno 2D en milímetros.' },
+];
 
 /**
  * Coloca las piezas en fila sobre la cama, sin solaparse: los productos de
@@ -52,8 +61,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [exploded, setExploded] = useState(true);
-  const [fmt, setFmt] = useState<'3mf' | 'stl'>('3mf');
-  // Al descargar varias piezas: separadas en fila (para imprimir) o juntas.
+  // Diálogo de descarga: qué formatos, nombre, y si separar las piezas.
+  const [dlOpen, setDlOpen] = useState(false);
+  const [dlFmts, setDlFmts] = useState<Set<Fmt>>(new Set<Fmt>(['3mf']));
+  const [dlName, setDlName] = useState('');
   const [separate, setSeparate] = useState(true);
   const [mark, setMark] = useState('Barakaldesa Manitas 3D');
   const [markOn, setMarkOn] = useState(false);
@@ -241,28 +252,38 @@ export default function App() {
 
   const [notice, setNotice] = useState<string | null>(null);
 
-  const exportAll = async () => {
-    // Un solo archivo siempre que se puede: el 3MF lleva todas las piezas como
-    // objetos, con nombre y en milímetros. Lo que el STL nunca pudo.
-    let blob: Blob;
-    let name: string;
+  const download = async () => {
+    if (!marked.length || !dlFmts.size) return;
+    const name =
+      (dlName.trim() || `moldelab-${params.product}`).replace(/[^\w\-]+/g, '_').slice(0, 40) ||
+      'moldelab';
     const forExport = separate ? spreadPieces(marked) : marked;
-    if (fmt === '3mf') {
-      blob = to3mf(forExport, { bg: bgColor, trace: traceColor });
-      name = `moldelab-${params.product}.3mf`;
-    } else if (marked.length === 1) {
-      blob = toStl(marked[0].mesh, `MoldeLab ${marked[0].label}`);
-      name = `moldelab-${params.product}.stl`;
-    } else {
-      blob = toZip(
-        marked.map((pc) => ({ name: `moldelab-${params.product}-${pc.id}.stl`, mesh: pc.mesh })),
-      );
-      name = `moldelab-${params.product}.zip`;
+
+    // Cada formato añade uno o varios archivos; si al final hay más de uno, se
+    // empaquetan en un ZIP.
+    const files: Record<string, Uint8Array> = {};
+    const add = async (fn: string, blob: Blob) => {
+      files[fn] = new Uint8Array(await blob.arrayBuffer());
+    };
+
+    if (dlFmts.has('3mf')) await add(`${name}.3mf`, to3mf(forExport, { bg: bgColor, trace: traceColor }));
+    if (dlFmts.has('obj')) await add(`${name}.obj`, toObj(forExport.map((p) => ({ name: p.label, mesh: p.mesh }))));
+    if (dlFmts.has('svg') && silhouette) await add(`${name}.svg`, toSvg(silhouette.loops));
+    if (dlFmts.has('stl')) {
+      if (marked.length === 1) await add(`${name}.stl`, toStl(marked[0].mesh, `MoldeLab ${marked[0].label}`));
+      else for (const pc of forExport) await add(`${name}-${pc.id}.stl`, toStl(pc.mesh, pc.label));
     }
 
-    const result = await saveBlob(blob, name);
+    const names = Object.keys(files);
+    if (!names.length) return;
+    const single = names.length === 1;
+    const blob = single ? new Blob([files[names[0]].buffer as ArrayBuffer]) : zipFiles(files);
+    const outName = single ? names[0] : `${name}.zip`;
+
+    const result = await saveBlob(blob, outName);
     if (result.ok) {
-      setNotice(`Guardado: ${name} (${(blob.size / 1024).toFixed(0)} KB)`);
+      setDlOpen(false);
+      setNotice(`Guardado: ${outName} (${(blob.size / 1024).toFixed(0)} KB)`);
       setTimeout(() => setNotice(null), 4000);
     } else if (result.reason === 'sandboxed') {
       setError(
@@ -356,48 +377,70 @@ export default function App() {
 
         {pieces.length > 0 && (
           <footer className="actions">
-            {pieces.length > 1 && fmt === '3mf' && (
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={separate}
-                  onChange={(e) => setSeparate(e.target.checked)}
-                />
-                <span />
-                Separar las piezas en la cama
-              </label>
-            )}
-            <div className="fmt" role="radiogroup" aria-label="Formato de descarga">
-              <button
-                role="radio"
-                aria-checked={fmt === '3mf'}
-                className={fmt === '3mf' ? 'on' : ''}
-                onClick={() => setFmt('3mf')}
-                title="Un archivo con todas las piezas, en milímetros"
-              >
-                3MF
-              </button>
-              <button
-                role="radio"
-                aria-checked={fmt === 'stl'}
-                className={fmt === 'stl' ? 'on' : ''}
-                onClick={() => setFmt('stl')}
-                title="El clásico. Varias piezas salen en un ZIP"
-              >
-                STL
-              </button>
-            </div>
-            <button className="primary" onClick={exportAll} disabled={!pieces.length}>
+            <button className="primary" onClick={() => setDlOpen(true)} disabled={!pieces.length}>
               <Download size={15} />
-              {fmt === '3mf'
-                ? `Descargar 3MF${pieces.length > 1 ? ` · ${pieces.length} piezas` : ''}`
-                : pieces.length > 1
-                  ? `Descargar ZIP · ${pieces.length} piezas`
-                  : 'Descargar STL'}
+              Descargar…
             </button>
           </footer>
         )}
       </aside>
+
+      {dlOpen && (
+        <div className="modal-back" onClick={() => setDlOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Descargar archivos</h3>
+
+            <label className="modal-field">
+              Nombre del archivo
+              <input
+                type="text"
+                value={dlName}
+                maxLength={40}
+                placeholder={`moldelab-${params.product}`}
+                onChange={(e) => setDlName(e.target.value)}
+              />
+            </label>
+
+            <div className="fmt-list">
+              {FORMATS.map((f) => (
+                <label key={f.id} className="fmt-row">
+                  <input
+                    type="checkbox"
+                    checked={dlFmts.has(f.id)}
+                    onChange={(e) =>
+                      setDlFmts((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(f.id);
+                        else next.delete(f.id);
+                        return next;
+                      })
+                    }
+                  />
+                  <span className="fmt-name">{f.label}</span>
+                  <small>{f.hint}</small>
+                </label>
+              ))}
+            </div>
+
+            {pieces.length > 1 && (
+              <label className="toggle">
+                <input type="checkbox" checked={separate} onChange={(e) => setSeparate(e.target.checked)} />
+                <span />
+                Separar las piezas en la cama
+              </label>
+            )}
+
+            <div className="modal-actions">
+              <button className="ghost" onClick={() => setDlOpen(false)}>
+                Cancelar
+              </button>
+              <button className="primary" onClick={download} disabled={!dlFmts.size}>
+                <Download size={15} /> Descargar{dlFmts.size > 1 ? ' (ZIP)' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="stage">
         {isEmbedded() && (

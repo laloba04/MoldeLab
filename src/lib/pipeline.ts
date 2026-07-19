@@ -18,8 +18,18 @@ import { buildProduct, byId } from './catalog';
 
 const BORDER = 2;
 
-/** Contornos de una máscara -> lazos en mm, orientados y clasificados. */
-function loopsFromMask(mask: Mask, p: Params, mmPerPx: number, minAreaMm2: number): Loop[] {
+/**
+ * Contornos de una máscara -> lazos en mm, orientados y clasificados.
+ * `resampleMm` es el paso al que se reparten los puntos del contorno: fino
+ * (≈0.5) conserva los detalles pequeños; grueso (≈1.2) da menos triángulos.
+ */
+function loopsFromMask(
+  mask: Mask,
+  p: Params,
+  mmPerPx: number,
+  minAreaMm2: number,
+  resampleMm = 1.2,
+): Loop[] {
   const raw = traceContours(pad(mask, BORDER));
   const loops: Loop[] = [];
 
@@ -34,7 +44,7 @@ function loopsFromMask(mask: Mask, p: Params, mmPerPx: number, minAreaMm2: numbe
     pts = simplify(pts, p.simplify);
     pts = smooth(pts, p.smooth);
     pts = dedupe(pts);
-    pts = resample(pts, 1.2);
+    pts = resample(pts, resampleMm);
     if (pts.length < 3) continue;
 
     loops.push({ pts, hole: false });
@@ -79,7 +89,9 @@ export function vectorize(img: ImageData, p: Params): Silhouette {
   );
 
   let loops = [...kept, ...kholes];
-  let detail = loopsFromMask(detailMask, p, mmPerPx, minArea * 0.02);
+  // El detalle lleva las líneas finas (venas, filigranas): se remuestrea a un
+  // paso fino (0.5 mm) para que no se redondeen ni se emborronen.
+  let detail = loopsFromMask(detailMask, p, mmPerPx, minArea * 0.02, 0.5);
 
   // Bandas por umbral para los productos en capas: la capa 0 es la silueta
   // entera y cada banda siguiente es lo que queda por debajo de un umbral más
@@ -92,7 +104,7 @@ export function vectorize(img: ImageData, p: Params): Silhouette {
       const t = Math.max(10, Math.round(p.threshold * (1 - i / (nExtra + 1))));
       const bin = binarize(img, t, p.invert);
       const m = p.cleanup > 0 ? cleanupMask(bin, p.cleanup) : bin;
-      bands.push(loopsFromMask(m, p, mmPerPx, minArea * 0.05));
+      bands.push(loopsFromMask(m, p, mmPerPx, minArea * 0.05, 0.6));
     }
   }
 

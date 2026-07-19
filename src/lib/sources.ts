@@ -98,7 +98,32 @@ export function arcTextImage(text: string, scale: number, curve: number): ImageD
 }
 
 /** Imagen del usuario arriba, texto debajo. El clásico logo + nombre. */
-export function imageWithText(img: ImageData, text: string, scale: number): ImageData {
+/**
+ * Fila más baja con tinta cerca del eje central de la imagen. Sirve para saber
+ * dónde termina de verdad el dibujo (no su caja), y así soldar el texto justo
+ * ahí. Devuelve la Y en píxeles de la imagen (o su alto si no hay tinta).
+ */
+function inkBottomCenter(img: ImageData, colFrac = 0.4): number {
+  const { width, height, data } = img;
+  const x0 = Math.floor(width * (0.5 - colFrac / 2));
+  const x1 = Math.ceil(width * (0.5 + colFrac / 2));
+  for (let y = height - 1; y >= 0; y--) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * width + x) * 4;
+      const lum = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      if (data[i + 3] > 40 && lum < 150) return y;
+    }
+  }
+  return height;
+}
+
+export function imageWithText(
+  img: ImageData,
+  text: string,
+  scale: number,
+  tx = 0,
+  ty = 0,
+): ImageData {
   const t = text.trim();
   if (!t) return img;
 
@@ -106,26 +131,49 @@ export function imageWithText(img: ImageData, text: string, scale: number): Imag
   const px = fit(probe, t, W * (scale / 100), 200);
   probe.font = FONT.replace('%s', String(px));
   const textH = px * 1.6;
+  const textW = probe.measureText(t).width;
 
   const imgW = W * 0.9;
   const k = imgW / img.width;
   const imgH = img.height * k;
+  const imgTop = 20;
 
-  const { c, ctx } = makeCanvas(W, Math.ceil(imgH + textH + 60));
+  // Posición del texto: parte de «centrado, debajo de la imagen» y se desplaza
+  // con los deslizadores. Se recorta para no salirse del lienzo.
+  const baseCy = imgH + 20 + textH / 2;
+  const textCy = baseCy + ty * textH;
+  const half = textW / 2 + 12;
+  const textCx = Math.max(half, Math.min(W - half, W / 2 + tx * (W * 0.3)));
+
+  // El lienzo crece lo necesario para que el texto quepa lo bajes o lo subas.
+  const bottom = Math.max(imgH + textH + 60, textCy + textH / 2 + 30);
+  const top = Math.min(0, textCy - textH / 2 - 30);
+  const { c, ctx } = makeCanvas(W, Math.ceil(bottom - top));
+  const shift = -top; // todo se dibuja desplazado si el texto sube por encima
 
   // ImageData no se puede dibujar escalado: pasa por un canvas intermedio.
   const tmp = document.createElement('canvas');
   tmp.width = img.width;
   tmp.height = img.height;
   tmp.getContext('2d')!.putImageData(img, 0, 0);
-  ctx.drawImage(tmp, (W - imgW) / 2, 20, imgW, imgH);
+  ctx.drawImage(tmp, (W - imgW) / 2, imgTop + shift, imgW, imgH);
+
+  // Puente: une la tinta más baja del dibujo con el texto para que salgan
+  // soldados en UNA pieza (si no, el texto flota o se pierde como isla suelta).
+  // Es una barra recta entre ambos, así que aguanta que el texto se mueva.
+  const inkY = imgTop + shift + inkBottomCenter(img) * k;
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = Math.max(40, px * 0.4);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(W / 2, inkY);
+  ctx.lineTo(textCx, textCy + shift);
+  ctx.stroke();
 
   ctx.font = FONT.replace('%s', String(px));
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  // El texto solapa 6 px con la imagen: así texto e imagen salen soldados en
-  // una sola pieza en vez de flotar separados.
-  ctx.fillText(t, W / 2, imgH + 14 + textH / 2 - 6);
+  ctx.fillText(t, textCx, textCy + shift);
 
   return ctx.getImageData(0, 0, c.width, c.height);
 }

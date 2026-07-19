@@ -12,7 +12,7 @@ export interface Mask {
   h: number;
 }
 
-const MAX_SIDE = 700;
+const MAX_SIDE = 1000;
 
 /** Dibuja el archivo en un canvas, reescalando si es enorme. */
 export async function loadImageData(file: File | Blob): Promise<ImageData> {

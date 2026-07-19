@@ -129,7 +129,8 @@ export default function App() {
       }
       if (product.needsText) {
         const t = params.textContent;
-        if (img && t.trim()) return imageWithText(img, t, params.textScale);
+        if (img && t.trim())
+          return imageWithText(img, t, params.textScale, params.textX, params.textY);
         if (img) return img;
         if (!t.trim()) return null;
         return params.product === 'sign-curved'
@@ -151,7 +152,7 @@ export default function App() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [img, product, params.textContent, params.textScale, params.textCurve, params.qrContent, params.product]);
+  }, [img, product, params.textContent, params.textScale, params.textX, params.textY, params.textCurve, params.qrContent, params.product]);
 
   // Vectorizar es lo caro: solo cuando cambia algo que afecta al contorno.
   const vecKey = [

@@ -205,10 +205,10 @@ export const PRODUCTS: Entry[] = [
     id: 'keychain-text',
     category: 'llaveros',
     label: 'Llavero de texto',
-    hint: 'Escribe un nombre y sale un llavero.',
+    hint: 'Escribe un nombre. El «borde» engorda las letras hasta que se unen.',
     needsText: true,
-    fields: ['textScale', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck'],
-    build: (s, p) => buildKeychain(s.loops, s.detail, p, 'silhouette'),
+    fields: ['textScale', 'thickness', 'border', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
+    build: (s, p) => buildKeychain(s.loops, s.detail, p, 'plate'),
   },
   {
     id: 'keychain-image-text',
@@ -216,7 +216,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Llavero imagen + texto',
     hint: 'Tu imagen arriba, el nombre debajo, en una pieza.',
     needsText: true,
-    fields: ['textScale', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
+    fields: ['textScale', 'textX', 'textY', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'relief'),
   },
   {

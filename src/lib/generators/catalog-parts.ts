@@ -272,7 +272,7 @@ export function buildKeychain(
   loops: Loop[],
   detail: Loop[],
   p: Params,
-  variant: 'silhouette' | 'relief' | 'cutout',
+  variant: 'silhouette' | 'relief' | 'cutout' | 'plate',
 ): Piece[] {
   const ring = ringAt(loops, p);
   const extras: Mesh[] = [
@@ -280,7 +280,13 @@ export function buildKeychain(
   ];
 
   let base: Region[];
-  if (variant === 'cutout') {
+  if (variant === 'plate') {
+    // Une las letras por su PROPIO contorno: se engorda la silueta (offset) hasta
+    // que las letras vecinas se tocan y forman una sola pieza con forma de la
+    // palabra, no una placa rectangular. Las letras van en relieve encima.
+    base = regionsOf(loops, Math.max(0.6, p.border));
+    extras.push(...reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight));
+  } else if (variant === 'cutout') {
     // El dibujo se cala en una etiqueta: se ve a través.
     const box = boxOf(loops);
     const tag = roundedRect(

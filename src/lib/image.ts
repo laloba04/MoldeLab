@@ -41,6 +41,71 @@ function hasAlpha(img: ImageData): boolean {
 }
 
 /**
+ * «Arreglar imagen»: calcula el mejor umbral automáticamente (método de Otsu,
+ * el que separa la imagen en dos grupos lo más distintos posible) y decide si
+ * hay que invertir (cuando el fondo es oscuro y el dibujo claro). Devuelve los
+ * ajustes; la UI los aplica.
+ */
+export function autoLevels(img: ImageData): { threshold: number; invert: boolean } {
+  // Con transparencia manda el alfa: material = opaco. Umbral medio, sin invertir.
+  if (hasAlpha(img)) return { threshold: 128, invert: false };
+
+  const { width: w, height: h, data } = img;
+  const lumAt = (x: number, y: number) => {
+    const p = (y * w + x) * 4;
+    return 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+  };
+
+  // Histograma de luminancia.
+  const hist = new Array(256).fill(0);
+  for (let p = 0; p < data.length; p += 4) {
+    const lum = (0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]) | 0;
+    hist[lum]++;
+  }
+
+  // Otsu: busca el umbral que maximiza la varianza entre los dos grupos.
+  const total = w * h;
+  let sum = 0;
+  for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let sumB = 0;
+  let wB = 0;
+  let best = 0;
+  let thr = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > best) {
+      best = between;
+      thr = t;
+    }
+  }
+
+  // ¿Invertir? Con el umbral, «material» = píxel oscuro. Si el borde de la
+  // imagen es mayoritariamente oscuro, el fondo es el oscuro → hay que invertir.
+  let borderOn = 0;
+  let borderTot = 0;
+  for (let x = 0; x < w; x++) {
+    borderTot += 2;
+    if (lumAt(x, 0) < thr) borderOn++;
+    if (lumAt(x, h - 1) < thr) borderOn++;
+  }
+  for (let y = 0; y < h; y++) {
+    borderTot += 2;
+    if (lumAt(0, y) < thr) borderOn++;
+    if (lumAt(w - 1, y) < thr) borderOn++;
+  }
+  const invert = borderOn > borderTot * 0.5;
+
+  return { threshold: Math.round(thr), invert };
+}
+
+/**
  * Binariza. Con alfa: opaco = material. Sin alfa: oscuro = material
  * (el caso típico de un dibujo negro sobre blanco).
  */

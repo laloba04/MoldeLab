@@ -127,6 +127,13 @@ body {
   border-color: var(--blade);
   color: var(--blade);
 }
+/* «Arreglar imagen»: sólido y discreto, aparece bajo la miniatura. */
+.upload.fix {
+  margin-top: 8px;
+  border-style: solid;
+  padding: 9px;
+  font-size: 12px;
+}
 
 .thumb {
   border: 1px solid var(--line);

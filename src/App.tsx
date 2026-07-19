@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Image as ImageIcon, Layers } from 'lucide-react';
+import { Download, Image as ImageIcon, Layers, Wand2 } from 'lucide-react';
 import { DEFAULTS, type Params, type Piece, type Silhouette } from './types';
-import { loadImageData } from './lib/image';
+import { autoLevels, loadImageData } from './lib/image';
 import { buildPieces, vectorize } from './lib/pipeline';
 import { byId } from './lib/catalog';
 import { boxOf } from './lib/shapes';
@@ -351,6 +351,20 @@ export default function App() {
               {stats.h.toFixed(0)} mm
             </figcaption>
           </figure>
+        )}
+
+        {img && (
+          <button
+            className="upload fix"
+            onClick={() => {
+              const { threshold, invert } = autoLevels(img);
+              setParams((prev) => ({ ...prev, threshold, invert }));
+            }}
+            title="Ajusta el umbral y el fondo automáticamente"
+          >
+            <Wand2 size={15} />
+            Arreglar imagen
+          </button>
         )}
 
         <Controls p={params} set={set} reset={reset} />

@@ -53,9 +53,12 @@ function spreadPieces(pieces: Piece[]): Piece[] {
 }
 import { Viewer } from './components/Viewer';
 import { Controls } from './components/Controls';
+import { deletePreset, loadPresets, upsertPreset, type Preset } from './lib/presets';
 
 export default function App() {
   const [params, setParams] = useState<Params>(DEFAULTS);
+  const [presets, setPresets] = useState<Preset[]>(() => loadPresets());
+  const [presetName, setPresetName] = useState('');
   const [img, setImg] = useState<ImageData | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [silhouette, setSilhouette] = useState<Silhouette | null>(null);
@@ -368,6 +371,59 @@ export default function App() {
         )}
 
         <Controls p={params} set={set} reset={reset} />
+
+        <div className="presets">
+          <h3>Ajustes guardados</h3>
+          <div className="preset-save">
+            <input
+              type="text"
+              value={presetName}
+              maxLength={30}
+              placeholder="Nombre del ajuste…"
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && presetName.trim()) {
+                  setPresets(upsertPreset(presetName, params));
+                  setPresetName('');
+                }
+              }}
+            />
+            <button
+              className="mini"
+              disabled={!presetName.trim()}
+              onClick={() => {
+                setPresets(upsertPreset(presetName, params));
+                setPresetName('');
+              }}
+            >
+              Guardar
+            </button>
+          </div>
+          {presets.length > 0 ? (
+            <ul className="preset-list">
+              {presets.map((pr) => (
+                <li key={pr.name}>
+                  <button
+                    className="preset-load"
+                    title="Cargar este ajuste"
+                    onClick={() => setParams({ ...DEFAULTS, ...pr.params })}
+                  >
+                    {pr.name}
+                  </button>
+                  <button
+                    className="preset-del"
+                    title="Borrar"
+                    onClick={() => setPresets(deletePreset(pr.name))}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="hint">Guarda la configuración actual con un nombre para reutilizarla.</p>
+          )}
+        </div>
 
         {pieces.length > 0 && (
           <div className="colors">

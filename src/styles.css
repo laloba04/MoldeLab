@@ -135,6 +135,70 @@ body {
   font-size: 12px;
 }
 
+/* Ajustes guardados (presets) */
+.presets {
+  margin-top: 14px;
+}
+.presets h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.preset-save {
+  display: flex;
+  gap: 6px;
+}
+.preset-save input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.03));
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-family: var(--body);
+  font-size: 13px;
+}
+.preset-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.preset-list li {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.preset-load {
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  font-family: var(--body);
+  font-size: 12px;
+  cursor: pointer;
+}
+.preset-load:hover {
+  color: var(--blade);
+}
+.preset-del {
+  padding: 0 8px;
+  background: transparent;
+  color: var(--muted, #8a94a3);
+  border: 0;
+  border-left: 1px solid var(--line);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.preset-del:hover {
+  color: #e06666;
+}
+
 .thumb {
   border: 1px solid var(--line);
   border-radius: var(--r);

@@ -458,15 +458,30 @@ export default function App() {
               Grabar mi marca en la pieza
             </label>
             {markOn && (
-              <input
-                className="mark-input"
-                type="text"
-                value={mark}
-                maxLength={32}
-                placeholder="Tu marca…"
-                onChange={(e) => setMark(e.target.value)}
-              />
+              <>
+                <input
+                  className="mark-input"
+                  type="text"
+                  value={mark}
+                  maxLength={32}
+                  placeholder="Tu marca…"
+                  onChange={(e) => setMark(e.target.value)}
+                />
+                <p className="hint">
+                  Se graba en la cara de <strong>atrás</strong> (la que toca la cama). Dale la vuelta
+                  a la pieza, o usa <strong>Rayos X</strong>, para verla.
+                </p>
+              </>
             )}
+          </div>
+        )}
+
+        {pieces.length > 0 && !markable && (
+          <div className="mark-box">
+            <p className="hint">
+              Esta pieza no admite marca: es de <strong>corte</strong> o hueca (cortador, contorno,
+              peana). La marca se graba en piezas con una cara plana (placas, llaveros, sellos…).
+            </p>
           </div>
         )}
 

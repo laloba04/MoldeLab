@@ -189,6 +189,9 @@ export interface Params {
   // Anilla de llavero
   ringOuter: number;
   ringInner: number;
+  ringPos: number; // posición horizontal de la anilla: -1 izq, 0 centro, 1 der
+  ringPosY: number; // posición vertical de la anilla (arrastrada con el ratón)
+  ringNeck: number; // largo del rabito de la anilla (mm)
 
   // Letreros
   standAngle: number;
@@ -274,6 +277,9 @@ export const DEFAULTS: Params = {
 
   ringOuter: 5,
   ringInner: 2.5,
+  ringPos: 0,
+  ringPosY: 0,
+  ringNeck: 10,
 
   standAngle: 15,
   standDepth: 30,
@@ -367,6 +373,9 @@ export const FIELD_META: Record<Field, FieldMeta> = {
 
   ringOuter: { label: 'Anilla', unit: 'mm', min: 3, max: 10, step: 0.5 },
   ringInner: { label: 'Agujero de la anilla', unit: 'mm', min: 1.5, max: 6, step: 0.5 },
+  ringPos: { label: 'Posición de la anilla', unit: '', min: -1, max: 1, step: 0.1 },
+  ringPosY: { label: 'Altura de la anilla', unit: '', min: -1.5, max: 1.5, step: 0.05 },
+  ringNeck: { label: 'Largo de la anilla', unit: 'mm', min: 3, max: 40, step: 1 },
 
   standAngle: { label: 'Inclinación', unit: '°', min: 0, max: 40, step: 1 },
   standDepth: { label: 'Fondo del pie', unit: 'mm', min: 10, max: 60, step: 1 },

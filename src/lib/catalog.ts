@@ -182,7 +182,7 @@ export const PRODUCTS: Entry[] = [
     category: 'llaveros',
     label: 'Llavero silueta',
     hint: 'La forma recortada, con su anilla.',
-    fields: [...SIZE, 'thickness', 'ringOuter', 'ringInner'],
+    fields: [...SIZE, 'thickness', 'ringOuter', 'ringInner', 'ringPos', 'ringNeck'],
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'silhouette'),
   },
   {
@@ -190,7 +190,7 @@ export const PRODUCTS: Entry[] = [
     category: 'llaveros',
     label: 'Llavero con relieve',
     hint: 'La silueta con el dibujo levantado encima.',
-    fields: [...SIZE, 'thickness', 'ringOuter', 'ringInner', ...RELIEF_FIELDS],
+    fields: [...SIZE, 'thickness', 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'relief'),
   },
   {
@@ -198,7 +198,7 @@ export const PRODUCTS: Entry[] = [
     category: 'llaveros',
     label: 'Llavero calado',
     hint: 'El dibujo atraviesa la etiqueta. Se ve la luz.',
-    fields: [...SIZE, 'thickness', 'border', 'cornerRadius', 'ringOuter', 'ringInner'],
+    fields: [...SIZE, 'thickness', 'border', 'cornerRadius', 'ringOuter', 'ringInner', 'ringPos', 'ringNeck'],
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'cutout'),
   },
   {
@@ -207,7 +207,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Llavero de texto',
     hint: 'Escribe un nombre y sale un llavero.',
     needsText: true,
-    fields: ['textScale', 'thickness', ...SIZE, 'ringOuter', 'ringInner'],
+    fields: ['textScale', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck'],
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'silhouette'),
   },
   {
@@ -216,7 +216,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Llavero imagen + texto',
     hint: 'Tu imagen arriba, el nombre debajo, en una pieza.',
     needsText: true,
-    fields: ['textScale', 'thickness', ...SIZE, 'ringOuter', 'ringInner', ...RELIEF_FIELDS],
+    fields: ['textScale', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'relief'),
   },
   {

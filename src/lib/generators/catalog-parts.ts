@@ -224,13 +224,47 @@ export function buildImprintMold(loops: Loop[], p: Params): Piece[] {
 // Llaveros y etiquetas
 // -----------------------------------------------------------------------------
 
-/** La anilla se pega al borde superior y solapa hacia dentro para soldarse. */
-function ringAt(loops: Loop[], p: Params): { outer: Pt[]; hole: Pt[] } {
+/**
+ * La anilla del llavero es una PESTAÑA con forma de píldora (como la de
+ * MakerLab «Image to Keychain»): un rectángulo de puntas redondeadas que sale
+ * del borde superior del dibujo, centrado, con el agujero cerca de la punta.
+ *
+ * La clave para que no flote: la pestaña se solapa hacia DENTRO del material
+ * (baja por debajo del punto más alto del dibujo en el eje central), así que la
+ * unión con el dibujo es un bloque macizo, no un cuello fino. Funciona igual
+ * aunque el centro tenga un hueco (una mariposa entre las antenas): la pestaña
+ * baja hasta encontrar material y se suelda a él.
+ */
+/**
+ * Centro del agujero de la anilla (el punto que el usuario arrastra con el
+ * ratón en el visor). Depende de la caja del dibujo y de la posición elegida.
+ */
+export function ringHandle(loops: Loop[], p: Params): Pt {
   const box = boxOf(loops);
-  const cy = box.maxY + p.ringOuter * 0.55; // solapa con el cuerpo
+  const rx = box.cx + (p.ringPos ?? 0) * (box.w / 2);
+  // La posición por defecto NO depende del tamaño de la anilla, para que al
+  // agrandarla o achicarla crezca en su sitio sin saltar.
+  const holeDefault = box.maxY + Math.max(4, box.h * 0.06);
+  const holeCy = holeDefault + (p.ringPosY ?? 0) * (box.h / 2);
+  return [rx, holeCy];
+}
+
+function ringAt(loops: Loop[], p: Params): { tab: Pt[]; hole: Pt[] } {
+  const [rx, holeCy] = ringHandle(loops, p);
+
+  // Argolla de tamaño FIJO: una píldora con el agujero arriba y un rabito debajo
+  // que la mantiene pegada al dibujo. No se estira; va tal cual donde se
+  // arrastre (arriba/abajo, izquierda/derecha), como en MakerLab.
+  const w = p.ringOuter * 2; // ancho (lo controla «Anilla»)
+  const neck = p.ringNeck ?? p.ringOuter * 2; // largo del rabito (lo controla «Largo»)
+  const tabTop = holeCy + p.ringOuter;
+  const tabBottom = holeCy - neck;
+  const cy = (tabTop + tabBottom) / 2;
+  const tab = roundedRect(rx, cy, w, Math.max(w, tabTop - tabBottom), w / 2);
+
   return {
-    outer: circle(box.cx, cy, p.ringOuter, 40),
-    hole: [...circle(box.cx, cy, p.ringInner, 32)].reverse() as Pt[],
+    tab,
+    hole: [...circle(rx, holeCy, p.ringInner, 32)].reverse() as Pt[],
   };
 }
 
@@ -241,7 +275,9 @@ export function buildKeychain(
   variant: 'silhouette' | 'relief' | 'cutout',
 ): Piece[] {
   const ring = ringAt(loops, p);
-  const extras: Mesh[] = [solid(sanitize([ring.outer], [ring.hole]), 0, p.thickness)];
+  const extras: Mesh[] = [
+    solid(sanitize([ring.tab], [ring.hole]), 0, p.thickness), // la pestaña con su agujero
+  ];
 
   let base: Region[];
   if (variant === 'cutout') {

@@ -4,6 +4,8 @@ import { DEFAULTS, type Params, type Piece, type Silhouette } from './types';
 import { loadImageData } from './lib/image';
 import { buildPieces, vectorize } from './lib/pipeline';
 import { byId } from './lib/catalog';
+import { boxOf } from './lib/shapes';
+import { ringHandle } from './lib/generators/catalog-parts';
 import { arcTextImage, imageWithText, qrImage, textImage } from './lib/sources';
 import { toStl } from './lib/stl';
 import { toObj, toSvg, zipFiles } from './lib/formats';
@@ -244,6 +246,28 @@ export default function App() {
   const markable = pieces.some(canWatermark);
   const hasTrace = marked.some((p) => (p.overlay?.positions.length ?? 0) > 0);
 
+  // Tirador de la anilla: solo en llaveros (los que exponen «ringPos») y con una
+  // sola pieza. Arrastrarlo mueve la anilla a mano, como en MakerLab.
+  const ringDrag = useMemo(() => {
+    const prod = byId(params.product);
+    if (!silhouette || !prod.fields.includes('ringPos') || marked.length !== 1) return null;
+    const box = boxOf(silhouette.loops);
+    const [hx, hy] = ringHandle(silhouette.loops, params);
+    const holeDefault = box.maxY + Math.max(4, box.h * 0.06);
+    return {
+      pos: { x: hx, y: hy, z: params.thickness },
+      move: (x: number, y: number) => {
+        const nx = box.w ? (x - box.cx) / (box.w / 2) : 0;
+        const ny = box.h ? (y - holeDefault) / (box.h / 2) : 0;
+        setParams((prev) => ({
+          ...prev,
+          ringPos: Math.max(-1, Math.min(1, Math.round(nx * 1000) / 1000)),
+          ringPosY: Math.max(-1.5, Math.min(1.5, Math.round(ny * 1000) / 1000)),
+        }));
+      },
+    };
+  }, [silhouette, params, marked.length]);
+
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer.files[0];
@@ -459,6 +483,8 @@ export default function App() {
               traceColor={traceColor}
               hideTrace={hideTrace}
               viewMode={viewMode}
+              ring={ringDrag?.pos ?? null}
+              onRingMove={ringDrag?.move}
             />
             <div className="hud">
               {pieces.length > 1 && (

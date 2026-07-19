@@ -1,8 +1,74 @@
-import { useMemo, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Grid, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Piece } from '../types';
+
+/** Punto arrastrable: la anilla del llavero. Se mueve sobre el plano de arriba
+ *  (z constante) y avisa a App de las nuevas coordenadas en mm. */
+function DragHandle({
+  ring,
+  onMove,
+  onDragChange,
+}: {
+  ring: { x: number; y: number; z: number };
+  onMove: (x: number, y: number) => void;
+  onDragChange: (d: boolean) => void;
+}) {
+  const { camera, gl } = useThree();
+  const dragging = useRef(false);
+  const ray = useRef(new THREE.Raycaster());
+  const plane = useRef(new THREE.Plane());
+  const hit = useRef(new THREE.Vector3());
+  const cb = useRef(onMove);
+  cb.current = onMove;
+
+  useEffect(() => {
+    const toWorld = (e: PointerEvent) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      ray.current.setFromCamera(ndc, camera);
+      plane.current.set(new THREE.Vector3(0, 0, 1), -ring.z);
+      return ray.current.ray.intersectPlane(plane.current, hit.current);
+    };
+    const move = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      const w = toWorld(e);
+      if (w) cb.current(w.x, w.y);
+    };
+    const up = () => {
+      if (dragging.current) {
+        dragging.current = false;
+        onDragChange(false);
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+  }, [camera, gl, ring.z, onDragChange]);
+
+  return (
+    <mesh
+      position={[ring.x, ring.y, ring.z + 1.5]}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        dragging.current = true;
+        onDragChange(true);
+      }}
+      onPointerOver={() => (gl.domElement.style.cursor = 'grab')}
+      onPointerOut={() => (gl.domElement.style.cursor = '')}
+    >
+      <sphereGeometry args={[3, 20, 20]} />
+      <meshBasicMaterial color="#ffcf3f" depthTest={false} transparent opacity={0.92} />
+    </mesh>
+  );
+}
 
 function geomOf(positions: number[]): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
@@ -99,6 +165,8 @@ export function Viewer({
   traceColor,
   hideTrace = false,
   viewMode = 'solid',
+  ring = null,
+  onRingMove,
 }: {
   pieces: Piece[];
   exploded: boolean;
@@ -107,7 +175,10 @@ export function Viewer({
   traceColor: string;
   hideTrace?: boolean;
   viewMode?: ViewMode;
+  ring?: { x: number; y: number; z: number } | null;
+  onRingMove?: (x: number, y: number) => void;
 }) {
+  const [dragging, setDragging] = useState(false);
   // Las piezas se separan en fila, no en montón.
   const span = useMemo(() => {
     let max = 0;
@@ -162,7 +233,11 @@ export function Viewer({
         />
       ))}
 
-      <OrbitControls makeDefault enablePan target={[0, 0, 8]} />
+      {ring && onRingMove && (
+        <DragHandle ring={ring} onMove={onRingMove} onDragChange={setDragging} />
+      )}
+
+      <OrbitControls makeDefault enablePan enabled={!dragging} target={[0, 0, 8]} />
     </Canvas>
     {mark ? <span className="viewer-mark">{mark}</span> : null}
     </div>

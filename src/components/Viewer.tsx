@@ -199,11 +199,23 @@ export function Viewer({
     >
       <color attach="background" args={['#111820']} />
       <hemisphereLight intensity={0.5} groundColor="#0b1016" />
+      {/* La cámara de sombras por defecto de three solo abarca 10x10 unidades
+          alrededor del origen: fuera de ahí no hay sombra, y dentro la pieza se
+          sombreaba a sí misma y salía un cuadrado rayado en mitad del modelo.
+          Aquí se abre a toda la cama y se separa la sombra de la superficie. */}
       <directionalLight
         position={[60, -80, 140]}
         intensity={2.2}
         castShadow
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0005}
+        shadow-normalBias={1}
+        shadow-camera-left={-180}
+        shadow-camera-right={180}
+        shadow-camera-top={180}
+        shadow-camera-bottom={-180}
+        shadow-camera-near={1}
+        shadow-camera-far={600}
       />
       <directionalLight position={[-80, 60, 60]} intensity={0.6} />
 

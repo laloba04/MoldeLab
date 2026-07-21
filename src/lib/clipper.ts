@@ -88,6 +88,44 @@ export function sanitize(outer: Pt[][], holes: Pt[][]): Region[] {
 }
 
 /**
+ * Booleanas 2D de verdad, región contra región.
+ *
+ * `sanitize` NO sirve para restar: junta todos los caminos en un montón y
+ * decide por número de vueltas, así que si dos trozos de material se solapan
+ * (vueltas = 2) el agujero que se les resta encima solo baja a 1 y el material
+ * sigue ahí. Aquí en cambio hay sujeto y recorte separados, que es lo que hace
+ * falta cuando se quita una banda de una placa.
+ */
+function addRegions(c: any, regions: Region[], type: number) {
+  for (const r of regions) {
+    c.AddPath(toPath(r.outer), type, true);
+    for (const h of r.holes) c.AddPath(toPath(h), type, true);
+  }
+}
+
+function boolOp(op: number, a: Region[], b: Region[]): Region[] {
+  const c = new ClipperLib.Clipper();
+  addRegions(c, a, ClipperLib.PolyType.ptSubject);
+  addRegions(c, b, ClipperLib.PolyType.ptClip);
+  const solution: Path[] = [];
+  c.Execute(op, solution, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+  return toRegions(solution);
+}
+
+/** Une regiones. */
+export function union(a: Region[], b: Region[]): Region[] {
+  if (!a.length) return b;
+  if (!b.length) return a;
+  return boolOp(ClipperLib.ClipType.ctUnion, a, b);
+}
+
+/** Quita `b` de `a`. */
+export function subtract(a: Region[], b: Region[]): Region[] {
+  if (!a.length || !b.length) return a;
+  return boolOp(ClipperLib.ClipType.ctDifference, a, b);
+}
+
+/**
  * Intersección booleana 2D: lo que queda de `subject` dentro de `clip`.
  * Es la pieza que faltaba para el puzzle y el llavero articulado: recortar la
  * silueta con una rejilla de celdas sin tocar ninguna malla 3D.

@@ -9,7 +9,7 @@
 
 import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
-import { intersect, offsetRegions, sanitize, type Region } from '../clipper';
+import { intersect, offsetRegions, sanitize, subtract, union, type Region } from '../clipper';
 import { pointInPolygon, signedArea } from '../polygon';
 import { boxOf, circle, heart, roundedRect, shiftLoops, spikes } from '../shapes';
 
@@ -171,18 +171,16 @@ export function buildCutoutSign(loops: Loop[], detail: Loop[], p: Params): Piece
   const minArea = Math.PI * (half * 4) ** 2;
   const drawn = src.filter((l) => Math.abs(signedArea(l.pts)) >= minArea);
 
-  const subj: Pt[][] = [frame];
-  const cuts: Pt[][] = [];
   const n = Math.max(0, Math.round(p.cutBridges));
   const side = half * 2 + 1; // algo más ancho que la banda, para que cosa
 
+  let bands: Region[] = [];
+  let bridges: Region[] = [];
+
   for (const [k, l] of drawn.entries()) {
-    // La banda a quitar: lo de fuera del contorno menos lo de dentro.
-    for (const o of offsetRegions([l.pts], [], half)) {
-      cuts.push([...o.outer].reverse() as Pt[]);
-    }
-    // Se devuelve el material del interior, que si no se iría con la banda.
-    for (const i of offsetRegions([l.pts], [], -half)) subj.push(i.outer);
+    // La banda a quitar: lo de fuera del contorno menos lo de dentro. Es una
+    // resta de verdad; el material de alrededor ni se toca.
+    bands = union(bands, subtract(offsetRegions([l.pts], [], half), offsetRegions([l.pts], [], -half)));
 
     // Puentes: cuadraditos sobre el contorno que NO se cortan, y que dejan
     // cosida la parte de dentro con el resto de la placa. Se reparten por el
@@ -193,12 +191,12 @@ export function buildCutoutSign(loops: Loop[], detail: Loop[], p: Params): Piece
       const start = (skip * k) / Math.max(1, drawn.length);
       for (let b = 0; b < n; b++) {
         const [bx, by] = l.pts[Math.floor(start + b * skip) % l.pts.length];
-        subj.push(roundedRect(bx, by, side, side, 0));
+        bridges = union(bridges, sanitize([roundedRect(bx, by, side, side, 0)], []));
       }
     }
   }
 
-  const cut = sanitize(subj, cuts);
+  const cut = union(subtract(sanitize([frame], []), bands), bridges);
   return piece('sign-cutout', 'Letrero calado', 'body', solid(cut, 0, p.thickness), {
     plate: { regions: cut, zLo: 0, zHi: p.thickness },
   });

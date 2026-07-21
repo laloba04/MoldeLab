@@ -21,6 +21,7 @@ import { offsetRegions, type Region } from '../clipper';
 
 const PLATE_CLEARANCE = 0.3; // holgura para que la placa entre en el cortador
 const STEPS = 3; // escalones del ángulo de salida
+const RIM_H = 1.6; // grosor del reborde de agarre
 
 /** La región de la placa base del sello: la misma que extruye stampSolids,
  *  compartida para que la marca de agua pueda recomponerla. */
@@ -42,6 +43,21 @@ export function stampSolids(loops: Loop[], detail: Loop[], p: Params): Mesh[] {
     const m = emptyMesh();
     extrudeRegion(m, region, 0, p.stampBase);
     solids.push(m);
+  }
+
+  // --- Reborde de agarre ---
+  // Una pestaña que SOBRESALE del contorno, en la cara de atrás (la que no
+  // estampa). Al meter el sello en el cortador, el reborde queda apoyado en el
+  // filo en vez de colarse dentro, y deja un saliente donde meter el dedo para
+  // levantarlo y sacarlo. Con 0 no se genera.
+  if (p.stampRim > 0) {
+    const outer = loops.filter((l) => !l.hole).map((l) => l.pts);
+    const holes = loops.filter((l) => l.hole).map((l) => l.pts);
+    for (const region of offsetRegions(outer, holes, p.stampRim)) {
+      const m = emptyMesh();
+      extrudeRegion(m, region, -RIM_H, 0.01);
+      solids.push(m);
+    }
   }
 
   // --- Relieve, escalón a escalón ---

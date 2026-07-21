@@ -76,6 +76,14 @@ export default function App() {
   // Colores del visor y del 3MF: fondo = placa, trazo = relieve.
   const [bgColor, setBgColor] = useState('#e4d5c1');
   const [traceColor, setTraceColor] = useState('#8a5038');
+  // Colores de las capas (productos «en capas de color»), elegibles uno a uno.
+  const [layerColors, setLayerColors] = useState<string[]>([
+    '#e4d5c1',
+    '#c98f5a',
+    '#8a5038',
+    '#4e2b1f',
+    '#2b1712',
+  ]);
   // Ocultar el relieve para ver la placa lisa.
   const [hideTrace, setHideTrace] = useState(false);
   // Modo de vista del modelo: sólido, rayos X (transparente) o alámbrico.
@@ -210,20 +218,27 @@ export default function App() {
   // La marca grabada se aplica sobre las piezas ya construidas. Es lo último que
   // toca la geometría: firma del taller, no parte del diseño.
   const marked = useMemo(() => {
-    if (!markOn || !mark.trim()) return pieces;
-    try {
-      return applyWatermark(pieces, {
-        text: mark,
-        mode: 'engrave',
-        depth: 0.6,
-        heightMm: 4,
-        // El canvas vive en el navegador; la librería en sí corre también en Node.
-        raster: rasterizeText,
-      });
-    } catch {
-      return pieces;
-    }
-  }, [pieces, markOn, mark]);
+    const stamped = (() => {
+      if (!markOn || !mark.trim()) return pieces;
+      try {
+        return applyWatermark(pieces, {
+          text: mark,
+          mode: 'engrave',
+          depth: 0.6,
+          heightMm: 4,
+          // El canvas vive en el navegador; la librería en sí corre también en Node.
+          raster: rasterizeText,
+        });
+      } catch {
+        return pieces;
+      }
+    })();
+
+    // Las piezas que traen color propio (las capas) reciben el que haya elegido
+    // el usuario, en orden. Si no ha tocado nada, se quedan con el suyo.
+    let i = 0;
+    return stamped.map((p) => (p.tint ? { ...p, tint: layerColors[i++] ?? p.tint } : p));
+  }, [pieces, markOn, mark, layerColors]);
 
   const stats = useMemo(
     () => ({
@@ -434,14 +449,43 @@ export default function App() {
         {pieces.length > 0 && (
           <div className="colors">
             <h3>Colores</h3>
-            <label className="color-row">
-              <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} />
-              <span>Fondo (la placa)</span>
-            </label>
-            <label className="color-row">
-              <input type="color" value={traceColor} onChange={(e) => setTraceColor(e.target.value)} />
-              <span>Trazo (el dibujo)</span>
-            </label>
+            {marked.filter((p) => p.tint).length > 0 ? (
+              // Producto por capas: un color por capa, en el mismo orden en que
+              // se apilan. Es lo que se lleva el 3MF a los filamentos.
+              marked
+                .filter((p) => p.tint)
+                .map((p, i) => (
+                  <label className="color-row" key={p.id}>
+                    <input
+                      type="color"
+                      value={layerColors[i] ?? p.tint}
+                      onChange={(e) =>
+                        setLayerColors((prev) => {
+                          const next = [...prev];
+                          next[i] = e.target.value;
+                          return next;
+                        })
+                      }
+                    />
+                    <span>{p.label}</span>
+                  </label>
+                ))
+            ) : (
+              <>
+                <label className="color-row">
+                  <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} />
+                  <span>Fondo (la placa)</span>
+                </label>
+                <label className="color-row">
+                  <input
+                    type="color"
+                    value={traceColor}
+                    onChange={(e) => setTraceColor(e.target.value)}
+                  />
+                  <span>Trazo (el dibujo)</span>
+                </label>
+              </>
+            )}
             {hasTrace && (
               <label className="toggle">
                 <input

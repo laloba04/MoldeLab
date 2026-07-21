@@ -160,6 +160,7 @@ export interface Params {
 
   // Sello / relieve
   stampBase: number;
+  stampRim: number; // reborde que sobresale del sello, para agarrarlo y sacarlo
   reliefHeight: number;
   reliefTaper: number;
   strokeWidth: number;
@@ -254,6 +255,7 @@ export const DEFAULTS: Params = {
   cutHoles: true,
 
   stampBase: 2,
+  stampRim: 3,
   reliefHeight: 1.2,
   reliefTaper: 0.25,
   strokeWidth: 0,
@@ -344,6 +346,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   cutHoles: { toggle: true, label: 'Cortar también los huecos' },
 
   stampBase: { label: 'Base', unit: 'mm', min: 1, max: 6, step: 0.2 },
+  stampRim: { label: 'Reborde para agarrar', unit: 'mm', min: 0, max: 10, step: 0.5 },
   reliefHeight: { label: 'Altura del relieve', unit: 'mm', min: 0.3, max: 4, step: 0.1 },
   reliefTaper: { label: 'Ángulo de salida', unit: 'mm', min: 0, max: 0.8, step: 0.05 },
   strokeWidth: { label: 'Engrosar trazo', unit: 'mm', min: -1, max: 2, step: 0.1 },

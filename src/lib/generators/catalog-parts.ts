@@ -132,6 +132,68 @@ export function buildStencil(loops: Loop[], detail: Loop[], p: Params, label = '
   });
 }
 
+/**
+ * Letrero calado. Dos maneras de entenderlo, y las dos valen:
+ *
+ *  - «figura»: se recorta la figura entera y queda una placa con su hueco. Es
+ *    la plantilla de toda la vida; nada se cae porque no queda nada suelto.
+ *  - «líneas»: se recorta solo un contorno fino, así que la figura se dibuja
+ *    con la luz y la placa sigue entera. El problema clásico es que ese corte
+ *    cerrado deja la parte de DENTRO suelta (como el centro de una «o»), así
+ *    que se dejan sin cortar unos cuantos PUENTES repartidos por el contorno.
+ */
+export function buildCutoutSign(loops: Loop[], detail: Loop[], p: Params): Piece[] {
+  const box = boxOf(loops);
+  const frame = roundedRect(
+    box.cx,
+    box.cy,
+    box.w + p.border * 2,
+    box.h + p.border * 2,
+    p.cornerRadius,
+  );
+  const src = detail.length ? detail : loops;
+
+  if (p.cutoutMode === 'figure') {
+    const cut = sanitize(
+      [frame, ...holesOf(src)],
+      [...outerOf(src).map((o) => [...o].reverse() as Pt[])],
+    );
+    return piece('sign-cutout', 'Letrero calado', 'body', solid(cut, 0, p.thickness), {
+      plate: { regions: cut, zLo: 0, zHi: p.thickness },
+    });
+  }
+
+  // --- Modo «solo las líneas» ---
+  const half = Math.max(0.3, p.cutLineWidth / 2);
+  const subj: Pt[][] = [frame];
+  const cuts: Pt[][] = [];
+
+  for (const l of src) {
+    // La banda a quitar: lo de fuera del contorno menos lo de dentro.
+    for (const o of offsetRegions([l.pts], [], half)) {
+      cuts.push([...o.outer].reverse() as Pt[]);
+    }
+    // Se devuelve el material del interior, que si no se iría con la banda.
+    for (const i of offsetRegions([l.pts], [], -half)) subj.push(i.outer);
+
+    // Puentes: cuadraditos sobre el contorno que NO se cortan, y que dejan
+    // cosida la parte de dentro con el resto de la placa.
+    const n = Math.max(0, Math.round(p.cutBridges));
+    if (n > 0 && l.pts.length >= n) {
+      const side = half * 2 + 1.2; // algo más ancho que la banda, para que cosa
+      for (let b = 0; b < n; b++) {
+        const [bx, by] = l.pts[Math.floor((b * l.pts.length) / n)];
+        subj.push(roundedRect(bx, by, side, side, 0));
+      }
+    }
+  }
+
+  const cut = sanitize(subj, cuts);
+  return piece('sign-cutout', 'Letrero calado', 'body', solid(cut, 0, p.thickness), {
+    plate: { regions: cut, zLo: 0, zHi: p.thickness },
+  });
+}
+
 /** Topper de tarta: la silueta extruida más las púas que la clavan en la tarta. */
 export function buildTopper(loops: Loop[], detail: Loop[], p: Params): Piece[] {
   const box = boxOf(loops);

@@ -174,6 +174,11 @@ export interface Params {
   /** Contorno del molde en las placas: seguir la imagen o una forma estándar. */
   moldShape: MoldShape;
 
+  // Letrero calado
+  cutoutMode: 'figure' | 'lines';
+  cutLineWidth: number; // grosor de la línea recortada (modo «solo líneas»)
+  cutBridges: number; // puentes que sujetan la parte de dentro
+
   // Grabado en hueco
   engraveDepth: number;
 
@@ -268,6 +273,9 @@ export const DEFAULTS: Params = {
   // Por defecto el molde sigue la silueta de la imagen subida: es lo que la
   // usuaria espera («que se adapte a la imagen»), no un rectángulo fijo.
   moldShape: 'image',
+  cutoutMode: 'lines',
+  cutLineWidth: 2,
+  cutBridges: 6,
 
   engraveDepth: 0.8,
 
@@ -367,6 +375,17 @@ export const FIELD_META: Record<Field, FieldMeta> = {
       { value: 'heart', label: 'Corazón' },
     ],
   },
+
+  cutoutMode: {
+    select: true,
+    label: 'Qué se recorta',
+    options: [
+      { value: 'lines', label: 'Solo las líneas (a contraluz)' },
+      { value: 'figure', label: 'La figura entera' },
+    ],
+  },
+  cutLineWidth: { label: 'Grosor de la línea', unit: 'mm', min: 0.8, max: 6, step: 0.2 },
+  cutBridges: { label: 'Puentes de sujeción', min: 0, max: 12, step: 1 },
 
   engraveDepth: { label: 'Profundidad del grabado', unit: 'mm', min: 0.2, max: 4, step: 0.1 },
 

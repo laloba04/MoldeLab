@@ -23,6 +23,7 @@ import {
 } from './generators/extra-parts';
 import {
   buildBookmark,
+  buildCutoutSign,
   buildExtrude,
   buildImprintMold,
   buildInlayPlate,
@@ -284,8 +285,8 @@ export const PRODUCTS: Entry[] = [
     category: 'letreros',
     label: 'Letrero calado',
     hint: 'El dibujo atraviesa la placa. Bonito a contraluz.',
-    fields: [...PLATE_FIELDS],
-    build: (s, p) => buildStencil(s.loops, s.detail, p),
+    fields: [...PLATE_FIELDS, 'cutoutMode', 'cutLineWidth', 'cutBridges'],
+    build: (s, p) => buildCutoutSign(s.loops, s.detail, p),
   },
 
   {

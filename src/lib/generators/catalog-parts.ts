@@ -10,7 +10,7 @@
 import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
 import { intersect, offsetRegions, sanitize, subtract, union, type Region } from '../clipper';
-import { pointInPolygon, signedArea } from '../polygon';
+import { pointInPolygon } from '../polygon';
 import { boxOf, circle, heart, roundedRect, shiftLoops, spikes } from '../shapes';
 
 const outerOf = (loops: Loop[]) => loops.filter((l) => !l.hole).map((l) => l.pts);
@@ -166,10 +166,15 @@ export function buildCutoutSign(loops: Loop[], detail: Loop[], p: Params): Piece
   // --- Modo «solo las líneas» ---
   const half = Math.max(0.3, p.cutLineWidth / 2);
 
-  // Una mota más pequeña que la propia línea no se puede dibujar: saldría como
-  // un puntito suelto (o un agujero que se cae). Se deja fuera.
-  const minArea = Math.PI * (half * 4) ** 2;
-  const drawn = src.filter((l) => Math.abs(signedArea(l.pts)) >= minArea);
+  // Dibujable solo si al meterse media línea hacia dentro queda algo: una forma
+  // más estrecha que el propio corte no se puede contornear, saldría como un
+  // borrón. Es la misma regla que usaría una cuchilla de verdad, y de paso deja
+  // fuera las motitas sin tocar los dibujos buenos de las alas.
+  const drawn: { l: Loop; inner: Region[] }[] = [];
+  for (const l of src) {
+    const inner = offsetRegions([l.pts], [], -half);
+    if (inner.length) drawn.push({ l, inner });
+  }
 
   const n = Math.max(0, Math.round(p.cutBridges));
   const side = half * 2 + 1; // algo más ancho que la banda, para que cosa
@@ -177,10 +182,10 @@ export function buildCutoutSign(loops: Loop[], detail: Loop[], p: Params): Piece
   let bands: Region[] = [];
   let bridges: Region[] = [];
 
-  for (const [k, l] of drawn.entries()) {
+  for (const [k, { l, inner }] of drawn.entries()) {
     // La banda a quitar: lo de fuera del contorno menos lo de dentro. Es una
     // resta de verdad; el material de alrededor ni se toca.
-    bands = union(bands, subtract(offsetRegions([l.pts], [], half), offsetRegions([l.pts], [], -half)));
+    bands = union(bands, subtract(offsetRegions([l.pts], [], half), inner));
 
     // Puentes: cuadraditos sobre el contorno que NO se cortan, y que dejan
     // cosida la parte de dentro con el resto de la placa. Se reparten por el

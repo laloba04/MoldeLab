@@ -166,20 +166,27 @@ export function buildCutoutSign(loops: Loop[], detail: Loop[], p: Params): Piece
   // --- Modo «solo las líneas» ---
   const half = Math.max(0.3, p.cutLineWidth / 2);
 
-  // Dibujable solo si al meterse media línea hacia dentro queda algo: una forma
-  // más estrecha que el propio corte no se puede contornear, saldría como un
-  // borrón. Es la misma regla que usaría una cuchilla de verdad, y de paso deja
-  // fuera las motitas sin tocar los dibujos buenos de las alas.
+  // Cada figura se trata según lo ancha que sea comparada con la línea:
+  //
+  //   - más estrecha que la línea → ni se toca: no se puede cortar limpio.
+  //   - estrecha (menos de dos líneas de ancho) → se recorta ENTERA, como una
+  //     ranura. Es lo que hace cualquier recortable de papel con las hojitas
+  //     finas: contornearlas dejaría una mancha llena de puentes.
+  //   - ancha → se contornea, y se le ponen los puentes para que lo de dentro
+  //     no se caiga.
+  const slots: Loop[] = [];
   const drawn: { l: Loop; inner: Region[] }[] = [];
   for (const l of src) {
     const inner = offsetRegions([l.pts], [], -half);
-    if (inner.length) drawn.push({ l, inner });
+    if (!inner.length) continue;
+    if (offsetRegions([l.pts], [], -half * 2).length) drawn.push({ l, inner });
+    else slots.push(l);
   }
 
   const n = Math.max(0, Math.round(p.cutBridges));
   const side = half * 2 + 1; // algo más ancho que la banda, para que cosa
 
-  let bands: Region[] = [];
+  let bands: Region[] = slots.length ? sanitize(slots.map((l) => l.pts), []) : [];
   let bridges: Region[] = [];
 
   for (const [k, { l, inner }] of drawn.entries()) {

@@ -125,6 +125,12 @@ export function subtract(a: Region[], b: Region[]): Region[] {
   return boolOp(ClipperLib.ClipType.ctDifference, a, b);
 }
 
+/** ¿Se tocan? Para saber si un corte invade el terreno de otro. */
+export function overlaps(a: Region[], b: Region[]): boolean {
+  if (!a.length || !b.length) return false;
+  return boolOp(ClipperLib.ClipType.ctIntersection, a, b).length > 0;
+}
+
 /**
  * Intersección booleana 2D: lo que queda de `subject` dentro de `clip`.
  * Es la pieza que faltaba para el puzzle y el llavero articulado: recortar la

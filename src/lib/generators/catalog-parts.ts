@@ -10,7 +10,7 @@
 import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
 import { intersect, offsetRegions, sanitize, subtract, union, type Region } from '../clipper';
-import { pointInPolygon } from '../polygon';
+import { pointInPolygon, signedArea } from '../polygon';
 import { boxOf, circle, heart, roundedRect, shiftLoops, spikes } from '../shapes';
 
 const outerOf = (loops: Loop[]) => loops.filter((l) => !l.hole).map((l) => l.pts);
@@ -132,6 +132,39 @@ export function buildStencil(loops: Loop[], detail: Loop[], p: Params, label = '
   });
 }
 
+/** Engorda (o adelgaza, con delta negativo) un conjunto de regiones. */
+function grow(rs: Region[], delta: number): Region[] {
+  if (!rs.length) return rs;
+  return offsetRegions(rs.map((r) => r.outer), rs.flatMap((r) => r.holes), delta);
+}
+
+/** Apertura: adelgazar y volver a engordar. Se lleva por delante las esquirlas
+ *  más finas que `r`, que es justo lo que deja un recorte contra un vecino. */
+function openRegions(rs: Region[], r: number): Region[] {
+  return grow(grow(rs, -r), r);
+}
+
+/** Distancia acumulada a lo largo del contorno, cerrándolo. */
+function arcLengths(pts: Pt[]): number[] {
+  const acc = [0];
+  for (let i = 1; i <= pts.length; i++) {
+    const [x1, y1] = pts[i - 1];
+    const [x2, y2] = pts[i % pts.length];
+    acc.push(acc[i - 1] + Math.hypot(x2 - x1, y2 - y1));
+  }
+  return acc;
+}
+
+/** El punto que está a `d` milímetros del principio del contorno. */
+function atLength(pts: Pt[], acc: number[], d: number): Pt {
+  let i = 1;
+  while (i < acc.length - 1 && acc[i] < d) i++;
+  const t = (d - acc[i - 1]) / Math.max(1e-6, acc[i] - acc[i - 1]);
+  const [x1, y1] = pts[i - 1];
+  const [x2, y2] = pts[i % pts.length];
+  return [x1 + (x2 - x1) * t, y1 + (y2 - y1) * t];
+}
+
 /**
  * Letrero calado. Dos maneras de entenderlo, y las dos valen:
  *
@@ -169,43 +202,83 @@ export function buildCutoutSign(loops: Loop[], detail: Loop[], p: Params): Piece
   // Cada figura se trata según lo ancha que sea comparada con la línea:
   //
   //   - más estrecha que la línea → ni se toca: no se puede cortar limpio.
-  //   - estrecha (menos de dos líneas de ancho) → se recorta ENTERA, como una
-  //     ranura. Es lo que hace cualquier recortable de papel con las hojitas
-  //     finas: contornearlas dejaría una mancha llena de puentes.
+  //   - estrecha → se recorta ENTERA, como una ranura. Es lo que hace cualquier
+  //     recortable de papel con las hojitas finas: contornearlas dejaría una
+  //     mancha llena de puentes.
   //   - ancha → se contornea, y se le ponen los puentes para que lo de dentro
   //     no se caiga.
-  const slots: Loop[] = [];
-  const drawn: { l: Loop; inner: Region[] }[] = [];
+  //
+  // Para contornear se le piden TRES líneas de ancho: con menos, la isla que
+  // queda dentro es más fina que el propio corte y sale picadillo.
+  // Y sobre todo: NINGÚN corte puede acercarse a otro más de `WALL`. Si lo
+  // hiciera, la pared que queda en medio no llega ni a un par de hilos de
+  // impresora y el letrero sale roto, con trozos que faltan. El que no cabe
+  // sencillamente no se dibuja; mejor un dibujo con menos detalle que una pieza
+  // partida. Se empieza por las figuras grandes, que son las que se notan.
+  const WALL = Math.max(1, half);
+
+  const cands: { l: Loop; area: number; inner: Region[]; wide: boolean }[] = [];
   for (const l of src) {
     const inner = offsetRegions([l.pts], [], -half);
-    if (!inner.length) continue;
-    if (offsetRegions([l.pts], [], -half * 2).length) drawn.push({ l, inner });
-    else slots.push(l);
+    if (!inner.length) continue; // más fina que el propio corte
+    cands.push({
+      l,
+      area: Math.abs(signedArea(l.pts)),
+      inner,
+      wide: offsetRegions([l.pts], [], -half * 3).length > 0,
+    });
   }
+  cands.sort((a, b) => b.area - a.area);
 
   const n = Math.max(0, Math.round(p.cutBridges));
   const side = half * 2 + 1; // algo más ancho que la banda, para que cosa
 
-  let bands: Region[] = slots.length ? sanitize(slots.map((l) => l.pts), []) : [];
+  let bands: Region[] = [];
   let bridges: Region[] = [];
+  let taken: Region[] = []; // los cortes, engordados: terreno prohibido
+  let k = 0;
 
-  for (const [k, { l, inner }] of drawn.entries()) {
-    // La banda a quitar: lo de fuera del contorno menos lo de dentro. Es una
-    // resta de verdad; el material de alrededor ni se toca.
-    bands = union(bands, subtract(offsetRegions([l.pts], [], half), inner));
+  for (const { l, inner, wide } of cands) {
+    // Ancha: se contornea. Estrecha: se recorta entera, como una ranura.
+    const raw = wide
+      ? subtract(offsetRegions([l.pts], [], half), inner)
+      : offsetRegions([l.pts], [], half);
+    if (!raw.length) continue;
+
+    // Y aquí está la clave: no se descarta la figura que no cabe, se le quita
+    // el trozo que invadiría la pared del vecino. Se conserva casi todo el
+    // dibujo y la pared nunca baja del mínimo. Después se liman las esquirlas
+    // que deja ese recorte, que ni se imprimen ni se ven.
+    const clean = openRegions(taken.length ? subtract(raw, taken) : raw, half * 0.6).filter(
+      // Además de finas, fuera las migajas: un corte más corto que unos pocos
+      // milímetros no dibuja nada, solo ensucia.
+      (r) => Math.abs(signedArea(r.outer)) >= half * 2 * 4,
+    );
+    if (!clean.length) continue;
+
+    bands = union(bands, clean);
+    taken = union(taken, grow(clean, WALL));
+    if (!wide) continue;
 
     // Puentes: cuadraditos sobre el contorno que NO se cortan, y que dejan
-    // cosida la parte de dentro con el resto de la placa. Se reparten por el
-    // contorno, y cada figura empieza en un sitio distinto para que no se
-    // amontonen todos en la misma zona.
-    if (n > 0 && l.pts.length >= n) {
-      const skip = l.pts.length / n;
-      const start = (skip * k) / Math.max(1, drawn.length);
-      for (let b = 0; b < n; b++) {
-        const [bx, by] = l.pts[Math.floor(start + b * skip) % l.pts.length];
+    // cosida la parte de dentro con el resto de la placa.
+    //
+    // Se reparten por LONGITUD, no por número de puntos, y se les exige una
+    // separación mínima: en un contorno corto, seis puentes seguidos no cosen
+    // nada, solo pican la línea y la dejan de puntitos. Cada figura además
+    // empieza en un sitio distinto para que no se alineen todos.
+    if (n > 0) {
+      const walk = arcLengths(l.pts);
+      const total = walk[walk.length - 1];
+      const many = Math.min(n, Math.max(2, Math.floor(total / Math.max(8, side * 4))));
+      const step = total / many;
+      const start = (step * k) / Math.max(1, cands.length);
+      for (let b = 0; b < many; b++) {
+        const [bx, by] = atLength(l.pts, walk, (start + b * step) % total);
         bridges = union(bridges, sanitize([roundedRect(bx, by, side, side, 0)], []));
       }
     }
+    k++;
   }
 
   const cut = union(subtract(sanitize([frame], []), bands), bridges);

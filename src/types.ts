@@ -39,6 +39,9 @@ export interface Piece {
   /** La pieza no admite marca de agua de ningún tipo (p. ej. el puzzle o el
    *  articulado, donde cualquier marca soldaría las partes móviles). */
   noMark?: boolean;
+  /** Color propio de la pieza, por encima del color de fondo elegido. Lo usan
+   *  los productos por capas, donde cada capa va de un color distinto. */
+  tint?: string;
 }
 
 // -----------------------------------------------------------------------------

@@ -102,8 +102,9 @@ function PieceMesh({
   hideTrace: boolean;
   viewMode: ViewMode;
 }) {
-  // El cortador conserva su cian (corta); el resto usa el color de fondo.
-  const baseColor = piece.role === 'blade' ? '#1bc5d4' : bgColor;
+  // El cortador conserva su cian (corta). Las piezas con color propio (las capas
+  // de color) mandan sobre el color de fondo; el resto usa el de fondo.
+  const baseColor = piece.role === 'blade' ? '#1bc5d4' : (piece.tint ?? bgColor);
   const overlayLen = piece.overlay?.positions.length ?? 0;
 
   // Con «ocultar trazo» se pinta solo la placa: la cola de posiciones (el

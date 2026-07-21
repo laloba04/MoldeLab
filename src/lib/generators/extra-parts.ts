@@ -26,6 +26,13 @@ const rev = (pts: Pt[]) => [...pts].reverse() as Pt[];
 // -----------------------------------------------------------------------------
 
 /**
+ * Paleta de las capas: cada una de un color distinto, del más claro (la base,
+ * que es la más grande) al más oscuro (el detalle). Así en el visor se ve de un
+ * vistazo qué va en cada capa, y el 3MF sale ya con sus colores separados.
+ */
+const LAYER_TINTS = ['#e4d5c1', '#c98f5a', '#8a5038', '#4e2b1f', '#2b1712'];
+
+/**
  * Cada banda es más oscura (y por tanto más pequeña) que la anterior, y sube un
  * escalón. Se exporta una pieza por capa: el usuario cambia de filamento en el
  * cambio de capa del laminador, o imprime cada una de un color y las pega.
@@ -62,6 +69,7 @@ export function buildLayered(s: Silhouette, p: Params, withRing: boolean): Piece
         label: `Capa ${i + 1}`,
         role: i % 2 ? 'icing' : 'body',
         mesh,
+        tint: LAYER_TINTS[i % LAYER_TINTS.length],
         plate: { regions, zLo, zHi },
         overlay: parts.length > 1 ? merge(...parts.slice(1)) : undefined,
       });

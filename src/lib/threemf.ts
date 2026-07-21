@@ -82,6 +82,19 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
   const objects: string[] = [];
   const items: string[] = [];
 
+  // Paleta del archivo: 0 = fondo, 1 = trazo, y detrás los colores propios de
+  // las piezas que los traen (las capas de color), sin repetir ninguno. Así un
+  // letrero de 3 capas sale del laminador ya con sus 3 filamentos separados.
+  const palette: string[] = colors ? [hex(colors.bg), hex(colors.trace)] : [];
+  const idxOf = (c?: string): number => {
+    if (!colors || !c) return 0;
+    const h = hex(c);
+    const found = palette.indexOf(h);
+    if (found >= 0) return found;
+    palette.push(h);
+    return palette.length - 1;
+  };
+
   pieces.forEach((pc, idx) => {
     const id = idx + 1;
     const overlayStart =
@@ -96,16 +109,18 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
       .join('');
     // Color estándar del 3MF (extensión de color): la placa apunta al color 0
     // (fondo) y el relieve al color 1 (trazo). Bambu lo lee como colores reales.
+    const baseIdx = idxOf(pc.tint);
     const tr = tris
       .map(([a, b, c, relieve]) =>
         colors
-          ? `<triangle v1="${a}" v2="${b}" v3="${c}" pid="1" p1="${relieve ? 1 : 0}"/>`
+          ? `<triangle v1="${a}" v2="${b}" v3="${c}" pid="1" p1="${relieve ? 1 : baseIdx}"/>`
           : `<triangle v1="${a}" v2="${b}" v3="${c}"/>`,
       )
       .join('');
 
-    // El objeto declara su color por defecto (fondo); el relieve lo cambia.
-    const objAttr = colors ? ` pid="1" pindex="0"` : '';
+    // El objeto declara su color por defecto (el suyo, o el fondo); el relieve
+    // lo cambia al color del trazo.
+    const objAttr = colors ? ` pid="1" pindex="${baseIdx}"` : '';
     objects.push(
       `<object id="${id}" type="model" name="${xmlName(pc.label)}"${objAttr}><mesh>` +
         `<vertices>${vx}</vertices><triangles>${tr}</triangles></mesh></object>`,
@@ -117,8 +132,7 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
   // de Bambu lee como colores de verdad. displaycolor en formato #RRGGBBFF.
   const colorGroup = colors
     ? `<m:colorgroup id="1">` +
-      `<m:color color="${hex(colors.bg)}FF"/>` +
-      `<m:color color="${hex(colors.trace)}FF"/>` +
+      palette.map((h) => `<m:color color="${h}FF"/>`).join('') +
       `</m:colorgroup>`
     : '';
 

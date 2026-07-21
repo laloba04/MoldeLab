@@ -132,10 +132,16 @@ export default function App() {
       }
       if (product.needsText) {
         const t = params.textContent;
-        if (img && t.trim())
-          return imageWithText(img, t, params.textScale, params.textX, params.textY);
-        if (img) return img;
-        if (!t.trim()) return null;
+        // Solo «Llavero imagen + texto» combina las dos cosas. En el resto de
+        // productos de texto (letrero de letra grande, curvo, llavero de texto)
+        // manda el texto: mezclar la imagen dejaba las letras diminutas al lado
+        // del dibujo, y el filtro de islas pequeñas se las comía.
+        if (product.id === 'keychain-image-text') {
+          if (img && t.trim())
+            return imageWithText(img, t, params.textScale, params.textX, params.textY);
+          if (img) return img;
+        }
+        if (!t.trim()) return img;
         return params.product === 'sign-curved'
           ? arcTextImage(t, params.textScale, params.textCurve)
           : textImage(t, params.textScale);

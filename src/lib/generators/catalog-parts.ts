@@ -110,7 +110,7 @@ export function engraved(base: Region[], detail: Loop[], p: Params, zLo: number,
 // -----------------------------------------------------------------------------
 
 /** Plantilla: una placa con la silueta calada. Se espolvorea por encima. */
-export function buildStencil(loops: Loop[], detail: Loop[], p: Params): Piece[] {
+export function buildStencil(loops: Loop[], detail: Loop[], p: Params, label = 'Plantilla'): Piece[] {
   const box = boxOf(loops);
   const frame = roundedRect(
     box.cx,
@@ -127,7 +127,7 @@ export function buildStencil(loops: Loop[], detail: Loop[], p: Params): Piece[] 
     [...outerOf(src).map((o) => [...o].reverse() as Pt[])],
   );
 
-  return piece('stencil', 'Plantilla', 'body', solid(cut, 0, p.thickness), {
+  return piece('stencil', label, 'body', solid(cut, 0, p.thickness), {
     plate: { regions: cut, zLo: 0, zHi: p.thickness },
   });
 }
@@ -345,13 +345,55 @@ export function buildTag(loops: Loop[], detail: Loop[], p: Params, round: boolea
 // Letreros
 // -----------------------------------------------------------------------------
 
-/** Letrero de pie: la silueta en vertical, sobre una peana inclinada. */
-export function buildStandingSign(loops: Loop[], p: Params): Piece[] {
-  const box = boxOf(loops);
-  const face = regionsOf(loops);
+/** Lo que la pestaña del letrero se hunde en la peana. La ranura mide igual. */
+const SLOT_DEPTH = 6;
 
-  // La cara del letrero se imprime tumbada y se encaja en la peana.
-  const sign = solid(face, 0, p.thickness);
+/**
+ * Letrero de pie: la silueta en vertical, sobre una peana inclinada.
+ * `unite` engorda la silueta para que las partes sueltas (las letras de una
+ * palabra) se toquen y salgan en una sola pieza; 0 la deja tal cual.
+ */
+export function buildStandingSign(
+  loops: Loop[],
+  p: Params,
+  unite = 0,
+  detail: Loop[] = [],
+): Piece[] {
+  const box = boxOf(loops);
+  const face = regionsOf(loops, unite);
+
+  // La cara del letrero se imprime tumbada y se encaja en la peana. Cuando se
+  // han unido las letras (unite > 0), el dibujo se levanta en relieve encima
+  // para que se siga leyendo: si no, la palabra queda hecha un churro.
+  const relief = unite > 0 ? reliefSolids(detail.length ? detail : loops, p, p.thickness - 0.01, p.reliefHeight) : [];
+
+  // Pestaña plana bajo la silueta: es lo que entra en la ranura. Sin ella, una
+  // figura de base irregular (las colas de una mariposa, la panza de un gato)
+  // se apoya en dos puntos y se cae. Arranca DENTRO del material —se busca el
+  // punto más bajo con relleno en el eje central— para quedar soldada.
+  const solidAt = (x: number, y: number) =>
+    loops.some((l) => !l.hole && pointInPolygon([x, y], l.pts)) &&
+    !loops.some((l) => l.hole && pointInPolygon([x, y], l.pts));
+
+  const step = Math.max(0.4, box.h / 240);
+  let lowest = box.minY;
+  for (let y = box.minY; y <= box.maxY; y += step) {
+    if (solidAt(box.cx, y)) {
+      lowest = y;
+      break;
+    }
+  }
+
+  const tabTop = lowest + 2; // solape para soldarse a la figura
+  const tabBottom = box.minY - SLOT_DEPTH;
+  const tabW = Math.max(12, box.w * 0.45);
+  const tang = solid(
+    sanitize([roundedRect(box.cx, (tabTop + tabBottom) / 2, tabW, tabTop - tabBottom, 0)], []),
+    0,
+    p.thickness,
+  );
+
+  const sign = merge(solid(face, 0, p.thickness), tang, ...relief);
 
   const baseW = box.w + p.border * 2;
   const slotW = p.thickness + 0.4; // holgura de encaje
@@ -369,7 +411,7 @@ export function buildStandingSign(loops: Loop[], p: Params): Piece[] {
     [roundedRect(box.cx, box.cy + p.standDepth / 4 + slotW / 2 - lean, baseW, p.standDepth / 2 - slotW / 2, 0)],
     [],
   );
-  parts.push(solid(slotFront, 4, 10), solid(slotBack, 4, 10));
+  parts.push(solid(slotFront, 4, 4 + SLOT_DEPTH), solid(slotBack, 4, 4 + SLOT_DEPTH));
 
   return [
     ...piece('sign', 'Letrero', 'body', sign, {
@@ -411,10 +453,23 @@ export function buildWallSign(loops: Loop[], detail: Loop[], p: Params): Piece[]
 // Personalizados
 // -----------------------------------------------------------------------------
 
-export function buildExtrude(loops: Loop[], p: Params): Piece[] {
-  const base = regionsOf(loops);
-  return piece('extrude', 'Extrusión', 'body', solid(base, 0, p.thickness), {
+export function buildExtrude(
+  loops: Loop[],
+  p: Params,
+  unite = 0,
+  detail: Loop[] = [],
+): Piece[] {
+  const base = regionsOf(loops, unite);
+  // Igual que en el letrero de pie: si se han unido las letras, el dibujo se
+  // levanta encima para que se lea.
+  const overlay =
+    unite > 0
+      ? merge(...reliefSolids(detail.length ? detail : loops, p, p.thickness - 0.01, p.reliefHeight))
+      : emptyMesh();
+
+  return piece('extrude', 'Extrusión', 'body', merge(solid(base, 0, p.thickness), overlay), {
     plate: { regions: base, zLo: 0, zHi: p.thickness },
+    overlay: overlay.positions.length ? overlay : undefined,
   });
 }
 

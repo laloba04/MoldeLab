@@ -10,7 +10,7 @@
 import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
 import { intersect, offsetRegions, sanitize, type Region } from '../clipper';
-import { pointInPolygon } from '../polygon';
+import { pointInPolygon, signedArea } from '../polygon';
 import { boxOf, circle, heart, roundedRect, shiftLoops, spikes } from '../shapes';
 
 const outerOf = (loops: Loop[]) => loops.filter((l) => !l.hole).map((l) => l.pts);
@@ -165,10 +165,18 @@ export function buildCutoutSign(loops: Loop[], detail: Loop[], p: Params): Piece
 
   // --- Modo «solo las líneas» ---
   const half = Math.max(0.3, p.cutLineWidth / 2);
+
+  // Una mota más pequeña que la propia línea no se puede dibujar: saldría como
+  // un puntito suelto (o un agujero que se cae). Se deja fuera.
+  const minArea = Math.PI * (half * 4) ** 2;
+  const drawn = src.filter((l) => Math.abs(signedArea(l.pts)) >= minArea);
+
   const subj: Pt[][] = [frame];
   const cuts: Pt[][] = [];
+  const n = Math.max(0, Math.round(p.cutBridges));
+  const side = half * 2 + 1; // algo más ancho que la banda, para que cosa
 
-  for (const l of src) {
+  for (const [k, l] of drawn.entries()) {
     // La banda a quitar: lo de fuera del contorno menos lo de dentro.
     for (const o of offsetRegions([l.pts], [], half)) {
       cuts.push([...o.outer].reverse() as Pt[]);
@@ -177,12 +185,14 @@ export function buildCutoutSign(loops: Loop[], detail: Loop[], p: Params): Piece
     for (const i of offsetRegions([l.pts], [], -half)) subj.push(i.outer);
 
     // Puentes: cuadraditos sobre el contorno que NO se cortan, y que dejan
-    // cosida la parte de dentro con el resto de la placa.
-    const n = Math.max(0, Math.round(p.cutBridges));
+    // cosida la parte de dentro con el resto de la placa. Se reparten por el
+    // contorno, y cada figura empieza en un sitio distinto para que no se
+    // amontonen todos en la misma zona.
     if (n > 0 && l.pts.length >= n) {
-      const side = half * 2 + 1.2; // algo más ancho que la banda, para que cosa
+      const skip = l.pts.length / n;
+      const start = (skip * k) / Math.max(1, drawn.length);
       for (let b = 0; b < n; b++) {
-        const [bx, by] = l.pts[Math.floor((b * l.pts.length) / n)];
+        const [bx, by] = l.pts[Math.floor(start + b * skip) % l.pts.length];
         subj.push(roundedRect(bx, by, side, side, 0));
       }
     }

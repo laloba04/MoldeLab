@@ -85,7 +85,16 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
   // Paleta del archivo: 0 = fondo, 1 = trazo, y detrás los colores propios de
   // las piezas que los traen (las capas de color), sin repetir ninguno. Así un
   // letrero de 3 capas sale del laminador ya con sus 3 filamentos separados.
-  const palette: string[] = colors ? [hex(colors.bg), hex(colors.trace)] : [];
+  //
+  // El trazo solo entra si alguna pieza trae relieve aparte. Si no lo trae —el
+  // caso de «todo de un color»— declararlo igual haría que el laminador pidiera
+  // un segundo filamento para pintar cero triángulos.
+  const hasTrace = pieces.some((pc) => pc.overlay?.positions.length);
+  const palette: string[] = colors
+    ? hasTrace
+      ? [hex(colors.bg), hex(colors.trace)]
+      : [hex(colors.bg)]
+    : [];
   const idxOf = (c?: string): number => {
     if (!colors || !c) return 0;
     const h = hex(c);

@@ -94,6 +94,7 @@ function PieceMesh({
   traceColor,
   hideTrace,
   viewMode,
+  oneColor,
 }: {
   piece: Piece;
   offset: number;
@@ -101,10 +102,17 @@ function PieceMesh({
   traceColor: string;
   hideTrace: boolean;
   viewMode: ViewMode;
+  oneColor: boolean;
 }) {
-  // El cortador conserva su cian (corta). Las piezas con color propio (las capas
-  // de color) mandan sobre el color de fondo; el resto usa el de fondo.
-  const baseColor = piece.role === 'blade' ? '#1bc5d4' : (piece.tint ?? bgColor);
+  // El cortador conserva su cian (corta) para distinguirlo de un vistazo. Las
+  // piezas con color propio (las capas de color) mandan sobre el color de
+  // fondo; el resto usa el de fondo. Con «todo de un color» no hay excepciones:
+  // se ve tal cual va a salir de la impresora, de una sola tinta.
+  const baseColor = oneColor
+    ? bgColor
+    : piece.role === 'blade'
+      ? '#1bc5d4'
+      : (piece.tint ?? bgColor);
   const overlayLen = piece.overlay?.positions.length ?? 0;
 
   // Con «ocultar trazo» se pinta solo la placa: la cola de posiciones (el
@@ -166,6 +174,7 @@ export function Viewer({
   traceColor,
   hideTrace = false,
   viewMode = 'solid',
+  oneColor = false,
   ring = null,
   onRingMove,
 }: {
@@ -176,6 +185,7 @@ export function Viewer({
   traceColor: string;
   hideTrace?: boolean;
   viewMode?: ViewMode;
+  oneColor?: boolean;
   ring?: { x: number; y: number; z: number } | null;
   onRingMove?: (x: number, y: number) => void;
 }) {
@@ -243,6 +253,7 @@ export function Viewer({
           traceColor={traceColor}
           hideTrace={hideTrace}
           viewMode={viewMode}
+          oneColor={oneColor}
         />
       ))}
 

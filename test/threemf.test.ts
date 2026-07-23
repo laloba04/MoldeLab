@@ -130,6 +130,24 @@ async function main() {
   }
 
   check('se han auditado todos los objetos', oi === pieces.length);
+
+  // «Todo de un color»: sin relieve aparte, el archivo no puede declarar un
+  // segundo color. Si lo declara, el laminador pide un filamento para pintar
+  // cero triángulos y salen cambios de filamento a cuenta de nada.
+  const uno = pieces.map((pc) => ({ ...pc, tint: undefined, overlay: undefined }));
+  const xmlUno = strFromU8(
+    unzipSync(new Uint8Array(await to3mf(uno, { bg: '#e4d5c1', trace: '#8a5038' }).arrayBuffer()))[
+      '3D/3dmodel.model'
+    ],
+  );
+  const paleta = (xmlUno.match(/<m:color /g) ?? []).length;
+  const usados = new Set([...xmlUno.matchAll(/p1="(\d+)"/g)].map((m) => m[1]));
+  check('todo de un color: el 3MF declara un solo color', paleta === 1, `${paleta} colores`);
+  check(
+    'todo de un color: ningún triángulo pide el segundo',
+    usados.size <= 1 && !usados.has('1'),
+    `usados: [${[...usados].join(',')}]`,
+  );
   console.log(`\ntamaño del 3MF: ${(blob.size / 1024).toFixed(0)} KB`);
   console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');
   process.exitCode = failures ? 1 : 0;

@@ -58,6 +58,9 @@ export default function App() {
   ]);
   // Ocultar el relieve para ver la placa lisa.
   const [hideTrace, setHideTrace] = useState(false);
+  // Una sola tinta: ni relieve aparte ni filo turquesa ni capas. Se imprime del
+  // tirón, sin cambios de filamento, que es como se hace la mayoría de las veces.
+  const [oneColor, setOneColor] = useState(false);
   // Modo de vista del modelo: sólido, rayos X (transparente) o alámbrico.
   const [viewMode, setViewMode] = useState<'solid' | 'xray' | 'wire'>('solid');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -206,11 +209,18 @@ export default function App() {
       }
     })();
 
+    // Una sola tinta: se le quita a cada pieza tanto su color propio como el
+    // relieve marcado aparte. Sin `overlay` no hay segundo color que repartir,
+    // ni en el visor ni en el 3MF, así que el laminador no pide cambios de
+    // filamento. La geometría no se toca: sigue siendo la misma pieza.
+    if (oneColor)
+      return stamped.map((p): Piece => ({ ...p, tint: undefined, overlay: undefined }));
+
     // Las piezas que traen color propio (las capas) reciben el que haya elegido
     // el usuario, en orden. Si no ha tocado nada, se quedan con el suyo.
     let i = 0;
     return stamped.map((p) => (p.tint ? { ...p, tint: layerColors[i++] ?? p.tint } : p));
-  }, [pieces, markOn, mark, layerColors]);
+  }, [pieces, markOn, mark, layerColors, oneColor]);
 
   const stats = useMemo(
     () => ({
@@ -422,7 +432,21 @@ export default function App() {
         {pieces.length > 0 && (
           <div className="colors">
             <h3>Colores</h3>
-            {marked.filter((p) => p.tint).length > 0 ? (
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={oneColor}
+                onChange={(e) => setOneColor(e.target.checked)}
+              />
+              <span />
+              Todo de un color
+            </label>
+            {oneColor ? (
+              <label className="color-row">
+                <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} />
+                <span>El color de toda la pieza</span>
+              </label>
+            ) : marked.filter((p) => p.tint).length > 0 ? (
               // Producto por capas: un color por capa, en el mismo orden en que
               // se apilan. Es lo que se lleva el 3MF a los filamentos.
               marked
@@ -459,7 +483,12 @@ export default function App() {
                 </label>
               </>
             )}
-            {hasTrace && (
+            {oneColor && (
+              <p className="hint">
+                Una sola tinta: sale del laminador sin cambios de filamento.
+              </p>
+            )}
+            {hasTrace && !oneColor && (
               <label className="toggle">
                 <input
                   type="checkbox"
@@ -592,6 +621,7 @@ export default function App() {
               traceColor={traceColor}
               hideTrace={hideTrace}
               viewMode={viewMode}
+              oneColor={oneColor}
               ring={ringDrag?.pos ?? null}
               onRingMove={ringDrag?.move}
             />

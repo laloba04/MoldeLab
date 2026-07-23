@@ -33,6 +33,10 @@ html,
 body,
 #root {
   height: 100%;
+  /* En el móvil la barra del navegador aparece y desaparece, y `100%` deja la
+     app recortada por abajo (el botón de descargar se queda fuera). `dvh` mide
+     lo que de verdad se ve en cada momento. El 100% queda de respaldo. */
+  height: 100dvh;
 }
 
 /* El viewport no se desplaza jamás. Al enfocar un control metido en el scroll
@@ -749,6 +753,13 @@ button.ghost:hover {
   backdrop-filter: blur(2px);
 }
 .modal {
+  /* El navegador le pone a `dialog[open]` position:absolute e insets propios, y
+     eso lo saca del flujo del flex de `.modal-back`: se iría a una esquina en
+     vez de quedar centrado. Se le devuelve a la normalidad. */
+  position: static;
+  inset: auto;
+  margin: 0;
+  color: inherit;
   width: min(420px, 92vw);
   max-height: 88vh;
   overflow-y: auto;
@@ -955,18 +966,145 @@ button.chip:hover {
   text-align: center;
 }
 
+/* --- Pantallas estrechas -------------------------------------------------- */
+/*
+   El diseño de escritorio son dos columnas: controles a la izquierda, modelo a
+   la derecha. En un móvil no caben, así que se apilan: el modelo ARRIBA (que es
+   lo que se quiere ver mientras se toca un control) y los controles abajo, con
+   su propio scroll. El botón de descargar se queda pegado al fondo para no
+   tener que buscarlo al final de la lista.
+*/
 @media (max-width: 860px) {
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr 320px;
+    /* El visor se queda con una franja fija y generosa; el resto, controles. */
+    grid-template-rows: minmax(200px, 42dvh) 1fr;
   }
   .panel {
     order: 2;
     border-right: 0;
     border-top: 1px solid var(--line);
+    /* Sin relleno abajo: de eso se encarga la barra pegajosa del botón, que
+       además tiene que quedar a ras del borde. */
+    padding: 16px 14px 0;
+    gap: 14px;
+    /* Que el dedo arrastre el panel sin arrastrar la página de detrás. */
+    overscroll-behavior: contain;
   }
   .stage {
     order: 1;
+  }
+
+  /* Descargar siempre a mano, sin recorrer antes todos los ajustes. Se sale del
+     relleno lateral para ocupar el ancho entero, y se reserva el hueco de la
+     barra de gestos del móvil. */
+  .panel .actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: auto -14px 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+  }
+
+  /* La ventana de descarga, como una hoja que sube desde abajo: se alcanza con
+     el pulgar en vez de quedar centrada en mitad de la pantalla. */
+  .modal-back {
+    align-items: flex-end;
+  }
+  .modal {
+    width: 100%;
+    max-height: 86dvh;
+    border-radius: 14px 14px 0 0;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+  .modal-actions {
+    flex-wrap: wrap;
+  }
+
+  /* Los botones flotantes del visor, más juntos al borde y en varias líneas si
+     hacen falta: la franja del visor es baja y no sobra sitio. */
+  .hud {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    flex-wrap: wrap;
+  }
+}
+
+/*
+   Móvil tumbado: es ancho pero muy bajo (un iPhone en horizontal mide 844px, o
+   sea que cae en el bloque de arriba). Apilar ahí deja el visor en una rendija,
+   así que se vuelve a dos columnas con el panel más estrecho.
+*/
+@media (max-width: 860px) and (orientation: landscape) {
+  .app {
+    grid-template-columns: 260px 1fr;
+    grid-template-rows: 1fr;
+  }
+  .panel {
+    order: 1;
+    border-right: 1px solid var(--line);
+    border-top: 0;
+  }
+  .stage {
+    order: 2;
+  }
+}
+
+/*
+   Dedos, no ratón. `pointer: coarse` acierta donde no llega el ancho: una
+   tableta grande también se toca. La recomendación de accesibilidad es 44px de
+   zona tocable; el pomo del deslizador medía 13.
+*/
+@media (pointer: coarse) {
+  input[type='range'] {
+    height: 22px;
+    background: transparent;
+  }
+  /* El carril se dibuja aparte para poder engordar la zona que se puede tocar
+     sin engordar la línea, que quedaría basta. */
+  input[type='range']::-webkit-slider-runnable-track {
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+  }
+  input[type='range']::-moz-range-track {
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+  }
+  input[type='range']::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+    margin-top: -10px;
+    border: 2px solid var(--panel);
+  }
+  input[type='range']::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--panel);
+  }
+
+  /* Zonas tocables mínimas en lo demás. */
+  button.primary,
+  button.ghost,
+  .chip,
+  .mode {
+    min-height: 44px;
+  }
+  .fmt-row,
+  .color-row,
+  .toggle {
+    min-height: 40px;
+  }
+  /* Menos de 16px hace que iOS haga zoom solo al enfocar un campo. */
+  input[type='text'],
+  input[type='search'],
+  select,
+  textarea {
+    font-size: 16px;
   }
 }
 

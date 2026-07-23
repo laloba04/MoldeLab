@@ -164,6 +164,7 @@ export interface Params {
   flangeWidth: number;
   flangeHeight: number;
   cutHoles: boolean;
+  cutterGrow: number; // margen de masa alrededor del dibujo (mm)
 
   // Sello / relieve
   stampBase: number;
@@ -266,6 +267,7 @@ export const DEFAULTS: Params = {
   flangeWidth: 1.6,
   flangeHeight: 1.2,
   cutHoles: true,
+  cutterGrow: 2,
 
   stampBase: 2,
   stampRim: 3,
@@ -361,6 +363,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   flangeWidth: { label: 'Pestaña', unit: 'mm', min: 0, max: 5, step: 0.2 },
   flangeHeight: { label: 'Altura de la pestaña', unit: 'mm', min: 0, max: 4, step: 0.2 },
   cutHoles: { toggle: true, label: 'Cortar también los huecos' },
+  cutterGrow: { label: 'Agrandar el cortador', unit: 'mm', min: 0, max: 12, step: 0.5 },
 
   stampBase: { label: 'Base', unit: 'mm', min: 1, max: 6, step: 0.2 },
   stampRim: { label: 'Reborde para agarrar', unit: 'mm', min: 0, max: 10, step: 0.5 },

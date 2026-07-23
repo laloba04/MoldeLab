@@ -20,6 +20,7 @@ import { PRODUCTS, buildProduct } from '../src/lib/catalog';
 import { toStl } from '../src/lib/stl';
 import { dropToBed, spreadPieces } from '../src/lib/layout';
 import { stampBaseRegions } from '../src/lib/generators/stamp';
+import { expandLoops } from '../src/lib/generators/catalog-parts';
 import { offsetRegions, subtract } from '../src/lib/clipper';
 import { DEFAULTS, type Loop, type Mesh, type Pt, type Silhouette } from '../src/types';
 
@@ -255,13 +256,39 @@ console.log('');
   const malos: string[] = [];
   for (const wall of [0.6, 1.2, 3]) {
     for (const fit of [0, 0.4, 1.5]) {
-      const p = { ...DEFAULTS, wallThickness: wall, stampFit: fit };
-      const hueco = offsetRegions(outer, holes, -wall / 2);
-      const fuera = totalArea(subtract(stampBaseRegions(loops, p), hueco));
-      if (fuera > 0.01) malos.push(`pared ${wall} / holgura ${fit}: ${fuera.toFixed(1)} mm² fuera`);
+      for (const grow of [0, 2, 6]) {
+        const p = { ...DEFAULTS, wallThickness: wall, stampFit: fit, cutterGrow: grow };
+        // El cortador se agranda; el sello no. El hueco se mide sobre la
+        // silueta ya agrandada, que es la que de verdad corta.
+        const cut = expandLoops(loops, grow);
+        const hueco = offsetRegions(
+          cut.filter((l) => !l.hole).map((l) => l.pts),
+          cut.filter((l) => l.hole).map((l) => l.pts),
+          -wall / 2,
+        );
+        const fuera = totalArea(subtract(stampBaseRegions(loops, p), hueco));
+        if (fuera > 0.01)
+          malos.push(`pared ${wall} / holgura ${fit} / margen ${grow}: ${fuera.toFixed(1)} mm² fuera`);
+      }
     }
   }
   check('el sello cabe dentro del cortador', malos.length === 0, malos.join('; '));
+
+  // Y agrandar tiene que agrandar de verdad, no quedarse en el comentario.
+  const anchoDe = (mm: number) => {
+    const e = expandLoops(loops, mm);
+    let a = Infinity;
+    let b = -Infinity;
+    for (const l of e)
+      for (const [x] of l.pts) {
+        if (x < a) a = x;
+        if (x > b) b = x;
+      }
+    return b - a;
+  };
+  const crece = anchoDe(2) - anchoDe(0);
+  check('agrandar 2 mm ensancha el corte 4 mm (2 por lado)', Math.abs(crece - 4) < 0.3,
+    `crece ${crece.toFixed(2)} mm`);
 }
 
 console.log(`\n${totalTris.toLocaleString('es-ES')} triángulos en total`);

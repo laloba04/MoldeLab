@@ -21,6 +21,24 @@ export function regionsOf(loops: Loop[], delta = 0): Region[] {
   return offsetRegions(outerOf(loops), holesOf(loops), delta);
 }
 
+/**
+ * La silueta engordada `mm` milímetros, otra vez como contornos.
+ *
+ * Sirve para dejar un margen de masa alrededor del dibujo: se agranda el
+ * contorno que CORTA, no el que dibuja. Como el sello se deriva de la misma
+ * silueta, crece con él y sigue encajando dentro del cortador; el relieve sale
+ * de `detail`, así que el dibujo conserva su tamaño y queda centrado con borde.
+ */
+export function expandLoops(loops: Loop[], mm: number): Loop[] {
+  if (Math.abs(mm) < 1e-6) return loops;
+  const out: Loop[] = [];
+  for (const r of regionsOf(loops, mm)) {
+    out.push({ pts: r.outer, hole: false });
+    for (const h of r.holes) out.push({ pts: h, hole: true });
+  }
+  return out.length ? out : loops;
+}
+
 function solid(regions: Region[], zLo: number, zHi: number): Mesh {
   const m = emptyMesh();
   for (const r of regions) extrudeRegion(m, r, zLo, zHi);

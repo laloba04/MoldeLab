@@ -24,6 +24,7 @@ import {
 import {
   buildBookmark,
   buildCutoutSign,
+  expandLoops,
   buildExtrude,
   buildImprintMold,
   buildInlayPlate,
@@ -52,6 +53,7 @@ const CUTTER_FIELDS = [
   'flangeWidth',
   'flangeHeight',
   'cutHoles',
+  'cutterGrow',
 ] as const;
 
 const STAMP_FIELDS = [...SIZE, 'stampBase', 'stampRim', 'stampFit', 'reliefHeight', 'reliefTaper', 'handle'] as const;
@@ -83,7 +85,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Cortador',
     hint: 'Recorta la masa siguiendo el contorno.',
     fields: [...CUTTER_FIELDS],
-    build: (s, p) => cutterPieces(s.loops, p),
+    build: (s, p) => cutterPieces(cutLoops(s, p), p),
   },
   {
     id: 'cutter-stamp',
@@ -92,7 +94,9 @@ export const PRODUCTS: Entry[] = [
     hint: 'Corta y marca el dibujo de una vez.',
     fields: [...CUTTER_FIELDS, 'stampBase', 'stampRim', 'stampFit', 'reliefHeight', 'reliefTaper', 'strokeWidth'],
     build: (s, p) => [
-      ...cutterPieces(s.loops, p),
+      // El cortador se agranda; el sello NO. Ahí está la gracia: el hueco crece
+      // y el sello se queda igual, así que entra con holgura de sobra.
+      ...cutterPieces(cutLoops(s, p), p),
       ...stampPieces(s.loops, s.detail, p),
     ],
   },
@@ -158,7 +162,10 @@ export const PRODUCTS: Entry[] = [
     label: 'Multicortador',
     hint: 'Varias copias del cortador en una sola cama.',
     fields: [...CUTTER_FIELDS, 'copies', 'gridCols', 'spacing'],
-    build: (s, p) => repeatGrid(cutterPieces(s.loops, p), s.loops, p),
+    build: (s, p) => {
+      const loops = cutLoops(s, p);
+      return repeatGrid(cutterPieces(loops, p), loops, p);
+    },
   },
   {
     id: 'practice-plate',
@@ -418,6 +425,17 @@ export const PRODUCTS: Entry[] = [
 ];
 
 // --- Envoltorios para las piezas heredadas ----------------------------------
+
+/**
+ * La silueta que CORTA, agrandada el margen que se pida.
+ *
+ * Solo crece el cortador, nunca el sello: el hueco se ensancha y el sello sigue
+ * midiendo lo mismo, que es justo lo que hace que entre sin pelearse. De paso
+ * la galleta sale con un borde de masa lisa alrededor del dibujo.
+ */
+function cutLoops(s: Silhouette, p: Params): Loop[] {
+  return expandLoops(s.loops, p.cutterGrow);
+}
 
 function cutterPieces(loops: Loop[], p: Params): Piece[] {
   const mesh = buildCutter(loops, p);

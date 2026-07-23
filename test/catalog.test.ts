@@ -19,6 +19,8 @@ import { boxOf, shiftLoops } from '../src/lib/shapes';
 import { PRODUCTS, buildProduct } from '../src/lib/catalog';
 import { toStl } from '../src/lib/stl';
 import { dropToBed, spreadPieces } from '../src/lib/layout';
+import { stampBaseRegions } from '../src/lib/generators/stamp';
+import { offsetRegions, subtract } from '../src/lib/clipper';
 import { DEFAULTS, type Loop, type Mesh, type Pt, type Silhouette } from '../src/types';
 
 let failures = 0;
@@ -224,6 +226,43 @@ for (const prod of PRODUCTS) {
 check('separadas, cada pieza se apoya en la cama', flotantes.length === 0, flotantes.slice(0, 4).join(', '));
 check('juntas, nada baja del cero', hundidas.length === 0, hundidas.slice(0, 4).join(', '));
 check('separadas, las piezas no se pisan', solapes.length === 0, [...new Set(solapes)].join(', '));
+
+// -----------------------------------------------------------------------------
+// El sello tiene que caber DENTRO del cortador
+// -----------------------------------------------------------------------------
+//
+// La pared del cortador se levanta CENTRADA en la línea de corte, así que la
+// cara interior queda a media pared hacia dentro. Si la placa del sello solo
+// descuenta una holgura fija, mide más que el hueco y el sello no entra. Se
+// comprueba con geometría, no de ojo: la placa no puede salirse del hueco.
+
+console.log('');
+{
+  const outer = loops.filter((l) => !l.hole).map((l) => l.pts);
+  const holes = loops.filter((l) => l.hole).map((l) => l.pts);
+  const areaOf = (pts: Pt[]) => {
+    let v = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const [x1, y1] = pts[i];
+      const [x2, y2] = pts[(i + 1) % pts.length];
+      v += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(v / 2);
+  };
+  const totalArea = (rs: { outer: Pt[]; holes: Pt[][] }[]) =>
+    rs.reduce((acc, r) => acc + areaOf(r.outer) - r.holes.reduce((h, x) => h + areaOf(x), 0), 0);
+
+  const malos: string[] = [];
+  for (const wall of [0.6, 1.2, 3]) {
+    for (const fit of [0, 0.4, 1.5]) {
+      const p = { ...DEFAULTS, wallThickness: wall, stampFit: fit };
+      const hueco = offsetRegions(outer, holes, -wall / 2);
+      const fuera = totalArea(subtract(stampBaseRegions(loops, p), hueco));
+      if (fuera > 0.01) malos.push(`pared ${wall} / holgura ${fit}: ${fuera.toFixed(1)} mm² fuera`);
+    }
+  }
+  check('el sello cabe dentro del cortador', malos.length === 0, malos.join('; '));
+}
 
 console.log(`\n${totalTris.toLocaleString('es-ES')} triángulos en total`);
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');

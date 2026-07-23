@@ -19,46 +19,91 @@ import type { Loop, Mesh, Params } from '../../types';
 import { cylinder, emptyMesh, extrudeRegion, merge } from '../mesh';
 import { offsetRegions, type Region } from '../clipper';
 
-const PLATE_CLEARANCE = 0.3; // holgura para que la placa entre en el cortador
+/**
+ * Cuánto se encoge la placa del sello respecto al contorno dibujado.
+ *
+ * No basta con una holgura de impresión: la pared del cortador se levanta
+ * CENTRADA en la línea de corte, así que se mete media pared hacia dentro. Si
+ * el sello solo descuenta la holgura, mide más que el hueco del cortador y no
+ * entra — que es justo lo que pasaba. Se descuentan las dos cosas.
+ */
+function plateInset(p: Params): number {
+  return p.wallThickness / 2 + Math.max(0, p.stampFit);
+}
 const STEPS = 3; // escalones del ángulo de salida
 const RIM_H = 1.6; // grosor del reborde de agarre
 
 /** La región de la placa base del sello: la misma que extruye stampSolids,
  *  compartida para que la marca de agua pueda recomponerla. */
-export function stampBaseRegions(loops: Loop[]): Region[] {
+export function stampBaseRegions(loops: Loop[], p: Params): Region[] {
   const outer = loops.filter((l) => !l.hole).map((l) => l.pts);
   const holes = loops.filter((l) => l.hole).map((l) => l.pts);
   if (!outer.length) return [];
-  return offsetRegions(outer, holes, -PLATE_CLEARANCE);
+  return offsetRegions(outer, holes, -plateInset(p));
 }
 
-/** Cada sólido cerrado por separado. La unión la resuelve el laminador. */
+/** El reborde de agarre: una pestaña que SOBRESALE del contorno, en la cara de
+ *  atrás (la que no estampa). Al meter el sello en el cortador queda apoyado en
+ *  el filo en vez de colarse dentro, y deja un saliente donde meter el dedo
+ *  para levantarlo y sacarlo. Con 0 no se genera. */
+export function stampRimRegions(loops: Loop[], p: Params): Region[] {
+  if (p.stampRim <= 0) return [];
+  const outer = loops.filter((l) => !l.hole).map((l) => l.pts);
+  const holes = loops.filter((l) => l.hole).map((l) => l.pts);
+  if (!outer.length) return [];
+  return offsetRegions(outer, holes, p.stampRim);
+}
+
+/**
+ * La cara de atrás del sello: la que toca la cama al imprimir y la única donde
+ * se puede grabar la marca. Con reborde es la del reborde, porque tapa la placa
+ * por debajo; sin reborde, la de la placa. Grabar en la equivocada deja el
+ * texto enterrado dentro del sólido: ni se ve ni se imprime.
+ */
+export function stampPlate(loops: Loop[], p: Params): { regions: Region[]; zLo: number; zHi: number } {
+  const rim = stampRimRegions(loops, p);
+  return rim.length
+    ? { regions: rim, zLo: -RIM_H, zHi: 0.01 }
+    : { regions: stampBaseRegions(loops, p), zLo: 0, zHi: p.stampBase };
+}
+
+/**
+ * Las piezas del sello, cada una por lo que es y no por el orden en que salen:
+ *
+ *  - `plate`: la cara de atrás, la que se graba (ver `stampPlate`).
+ *  - `keep`: el resto del cuerpo, que no se graba pero tampoco es dibujo.
+ *  - `overlay`: el relieve y el tirador, o sea el dibujo. Es lo que se pinta
+ *    con el color del trazo.
+ */
 export function stampSolids(loops: Loop[], detail: Loop[], p: Params): Mesh[] {
-  const solids: Mesh[] = [];
+  const { plate, keep, overlay } = stampParts(loops, detail, p);
+  return [...plate, ...keep, ...overlay];
+}
 
-  // --- Placa base ---
-  const base = stampBaseRegions(loops);
-  if (!base.length) return solids;
-  for (const region of base) {
-    const m = emptyMesh();
-    extrudeRegion(m, region, 0, p.stampBase);
-    solids.push(m);
-  }
+export function stampParts(
+  loops: Loop[],
+  detail: Loop[],
+  p: Params,
+): { plate: Mesh[]; keep: Mesh[]; overlay: Mesh[] } {
+  const empty = { plate: [], keep: [], overlay: [] };
 
-  // --- Reborde de agarre ---
-  // Una pestaña que SOBRESALE del contorno, en la cara de atrás (la que no
-  // estampa). Al meter el sello en el cortador, el reborde queda apoyado en el
-  // filo en vez de colarse dentro, y deja un saliente donde meter el dedo para
-  // levantarlo y sacarlo. Con 0 no se genera.
-  if (p.stampRim > 0) {
-    const outer = loops.filter((l) => !l.hole).map((l) => l.pts);
-    const holes = loops.filter((l) => l.hole).map((l) => l.pts);
-    for (const region of offsetRegions(outer, holes, p.stampRim)) {
+  const base = stampBaseRegions(loops, p);
+  if (!base.length) return empty;
+
+  const slab = (regions: Region[], zLo: number, zHi: number): Mesh[] =>
+    regions.map((r) => {
       const m = emptyMesh();
-      extrudeRegion(m, region, -RIM_H, 0.01);
-      solids.push(m);
-    }
-  }
+      extrudeRegion(m, r, zLo, zHi);
+      return m;
+    });
+
+  const rim = stampRimRegions(loops, p);
+  const baseSolids = slab(base, 0, p.stampBase);
+  // El reborde tapa la placa por debajo, así que la cara grabable es la suya y
+  // la placa pasa a ser cuerpo que se conserva tal cual.
+  const plate = rim.length ? slab(rim, -RIM_H, 0.01) : baseSolids;
+  const keep = rim.length ? baseSolids : [];
+  const solids: Mesh[] = [];
 
   // --- Relieve, escalón a escalón ---
   const dOuter = detail.filter((l) => !l.hole).map((l) => l.pts);
@@ -90,7 +135,7 @@ export function stampSolids(loops: Loop[], detail: Loop[], p: Params): Mesh[] {
     solids.push(m);
   }
 
-  return solids;
+  return { plate, keep, overlay: solids };
 }
 
 export function buildStamp(loops: Loop[], detail: Loop[], p: Params): Mesh {

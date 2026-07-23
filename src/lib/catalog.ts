@@ -9,7 +9,7 @@
 import type { Loop, Params, Piece, Product, ProductId, Silhouette } from '../types';
 import { merge } from './mesh';
 import { buildCutter } from './generators/cutter';
-import { stampBaseRegions, stampSolids } from './generators/stamp';
+import { stampParts, stampPlate } from './generators/stamp';
 import { buildEjector } from './generators/ejector';
 import {
   buildArticulated,
@@ -54,7 +54,7 @@ const CUTTER_FIELDS = [
   'cutHoles',
 ] as const;
 
-const STAMP_FIELDS = [...SIZE, 'stampBase', 'stampRim', 'reliefHeight', 'reliefTaper', 'handle'] as const;
+const STAMP_FIELDS = [...SIZE, 'stampBase', 'stampRim', 'stampFit', 'reliefHeight', 'reliefTaper', 'handle'] as const;
 
 const PLATE_FIELDS = [...SIZE, 'thickness', 'border', 'cornerRadius'] as const;
 
@@ -90,7 +90,7 @@ export const PRODUCTS: Entry[] = [
     category: 'reposteria',
     label: 'Cortador con estampa',
     hint: 'Corta y marca el dibujo de una vez.',
-    fields: [...CUTTER_FIELDS, 'stampBase', 'stampRim', 'reliefHeight', 'reliefTaper', 'strokeWidth'],
+    fields: [...CUTTER_FIELDS, 'stampBase', 'stampRim', 'stampFit', 'reliefHeight', 'reliefTaper', 'strokeWidth'],
     build: (s, p) => [
       ...cutterPieces(s.loops, p),
       ...stampPieces(s.loops, s.detail, p),
@@ -427,20 +427,20 @@ function cutterPieces(loops: Loop[], p: Params): Piece[] {
 }
 
 function stampPieces(loops: Loop[], detail: Loop[], p: Params): Piece[] {
-  const base = stampBaseRegions(loops);
-  const solids = stampSolids(loops, detail, p);
-  const mesh = merge(...solids);
+  const { plate, keep, overlay } = stampParts(loops, detail, p);
+  // El orden importa: el relieve tiene que quedar en la COLA de la malla, que
+  // es como el visor y el 3MF saben qué pintar con el color del trazo.
+  const mesh = merge(...plate, ...keep, ...overlay);
   if (!mesh.positions.length) return [];
 
-  // stampSolids devuelve primero la placa (un sólido por región); el resto
-  // (relieve y tirador) es el overlay que sobrevive al grabado de la marca.
   return [{
     id: 'stamp',
     label: 'Sello',
     role: 'icing',
     mesh,
-    plate: { regions: base, zLo: 0, zHi: p.stampBase },
-    overlay: merge(...solids.slice(base.length)),
+    plate: stampPlate(loops, p),
+    keep: keep.length ? merge(...keep) : undefined,
+    overlay: merge(...overlay),
   }];
 }
 

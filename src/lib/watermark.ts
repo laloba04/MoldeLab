@@ -447,7 +447,12 @@ function engraveOnPlate(piece: Piece, text: PlacedText, depth: number): Piece | 
     parts.push(layer);
   }
 
-  return { ...piece, mesh: merge(...parts, piece.overlay ?? emptyMesh()) };
+  // El orden se respeta: placa, cuerpo, y el relieve SIEMPRE al final, que es
+  // como el visor y el 3MF distinguen el dibujo del resto.
+  return {
+    ...piece,
+    mesh: merge(...parts, piece.keep ?? emptyMesh(), piece.overlay ?? emptyMesh()),
+  };
 }
 
 function markPiece(piece: Piece, opts: WatermarkOpts): Piece {

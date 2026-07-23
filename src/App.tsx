@@ -592,8 +592,23 @@ export default function App() {
       </aside>
 
       {dlOpen && (
-        <div className="modal-back" onClick={() => setDlOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-back"
+          role="presentation"
+          onClick={() => setDlOpen(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setDlOpen(false);
+          }}
+        >
+          {/* El diálogo para el clic fuera y las teclas: sin esto, cerrar la
+              ventana sería solo cosa del ratón. */}
+          <dialog
+            className="modal"
+            open
+            aria-label="Descargar archivos"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
             <h3>Descargar archivos</h3>
 
             <label className="modal-field">
@@ -668,7 +683,7 @@ export default function App() {
                 <Download size={15} /> Descargar{dlFmts.size > 1 ? ' (ZIP)' : ''}
               </button>
             </div>
-          </div>
+          </dialog>
         </div>
       )}
 

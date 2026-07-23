@@ -50,14 +50,18 @@ export const SLICERS: { id: Slicer; label: string; scheme: string }[] = [
 
 const LAST_KEY = 'moldelab-ultimo-envio';
 
-/** Nombre imposible de adivinar: nadie puede ir pescando modelos ajenos. */
+/**
+ * Nombre imposible de adivinar: el cubo es público, así que lo único que impide
+ * que alguien vaya pescando modelos ajenos es que el nombre no se pueda acertar.
+ * De ahí que el azar sea criptográfico y no `Math.random()`, que es predecible.
+ */
 function randomName(filename: string): string {
   const dot = filename.lastIndexOf('.');
   const ext = dot >= 0 ? filename.slice(dot) : '';
-  const rnd =
-    typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2) + Date.now().toString(36);
+  if (typeof crypto.randomUUID === 'function') return `${crypto.randomUUID()}${ext}`;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const rnd = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   return `${rnd}${ext}`;
 }
 

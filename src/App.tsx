@@ -12,7 +12,8 @@ import { toObj, toSvg, zipFiles } from './lib/formats';
 import { isEmbedded, saveBlob } from './lib/save';
 import { to3mf } from './lib/threemf';
 import { applyWatermark, canWatermark, rasterizeText } from './lib/watermark';
-import { translate, triangleCount } from './lib/mesh';
+import { triangleCount } from './lib/mesh';
+import { dropToBed, spreadPieces } from './lib/layout';
 
 type Fmt = '3mf' | 'stl' | 'obj' | 'svg';
 const FORMATS: { id: Fmt; label: string; hint: string }[] = [
@@ -22,35 +23,6 @@ const FORMATS: { id: Fmt; label: string; hint: string }[] = [
   { id: 'svg', label: 'SVG (corte láser)', hint: 'El contorno 2D en milímetros.' },
 ];
 
-/**
- * Coloca las piezas en fila sobre la cama, sin solaparse: los productos de
- * varias piezas se generan todas centradas en el origen y en un solo archivo
- * (3MF) saldrían apiladas una encima de otra. Aquí se separan a lo ancho.
- */
-function spreadPieces(pieces: Piece[]): Piece[] {
-  if (pieces.length < 2) return pieces;
-  const gap = 6;
-  const info = pieces.map((p) => {
-    let minX = Infinity, maxX = -Infinity;
-    const q = p.mesh.positions;
-    for (let i = 0; i < q.length; i += 3) {
-      if (q[i] < minX) minX = q[i];
-      if (q[i] > maxX) maxX = q[i];
-    }
-    return { minX, w: maxX - minX };
-  });
-  const total = info.reduce((s, b) => s + b.w, 0) + gap * (pieces.length - 1);
-  let cursor = -total / 2;
-  return pieces.map((p, i) => {
-    const dx = cursor - info[i].minX;
-    cursor += info[i].w + gap;
-    return {
-      ...p,
-      mesh: translate(p.mesh, dx, 0, 0),
-      overlay: p.overlay ? translate(p.overlay, dx, 0, 0) : undefined,
-    };
-  });
-}
 import { Viewer } from './components/Viewer';
 import { Controls } from './components/Controls';
 import { deletePreset, loadPresets, upsertPreset, type Preset } from './lib/presets';
@@ -306,7 +278,7 @@ export default function App() {
     const name =
       (dlName.trim() || `moldelab-${params.product}`).replace(/[^\w\-]+/g, '_').slice(0, 40) ||
       'moldelab';
-    const forExport = separate ? spreadPieces(marked) : marked;
+    const forExport = separate ? spreadPieces(marked) : dropToBed(marked);
 
     // Cada formato añade uno o varios archivos; si al final hay más de uno, se
     // empaquetan en un ZIP.
@@ -319,7 +291,8 @@ export default function App() {
     if (dlFmts.has('obj')) await add(`${name}.obj`, toObj(forExport.map((p) => ({ name: p.label, mesh: p.mesh }))));
     if (dlFmts.has('svg') && silhouette) await add(`${name}.svg`, toSvg(silhouette.loops));
     if (dlFmts.has('stl')) {
-      if (marked.length === 1) await add(`${name}.stl`, toStl(marked[0].mesh, `MoldeLab ${marked[0].label}`));
+      if (forExport.length === 1)
+        await add(`${name}.stl`, toStl(forExport[0].mesh, `MoldeLab ${forExport[0].label}`));
       else for (const pc of forExport) await add(`${name}-${pc.id}.stl`, toStl(pc.mesh, pc.label));
     }
 

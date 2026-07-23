@@ -18,6 +18,7 @@ import { cleanupMask, fillEnclosed, pad, type Mask } from '../src/lib/image';
 import { boxOf, shiftLoops } from '../src/lib/shapes';
 import { PRODUCTS, buildProduct } from '../src/lib/catalog';
 import { toStl } from '../src/lib/stl';
+import { dropToBed, spreadPieces } from '../src/lib/layout';
 import { DEFAULTS, type Loop, type Mesh, type Pt, type Silhouette } from '../src/types';
 
 let failures = 0;
@@ -160,6 +161,69 @@ check('todos los productos declaran controles', noFields.length === 0,
 
 const ids = PRODUCTS.map((p) => p.id);
 check('no hay ids repetidos', new Set(ids).size === ids.length);
+
+
+// -----------------------------------------------------------------------------
+// Colocación en la cama
+// -----------------------------------------------------------------------------
+//
+// Un 3MF donde una pieza baja del cero (el reborde del sello, el émbolo del
+// eyector) hace que el laminador hunda TODO el conjunto hasta que esa pieza
+// toca la cama, y las demás se quedan flotando: «voladizo flotante», y la
+// impresión sale mal. Aquí se exige que después de colocar, cada pieza se
+// apoye en la cama y ninguna baje del cero.
+
+const floorCeil = (m: Mesh) => {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 2; i < m.positions.length; i += 3) {
+    if (m.positions[i] < lo) lo = m.positions[i];
+    if (m.positions[i] > hi) hi = m.positions[i];
+  }
+  return { lo, hi };
+};
+
+console.log('');
+let flotantes: string[] = [];
+let hundidas: string[] = [];
+let solapes: string[] = [];
+
+for (const prod of PRODUCTS) {
+  const p = { ...DEFAULTS, product: prod.id };
+  let pieces;
+  try {
+    pieces = buildProduct(sil, p);
+  } catch {
+    continue;
+  }
+  if (!pieces.length) continue;
+
+  for (const pc of spreadPieces(pieces)) {
+    const { lo } = floorCeil(pc.mesh);
+    if (Math.abs(lo) > 0.01) flotantes.push(`${prod.id}/${pc.label} a ${lo.toFixed(2)}`);
+  }
+
+  const junto = dropToBed(pieces);
+  const min = Math.min(...junto.map((pc) => floorCeil(pc.mesh).lo));
+  if (min < -0.01) hundidas.push(`${prod.id} a ${min.toFixed(2)}`);
+
+  // Y separadas no se pueden pisar entre ellas.
+  const spans = spreadPieces(pieces).map((pc) => {
+    let a = Infinity;
+    let b = -Infinity;
+    for (let i = 0; i < pc.mesh.positions.length; i += 3) {
+      if (pc.mesh.positions[i] < a) a = pc.mesh.positions[i];
+      if (pc.mesh.positions[i] > b) b = pc.mesh.positions[i];
+    }
+    return [a, b];
+  });
+  for (let i = 1; i < spans.length; i++)
+    if (spans[i][0] < spans[i - 1][1]) solapes.push(prod.id);
+}
+
+check('separadas, cada pieza se apoya en la cama', flotantes.length === 0, flotantes.slice(0, 4).join(', '));
+check('juntas, nada baja del cero', hundidas.length === 0, hundidas.slice(0, 4).join(', '));
+check('separadas, las piezas no se pisan', solapes.length === 0, [...new Set(solapes)].join(', '));
 
 console.log(`\n${totalTris.toLocaleString('es-ES')} triángulos en total`);
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');

@@ -16,6 +16,20 @@ export interface Preset {
 }
 
 const MAX_NAME = 60;
+
+/**
+ * El nombre, reducido a lo que un nombre puede ser: letras (con tildes y ñ),
+ * números, espacios y poco más. Se limpia tanto al guardar como al leer, así
+ * que en el almacén del navegador nunca llega a haber nada raro — ni caracteres
+ * de control, ni etiquetas, ni un nombre de mil letras.
+ */
+function cleanName(raw: string): string {
+  return raw
+    .normalize('NFC')
+    .replace(/[^\p{L}\p{N} ._-]/gu, '')
+    .trim()
+    .slice(0, MAX_NAME);
+}
 const MAX_TEXT = 2000; // tope de los campos de texto (nombre, contenido del QR…)
 
 /**
@@ -47,7 +61,7 @@ function cleanPreset(raw: unknown): Preset | null {
   if (!raw || typeof raw !== 'object') return null;
   const { name, params } = raw as { name?: unknown; params?: unknown };
   if (typeof name !== 'string') return null;
-  const clean = name.trim().slice(0, MAX_NAME);
+  const clean = cleanName(name);
   return clean ? { name: clean, params: cleanParams(params) } : null;
 }
 
@@ -72,14 +86,17 @@ function save(list: Preset[]): Preset[] {
 
 /** Crea o reemplaza el preset con ese nombre y devuelve la lista ordenada. */
 export function upsertPreset(name: string, params: Params): Preset[] {
-  const clean = name.trim().slice(0, MAX_NAME);
+  const clean = cleanName(name);
   if (!clean) return loadPresets();
   const list = loadPresets().filter((p) => p.name !== clean);
-  list.push({ name: clean, params });
+  // También se sanea al guardar: lo que entra al almacén ya viene limpio, no
+  // se confía en que alguien lo limpie al salir.
+  list.push({ name: clean, params: cleanParams(params) });
   list.sort((a, b) => a.name.localeCompare(b.name));
   return save(list);
 }
 
 export function deletePreset(name: string): Preset[] {
-  return save(loadPresets().filter((p) => p.name !== name));
+  const clean = cleanName(name);
+  return save(loadPresets().filter((p) => p.name !== clean));
 }

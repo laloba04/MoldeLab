@@ -25,7 +25,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # --ignore-scripts: una dependencia con un postinstall malicioso no se
+      # ejecuta al instalar. Comprobado que la build sale idéntica sin ellos.
+      - run: npm ci --ignore-scripts
       # Envío directo al laminador (botón «Descargar y abrir»). Sin estas
       # variables el botón no se enseña y la app funciona igual que siempre.
       # La clave es la PÚBLICA de Supabase (anon): está pensada para viajar en

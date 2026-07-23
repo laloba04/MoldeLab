@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Image as ImageIcon, Layers, Wand2 } from 'lucide-react';
+import { Download, Image as ImageIcon, Layers, Send, Wand2 } from 'lucide-react';
 import { DEFAULTS, type Params, type Piece, type Silhouette } from './types';
 import { autoLevels, loadImageData } from './lib/image';
 import { buildPieces, vectorize } from './lib/pipeline';
@@ -14,6 +14,7 @@ import { to3mf } from './lib/threemf';
 import { applyWatermark, canWatermark, rasterizeText } from './lib/watermark';
 import { triangleCount } from './lib/mesh';
 import { dropToBed, spreadPieces } from './lib/layout';
+import { CLOUD, openInSlicer, SLICERS, uploadForSlicer, type Slicer } from './lib/cloud';
 
 type Fmt = '3mf' | 'stl' | 'obj' | 'svg';
 const FORMATS: { id: Fmt; label: string; hint: string }[] = [
@@ -43,6 +44,9 @@ export default function App() {
   const [dlFmts, setDlFmts] = useState<Set<Fmt>>(new Set<Fmt>(['3mf']));
   const [dlName, setDlName] = useState('');
   const [separate, setSeparate] = useState(true);
+  // Envío directo al laminador: cuál, y si hay un envío en marcha.
+  const [slicer, setSlicer] = useState<Slicer>('bambu');
+  const [sending, setSending] = useState(false);
   const [mark, setMark] = useState('Barakaldesa Manitas 3D');
   const [markOn, setMarkOn] = useState(false);
   // Colores del visor y del 3MF: fondo = placa, trazo = relieve.
@@ -283,10 +287,12 @@ export default function App() {
 
   const [notice, setNotice] = useState<string | null>(null);
 
-  const download = async () => {
-    if (!marked.length || !dlFmts.size) return;
+  /** Arma el archivo que toca según los formatos elegidos. Lo comparten el
+   *  botón de descargar y el de mandar al laminador. */
+  const buildFile = async (): Promise<{ blob: Blob; outName: string } | null> => {
+    if (!marked.length || !dlFmts.size) return null;
     const name =
-      (dlName.trim() || `moldelab-${params.product}`).replace(/[^\w\-]+/g, '_').slice(0, 40) ||
+      (dlName.trim() || `moldelab-${params.product}`).replace(/[^\w-]+/g, '_').slice(0, 40) ||
       'moldelab';
     const forExport = separate ? spreadPieces(marked) : dropToBed(marked);
 
@@ -307,10 +313,48 @@ export default function App() {
     }
 
     const names = Object.keys(files);
-    if (!names.length) return;
+    if (!names.length) return null;
     const single = names.length === 1;
-    const blob = single ? new Blob([files[names[0]].buffer as ArrayBuffer]) : zipFiles(files);
-    const outName = single ? names[0] : `${name}.zip`;
+    return {
+      blob: single ? new Blob([files[names[0]].buffer as ArrayBuffer]) : zipFiles(files),
+      outName: single ? names[0] : `${name}.zip`,
+    };
+  };
+
+  /**
+   * Mandar al laminador. Sube el archivo a internet y le pasa la dirección:
+   * el laminador se lo descarga él solo. Ver `lib/cloud.ts` para el porqué.
+   */
+  const sendToSlicer = async () => {
+    const built = await buildFile();
+    if (!built) return;
+    setSending(true);
+    setError(null);
+    try {
+      const up = await uploadForSlicer(built.blob, built.outName);
+      if (!up.ok) {
+        setError(
+          up.reason === 'sin-configurar'
+            ? 'Falta configurar el envío al laminador.'
+            : `No se ha podido enviar el modelo (${up.reason}). Descárgalo y ábrelo a mano.`,
+        );
+        return;
+      }
+      openInSlicer(up.url, slicer);
+      setDlOpen(false);
+      setNotice(
+        `Enviado a ${SLICERS.find((x) => x.id === slicer)?.label}. Si te pide confirmar el enlace, dile que sí; y si no se abre, cierra el laminador y vuelve a darle.`,
+      );
+      setTimeout(() => setNotice(null), 12000);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const download = async () => {
+    const built = await buildFile();
+    if (!built) return;
+    const { blob, outName } = built;
 
     const result = await saveBlob(blob, outName);
     if (result.ok) {
@@ -592,11 +636,35 @@ export default function App() {
               </label>
             )}
 
+            {CLOUD && (
+              <label className="color-row slicer-pick">
+                <select value={slicer} onChange={(e) => setSlicer(e.target.value as Slicer)}>
+                  {SLICERS.map((sl) => (
+                    <option key={sl.id} value={sl.id}>
+                      {sl.label}
+                    </option>
+                  ))}
+                </select>
+                <span>Laminador al que enviar</span>
+              </label>
+            )}
+
             <div className="modal-actions">
-              <button className="ghost" onClick={() => setDlOpen(false)}>
+              <button type="button" className="ghost" onClick={() => setDlOpen(false)}>
                 Cancelar
               </button>
-              <button className="primary" onClick={download} disabled={!dlFmts.size}>
+              {CLOUD && (
+                <button
+                  type="button"
+                  className="ghost send"
+                  onClick={sendToSlicer}
+                  disabled={!dlFmts.size || sending}
+                  title="Sube el modelo y se lo pasa al laminador para que lo abra"
+                >
+                  <Send size={15} /> {sending ? 'Enviando…' : 'Descargar y abrir'}
+                </button>
+              )}
+              <button type="button" className="primary" onClick={download} disabled={!dlFmts.size}>
                 <Download size={15} /> Descargar{dlFmts.size > 1 ? ' (ZIP)' : ''}
               </button>
             </div>

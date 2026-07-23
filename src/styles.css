@@ -975,3 +975,21 @@ button.chip:hover {
     transition: none !important;
   }
 }
+
+/* Enviar al laminador: el desplegable y el botón de la ventana de descarga. */
+.slicer-pick select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12.5px;
+}
+.modal-actions .ghost.send {
+  border-color: var(--blade);
+  color: var(--blade);
+}
+.modal-actions .ghost.send:disabled {
+  opacity: 0.5;
+}

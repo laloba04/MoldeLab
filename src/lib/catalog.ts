@@ -92,6 +92,7 @@ export const PRODUCTS: Entry[] = [
     category: 'reposteria',
     label: 'Cortador con estampa',
     hint: 'Corta y marca el dibujo de una vez.',
+    badge: 'popular',
     fields: [...CUTTER_FIELDS, 'stampBase', 'stampRim', 'stampFit', 'reliefHeight', 'reliefTaper', 'strokeWidth'],
     build: (s, p) => [
       // El cortador se agranda; el sello NO. Ahí está la gracia: el hueco crece
@@ -230,6 +231,7 @@ export const PRODUCTS: Entry[] = [
   {
     id: 'keychain-layers',
     category: 'llaveros',
+    badge: 'nuevo',
     label: 'Llavero en capas',
     hint: 'Una pieza por tono: cambia de filamento y sale a colores.',
     needsBands: true,
@@ -290,6 +292,7 @@ export const PRODUCTS: Entry[] = [
   {
     id: 'sign-cutout',
     category: 'letreros',
+    badge: 'nuevo',
     label: 'Letrero calado',
     hint: 'El dibujo atraviesa la placa. Bonito a contraluz.',
     fields: [...PLATE_FIELDS, 'cutoutMode', 'cutLineWidth', 'cutBridges'],

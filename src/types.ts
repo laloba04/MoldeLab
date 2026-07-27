@@ -128,6 +128,9 @@ export interface Product {
   label: string;
   hint: string;
   fields: Field[];
+  /** Distintivo en el menú: 'nuevo' (cian) o 'popular' (rosa). Se usa con
+   *  cuentagotas — un menú lleno de etiquetas no destaca nada. */
+  badge?: 'nuevo' | 'popular';
   /** La imagen se compone con texto antes de vectorizar. */
   needsText?: boolean;
   /** La imagen ES un código QR generado a partir de `qrContent`. */

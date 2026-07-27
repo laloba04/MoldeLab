@@ -1242,3 +1242,96 @@ button.chip:hover {
 .modal-actions .ghost.send:disabled {
   opacity: 0.5;
 }
+
+/* ===========================================================================
+   Acercamiento al estilo de Hi3D, con la identidad de MoldeLab (cian y rosa).
+   Etiquetas en el menú, superficies que flotan y una zona de subir más clara.
+   =========================================================================== */
+
+/* --- Etiquetas Nuevo / Popular -------------------------------------------- */
+.product strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.badge {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  line-height: 1;
+}
+.badge.nuevo {
+  color: var(--blade);
+  background: rgba(27, 197, 212, 0.14);
+  border: 1px solid rgba(27, 197, 212, 0.35);
+}
+.badge.popular {
+  color: var(--icing);
+  background: rgba(255, 95, 162, 0.14);
+  border: 1px solid rgba(255, 95, 162, 0.35);
+}
+
+/* --- Superficies que flotan (el aire de Hi3D) ----------------------------- */
+/* El lienzo de la app es más oscuro que el panel, así el panel "flota" encima
+   en vez de fundirse con el fondo. */
+body {
+  background: var(--graphite);
+}
+.panel {
+  background: linear-gradient(180deg, var(--panel), #131b24);
+  box-shadow: 1px 0 0 var(--line), 8px 0 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Cabeceras de sección: un punto de acento a la izquierda, como marca de taller. */
+.controls h3 {
+  position: relative;
+  padding-left: 10px;
+}
+.controls h3::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--blade);
+  opacity: 0.7;
+}
+
+/* La categoría abierta se resalta un poco, para orientarse en el menú. */
+.cat-head[aria-expanded='true'] .cat-label {
+  color: var(--text);
+  font-weight: 600;
+}
+.cat-head[aria-expanded='true'] .cat-icon {
+  filter: none;
+}
+
+/* --- Zona de subir más protagonista (el "Suelta para subir" de Hi3D) ------ */
+.upload {
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 12px;
+  border-width: 1.5px;
+  background: rgba(27, 197, 212, 0.03);
+  transition: border-color 0.14s, background 0.14s, color 0.14s;
+}
+.upload:hover {
+  background: rgba(27, 197, 212, 0.08);
+}
+.upload svg {
+  opacity: 0.85;
+}
+/* «Arreglar imagen» sigue siendo un botón normal, no una zona de soltar. */
+.upload.fix {
+  flex-direction: row;
+  padding: 9px;
+  background: transparent;
+  border-width: 1px;
+}

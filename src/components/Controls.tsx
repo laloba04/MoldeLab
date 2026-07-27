@@ -16,6 +16,12 @@ interface Props {
   reset: () => void;
 }
 
+/** El distintivo del producto en el menú, si lo tiene. */
+function Badge({ kind }: { kind?: 'nuevo' | 'popular' }) {
+  if (!kind) return null;
+  return <span className={`badge ${kind}`}>{kind === 'nuevo' ? 'Nuevo' : 'Popular'}</span>;
+}
+
 /** Un control se dibuja solo a partir de su metadato. Sin JSX a mano por campo. */
 function Control({ field, p, set }: { field: Field; p: Params; set: Props['set'] }) {
   const meta = FIELD_META[field];
@@ -118,7 +124,10 @@ export function Controls({ p, set, reset }: Props) {
                   className={prod.id === p.product ? 'product on' : 'product'}
                   onClick={() => pick(prod.id)}
                 >
-                  <strong>{prod.label}</strong>
+                  <strong>
+                    {prod.label}
+                    <Badge kind={prod.badge} />
+                  </strong>
                   <small>{prod.hint}</small>
                 </button>
               </li>
@@ -151,7 +160,10 @@ export function Controls({ p, set, reset }: Props) {
                           className={prod.id === p.product ? 'product on' : 'product'}
                           onClick={() => pick(prod.id)}
                         >
-                          <strong>{prod.label}</strong>
+                          <strong>
+                            {prod.label}
+                            <Badge kind={prod.badge} />
+                          </strong>
                           <small>{prod.hint}</small>
                         </button>
                       </li>

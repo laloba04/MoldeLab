@@ -206,8 +206,10 @@ export function Viewer({
       shadows
       camera={{ position: [80, -130, 100], fov: 40, up: [0, 0, 1], near: 1, far: 3000 }}
       dpr={[1, 2]}
+      // Lienzo transparente: el fondo lo pone el degradado de estudio de `.stage`
+      // (ver styles.css), así la escena tiene profundidad en vez de un gris liso.
+      gl={{ alpha: true }}
     >
-      <color attach="background" args={['#111820']} />
       <hemisphereLight intensity={0.5} groundColor="#0b1016" />
       {/* La cámara de sombras por defecto de three solo abarca 10x10 unidades
           alrededor del origen: fuera de ahí no hay sombra, y dentro la pieza se

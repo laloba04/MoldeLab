@@ -665,7 +665,11 @@ button.ghost:hover {
 
 .stage {
   position: relative;
-  background: var(--bed);
+  /* Luz de estudio: un foco tenue arriba-centro que se apaga hacia los bordes.
+     El lienzo 3D va por encima con su propio fondo, pero al mover la cámara los
+     bordes lo dejan ver y la escena gana profundidad en vez de un gris plano. */
+  background:
+    radial-gradient(80% 70% at 50% 30%, #16202b, var(--bed) 70%, var(--graphite));
 }
 
 .viewer-wrap {
@@ -898,27 +902,49 @@ button.chip:hover {
   display: grid;
   place-items: center;
   height: 100%;
-  /* Rejilla de cama de impresión, también cuando no hay nada que enseñar. */
-  background-image: linear-gradient(var(--line) 1px, transparent 1px),
+  padding: 24px;
+  /* La cama de impresión, con un foco de estudio en el centro: la rejilla se
+     apaga hacia los bordes en vez de cortarse de golpe, y el fondo se aclara un
+     punto bajo la tarjeta, como una pieza sobre el banco iluminado. */
+  background-color: var(--bed);
+  background-image:
+    radial-gradient(120% 90% at 50% 42%, rgba(27, 197, 212, 0.06), transparent 60%),
+    linear-gradient(var(--line) 1px, transparent 1px),
     linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 40px 40px;
+  background-size: 100% 100%, 40px 40px, 40px 40px;
   background-position: center;
+  -webkit-mask-image: radial-gradient(130% 100% at 50% 45%, #000 55%, transparent 100%);
+  mask-image: radial-gradient(130% 100% at 50% 45%, #000 55%, transparent 100%);
 }
 
 .empty-inner {
-  max-width: 380px;
-  padding: 34px;
+  max-width: 440px;
+  padding: 30px 32px 26px;
   text-align: left;
-  background: var(--bed);
+  background: linear-gradient(180deg, var(--panel), var(--bed));
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+
+.empty-eyebrow {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--blade);
 }
 
 .empty-inner h2 {
   font-family: var(--display);
   font-weight: 800;
-  font-size: 30px;
-  line-height: 1.06;
+  font-size: clamp(28px, 4.5vw, 36px);
+  line-height: 1.04;
   letter-spacing: -0.03em;
   margin-bottom: 12px;
 }
@@ -926,7 +952,92 @@ button.chip:hover {
 .empty-inner p {
   color: var(--muted);
   line-height: 1.55;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
+}
+
+/* Empezar desde una forma: la parte que copia el "elige una plantilla". */
+.tpl-intro {
+  margin: 22px 0 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.tpl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 6px;
+  background: var(--bed);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  font-family: var(--body);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, transform 0.12s;
+}
+.tpl img {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+}
+.tpl:hover {
+  border-color: var(--blade);
+  color: var(--text);
+  transform: translateY(-2px);
+}
+.tpl:focus-visible {
+  outline: 2px solid var(--blade);
+  outline-offset: 2px;
+}
+
+/* La misma galería en el panel, ya con imagen cargada: plegada y en miniatura. */
+.tpl-more > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--muted);
+  list-style: none;
+}
+.tpl-more > summary::-webkit-details-marker {
+  display: none;
+}
+.tpl-more > summary::before {
+  content: '▸ ';
+  color: var(--blade);
+}
+.tpl-more[open] > summary::before {
+  content: '▾ ';
+}
+.tpl-strip {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 5px;
+  margin-top: 10px;
+}
+.tpl-strip button {
+  padding: 0;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.tpl-strip img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+}
+.tpl-strip button:hover {
+  border-color: var(--blade);
 }
 
 .toast {

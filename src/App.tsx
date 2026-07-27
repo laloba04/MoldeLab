@@ -14,6 +14,7 @@ import { to3mf } from './lib/threemf';
 import { applyWatermark, canWatermark, rasterizeText } from './lib/watermark';
 import { triangleCount } from './lib/mesh';
 import { dropToBed, spreadPieces } from './lib/layout';
+import { TEMPLATES, templatePreview, templateToBlob, type Template } from './lib/templates';
 import { CLOUD, openInSlicer, SLICERS, uploadForSlicer, type Slicer } from './lib/cloud';
 
 type Fmt = '3mf' | 'stl' | 'obj' | 'svg';
@@ -78,7 +79,7 @@ export default function App() {
     setParams((prev) => ({ ...DEFAULTS, product: prev.product }));
   }, []);
 
-  const open = useCallback(async (file: File) => {
+  const open = useCallback(async (file: File | Blob) => {
     setError(null);
     setBusy(true);
     try {
@@ -91,6 +92,19 @@ export default function App() {
       setBusy(false);
     }
   }, []);
+
+  // Empezar desde una plantilla: se pinta y entra por el mismo camino que una
+  // foto, así que la vista previa y todos los ajustes funcionan igual.
+  const useTemplate = useCallback(
+    async (t: Template) => {
+      try {
+        await open(await templateToBlob(t));
+      } catch {
+        setError('No se ha podido cargar la plantilla.');
+      }
+    },
+    [open],
+  );
 
   // Pegar del portapapeles: en un editor así se usa más que el botón.
   useEffect(() => {
@@ -418,6 +432,19 @@ export default function App() {
           </button>
         )}
 
+        {img && (
+          <details className="tpl-more">
+            <summary>Empezar con una forma</summary>
+            <div className="tpl-strip">
+              {TEMPLATES.map((t) => (
+                <button key={t.id} type="button" onClick={() => useTemplate(t)} title={t.label}>
+                  <img src={templatePreview(t)} alt={t.label} />
+                </button>
+              ))}
+            </div>
+          </details>
+        )}
+
         <Controls p={params} set={set} reset={reset} />
 
         <div className="presets">
@@ -737,6 +764,7 @@ export default function App() {
         ) : (
           <div className="empty">
             <div className="empty-inner">
+              <span className="empty-eyebrow">Taller de moldes 3D</span>
               <h2>
                 Suelta un dibujo.
                 <br />
@@ -749,6 +777,22 @@ export default function App() {
               <button className="primary" onClick={() => fileRef.current?.click()}>
                 <ImageIcon size={16} /> Elegir imagen
               </button>
+
+              <div className="tpl-intro">o empieza con una forma</div>
+              <div className="tpl-grid">
+                {TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className="tpl"
+                    onClick={() => useTemplate(t)}
+                    title={t.label}
+                  >
+                    <img src={templatePreview(t)} alt="" aria-hidden />
+                    <span>{t.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}

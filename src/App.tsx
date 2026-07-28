@@ -28,9 +28,13 @@ const FORMATS: { id: Fmt; label: string; hint: string }[] = [
 import { Viewer } from './components/Viewer';
 import { Controls } from './components/Controls';
 import { deletePreset, loadPresets, upsertPreset, type Preset } from './lib/presets';
+import { loadSession, saveSession } from './lib/session';
+
+// Lo último que se dejó la vez anterior: producto, ajustes y marca del taller.
+const SAVED = loadSession();
 
 export default function App() {
-  const [params, setParams] = useState<Params>(DEFAULTS);
+  const [params, setParams] = useState<Params>(SAVED.params ?? DEFAULTS);
   const [presets, setPresets] = useState<Preset[]>(() => loadPresets());
   const [presetName, setPresetName] = useState('');
   const [img, setImg] = useState<ImageData | null>(null);
@@ -48,7 +52,7 @@ export default function App() {
   // Envío directo al laminador: cuál, y si hay un envío en marcha.
   const [slicer, setSlicer] = useState<Slicer>('bambu');
   const [sending, setSending] = useState(false);
-  const [mark, setMark] = useState('Barakaldesa Manitas 3D');
+  const [mark, setMark] = useState(SAVED.mark ?? 'Barakaldesa Manitas 3D');
   const [markOn, setMarkOn] = useState(false);
   // Colores del visor y del 3MF: fondo = placa, trazo = relieve.
   const [bgColor, setBgColor] = useState('#e4d5c1');
@@ -105,6 +109,13 @@ export default function App() {
     },
     [open],
   );
+
+  // Recordar entre visitas: se guarda lo último (producto, ajustes, marca) con
+  // un pequeño retardo, para no escribir en cada tirón de deslizador.
+  useEffect(() => {
+    const t = setTimeout(() => saveSession({ params, mark }), 400);
+    return () => clearTimeout(t);
+  }, [params, mark]);
 
   // Pegar del portapapeles: en un editor así se usa más que el botón.
   useEffect(() => {

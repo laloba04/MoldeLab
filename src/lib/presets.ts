@@ -39,7 +39,7 @@ const MAX_TEXT = 2000; // tope de los campos de texto (nombre, contenido del QRâ
  * cual, se RECONSTRUYE: se parte de los valores por defecto y solo se copia lo
  * que existe y es del tipo correcto. Cualquier cosa rara se queda fuera sola.
  */
-function cleanParams(raw: unknown): Params {
+export function cleanParams(raw: unknown): Params {
   const out = { ...DEFAULTS };
   if (!raw || typeof raw !== 'object') return out;
   const src = raw as Record<string, unknown>;

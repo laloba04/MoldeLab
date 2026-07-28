@@ -23,6 +23,18 @@ export interface Session {
   mark: string;
 }
 
+/** La marca, sin caracteres de control ni nada por debajo del espacio, y con
+ *  tope de longitud. Se limpia sin regex de control para no meter esos mismos
+ *  caracteres en el código. */
+function cleanMark(raw: string): string {
+  let out = '';
+  for (const ch of raw) {
+    if (ch >= ' ' && ch.codePointAt(0) !== 0x7f) out += ch;
+    if (out.length >= MARK_MAX) break;
+  }
+  return out;
+}
+
 export function loadSession(): Partial<Session> {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(KEY) || '{}');
@@ -30,7 +42,7 @@ export function loadSession(): Partial<Session> {
     const { params, mark } = raw as { params?: unknown; mark?: unknown };
     const out: Partial<Session> = {};
     if (params) out.params = cleanParams(params);
-    if (typeof mark === 'string') out.mark = mark.slice(0, MARK_MAX);
+    if (typeof mark === 'string') out.mark = cleanMark(mark);
     return out;
   } catch {
     return {};
@@ -39,7 +51,13 @@ export function loadSession(): Partial<Session> {
 
 export function saveSession(s: Session): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ params: s.params, mark: s.mark.slice(0, MARK_MAX) }));
+    // Se sanea también al guardar: los parámetros pasan por el mismo filtro que
+    // los presets y la marca por cleanMark. Al almacén nunca llega nada raro; no
+    // se confía en que alguien lo limpie al leer.
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ params: cleanParams(s.params), mark: cleanMark(s.mark) }),
+    );
   } catch {
     // Modo incógnito o cuota llena: no se puede recordar, pero no rompemos nada.
   }

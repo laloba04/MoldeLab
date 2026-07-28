@@ -1409,3 +1409,44 @@ body {
     padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
   }
 }
+
+/* --- «Generando…» sobre el visor (#4) ------------------------------------ */
+/* Un aviso discreto arriba del visor mientras se calcula, para que no parezca
+   que la web se ha quedado colgada con imágenes grandes. */
+.computing {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: rgba(13, 18, 25, 0.9);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--blade);
+}
+.spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(27, 197, 212, 0.28);
+  border-top-color: var(--blade);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Quien pide menos movimiento no ve girar: se queda el punto, sin animación. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

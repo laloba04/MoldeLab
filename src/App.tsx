@@ -43,6 +43,9 @@ export default function App() {
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // «Generando…»: el vectorizado bloquea un instante con imágenes grandes, y sin
+  // avisar parece que la web se ha colgado. Se enciende antes de calcular.
+  const [computing, setComputing] = useState(false);
   const [exploded, setExploded] = useState(true);
   // Diálogo de descarga: qué formatos, nombre, y si separar las piezas.
   const [dlOpen, setDlOpen] = useState(false);
@@ -99,7 +102,7 @@ export default function App() {
 
   // Empezar desde una plantilla: se pinta y entra por el mismo camino que una
   // foto, así que la vista previa y todos los ajustes funcionan igual.
-  const useTemplate = useCallback(
+  const loadTemplate = useCallback(
     async (t: Template) => {
       try {
         await open(await templateToBlob(t));
@@ -194,21 +197,27 @@ export default function App() {
     if (!source) {
       setSilhouette(null);
       setPieces([]);
+      setComputing(false);
       return;
     }
+    // Se enciende ANTES del setTimeout: así el navegador pinta el aviso durante
+    // esos 60 ms y ya está en pantalla cuando el cálculo bloquea de verdad.
+    setComputing(true);
     const t = setTimeout(() => {
       try {
         setSilhouette(vectorize(source, params));
         setError(null);
       } catch {
         setError('El contorno ha salido roto. Sube el umbral o la limpieza.');
+        setComputing(false);
       }
     }, 60);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, vecKey]);
 
-  // Mallar es barato: se rehace con cada slider.
+  // Mallar es barato: se rehace con cada slider. Aquí se apaga el aviso, cuando
+  // la silueta ya está vectorizada y las piezas construidas.
   useEffect(() => {
     if (!silhouette) return;
     try {
@@ -217,6 +226,7 @@ export default function App() {
     } catch {
       setError('No se ha podido generar la malla con estos valores.');
     }
+    setComputing(false);
   }, [silhouette, params]);
 
   // La marca grabada se aplica sobre las piezas ya construidas. Es lo último que
@@ -442,7 +452,7 @@ export default function App() {
             <summary>Empezar con una forma</summary>
             <div className="tpl-strip">
               {TEMPLATES.map((t) => (
-                <button key={t.id} type="button" onClick={() => useTemplate(t)} title={t.label}>
+                <button key={t.id} type="button" onClick={() => loadTemplate(t)} title={t.label}>
                   <img src={templatePreview(t)} alt={t.label} />
                 </button>
               ))}
@@ -698,7 +708,7 @@ export default function App() {
                     key={t.id}
                     type="button"
                     className="tpl"
-                    onClick={() => useTemplate(t)}
+                    onClick={() => loadTemplate(t)}
                     title={t.label}
                   >
                     <img src={templatePreview(t)} alt="" aria-hidden />
@@ -710,6 +720,12 @@ export default function App() {
           </div>
         )}
 
+        {computing && (
+          <div className="computing" role="status">
+            <span className="spinner" aria-hidden />
+            Generando…
+          </div>
+        )}
         {busy && <div className="toast">Leyendo la imagen…</div>}
         {error && <div className="toast error">{error}</div>}
         {notice && <div className="toast good">{notice}</div>}

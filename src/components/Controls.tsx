@@ -14,6 +14,9 @@ interface Props {
   p: Params;
   set: <K extends keyof Params>(k: K, v: Params[K]) => void;
   reset: () => void;
+  /** Qué parte enseñar: solo el selector de producto, solo sus ajustes, o
+   *  ambos (por defecto). Las maquetas nuevas los colocan en columnas distintas. */
+  view?: 'product' | 'tune' | 'all';
 }
 
 /** El distintivo del producto en el menú, si lo tiene. */
@@ -82,7 +85,7 @@ function Control({ field, p, set }: { field: Field; p: Params; set: Props['set']
   );
 }
 
-export function Controls({ p, set, reset }: Props) {
+export function Controls({ p, set, reset, view = 'all' }: Props) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({ reposteria: true });
 
@@ -102,6 +105,7 @@ export function Controls({ p, set, reset }: Props) {
 
   return (
     <div className="controls">
+      {view !== 'tune' && (
       <section>
         <h3>Tipo de producto</h3>
 
@@ -175,7 +179,10 @@ export function Controls({ p, set, reset }: Props) {
           })
         )}
       </section>
+      )}
 
+      {view !== 'product' && (
+      <>
       {(current.needsText || current.needsQr) && (
         <section>
           <h3>{current.needsQr ? 'Contenido del QR' : 'Texto'}</h3>
@@ -219,6 +226,8 @@ export function Controls({ p, set, reset }: Props) {
           <Control key={f} field={f} p={p} set={set} />
         ))}
       </section>
+      </>
+      )}
     </div>
   );
 }

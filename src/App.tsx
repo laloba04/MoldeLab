@@ -384,29 +384,23 @@ export default function App() {
     }
   };
 
-  return (
-    <div className="app" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
-      <aside className="panel">
-        <header className="brand">
-          <span className="mark" aria-hidden />
-          <div>
-            <h1>MoldeLab</h1>
-            <p>Una imagen entra. Un STL sale.</p>
-          </div>
-        </header>
+  const brand = (
+    <header className="brand">
+      <span className="mark" aria-hidden />
+      <div>
+        <h1>MoldeLab</h1>
+        <p>Una imagen entra. Un STL sale.</p>
+      </div>
+    </header>
+  );
 
+  const imageBlock = (
+    <>
         <button className="upload" onClick={() => fileRef.current?.click()}>
           <ImageIcon size={16} />
           {img ? 'Cambiar imagen' : 'Subir imagen'}
           <kbd>o pega con Ctrl+V</kbd>
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(e) => e.target.files?.[0] && open(e.target.files[0])}
-        />
 
         {preview && (
           <figure className="thumb">
@@ -444,9 +438,11 @@ export default function App() {
             </div>
           </details>
         )}
+    </>
+  );
 
-        <Controls p={params} set={set} reset={reset} />
-
+  const finishBlock = (
+    <>
         <div className="presets">
           <h3>Ajustes guardados</h3>
           <div className="preset-save">
@@ -499,7 +495,6 @@ export default function App() {
             <p className="hint">Guarda la configuración actual con un nombre para reutilizarla.</p>
           )}
         </div>
-
         {pieces.length > 0 && (
           <div className="colors">
             <h3>Colores</h3>
@@ -607,21 +602,113 @@ export default function App() {
             </p>
           </div>
         )}
+    </>
+  );
 
-        {pieces.length > 0 && (
-          <footer className="actions">
-            <button className="primary" onClick={() => setDlOpen(true)} disabled={!pieces.length}>
-              <Download size={15} />
-              Descargar…
-            </button>
-          </footer>
+  const downloadFooter =
+    pieces.length > 0 ? (
+      <footer className="actions">
+        <button className="primary" onClick={() => setDlOpen(true)} disabled={!pieces.length}>
+          <Download size={15} />
+          Descargar…
+        </button>
+      </footer>
+    ) : null;
+
+  const stageInner = (
+    <>
+        {isEmbedded() && (
+          <div className="banner">
+            Estás en un preview embebido: las descargas pueden estar bloqueadas. Si falla, abre la
+            app en su propia pestaña.
+          </div>
         )}
-      </aside>
+        {source ? (
+          <>
+            <Viewer
+              pieces={marked}
+              exploded={exploded}
+              mark={markOn ? mark : null}
+              bgColor={bgColor}
+              traceColor={traceColor}
+              hideTrace={hideTrace}
+              viewMode={viewMode}
+              oneColor={oneColor}
+              ring={ringDrag?.pos ?? null}
+              onRingMove={ringDrag?.move}
+            />
+            <div className="hud">
+              {pieces.length > 1 && (
+                <button className="chip" onClick={() => setExploded((v) => !v)}>
+                  <Layers size={14} /> {exploded ? 'Juntar' : 'Separar'}
+                </button>
+              )}
+              <button
+                className="chip"
+                onClick={() =>
+                  setViewMode((m) => (m === 'solid' ? 'xray' : m === 'xray' ? 'wire' : 'solid'))
+                }
+                title="Cambiar cómo se ve el modelo"
+              >
+                {viewMode === 'solid' ? 'Sólido' : viewMode === 'xray' ? 'Rayos X' : 'Alámbrico'}
+              </button>
+              <span className="chip readout">{product.label}</span>
+              {dims && (
+                <span className="chip readout" title="Ancho × Largo × Alto">
+                  {dims.w.toFixed(1)} × {dims.l.toFixed(1)} × {dims.h.toFixed(1)} mm
+                </span>
+              )}
+              <span className="chip readout">
+                {stats.tris.toLocaleString('es-ES')} triángulos
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="empty">
+            <div className="empty-inner">
+              <span className="empty-eyebrow">Taller de moldes 3D</span>
+              <h2>
+                Suelta un dibujo.
+                <br />
+                Sale un molde.
+              </h2>
+              <p>
+                Trazo negro sobre fondo blanco, o un PNG con transparencia. Cuanto más limpio el
+                dibujo, más limpio el filo.
+              </p>
+              <button className="primary" onClick={() => fileRef.current?.click()}>
+                <ImageIcon size={16} /> Elegir imagen
+              </button>
 
-      {dlOpen && (
-        <div
-          className="modal-back"
-          role="presentation"
+              <div className="tpl-intro">o empieza con una forma</div>
+              <div className="tpl-grid">
+                {TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className="tpl"
+                    onClick={() => useTemplate(t)}
+                    title={t.label}
+                  >
+                    <img src={templatePreview(t)} alt="" aria-hidden />
+                    <span>{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {busy && <div className="toast">Leyendo la imagen…</div>}
+        {error && <div className="toast error">{error}</div>}
+        {notice && <div className="toast good">{notice}</div>}
+    </>
+  );
+
+  const modal = dlOpen ? (
+    <div
+      className="modal-back"
+      role="presentation"
           onClick={() => setDlOpen(false)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') setDlOpen(false);
@@ -712,95 +799,33 @@ export default function App() {
             </div>
           </dialog>
         </div>
-      )}
+  ) : null;
 
-      <main className="stage">
-        {isEmbedded() && (
-          <div className="banner">
-            Estás en un preview embebido: las descargas pueden estar bloqueadas. Si falla, abre la
-            app en su propia pestaña.
-          </div>
-        )}
-        {source ? (
-          <>
-            <Viewer
-              pieces={marked}
-              exploded={exploded}
-              mark={markOn ? mark : null}
-              bgColor={bgColor}
-              traceColor={traceColor}
-              hideTrace={hideTrace}
-              viewMode={viewMode}
-              oneColor={oneColor}
-              ring={ringDrag?.pos ?? null}
-              onRingMove={ringDrag?.move}
-            />
-            <div className="hud">
-              {pieces.length > 1 && (
-                <button className="chip" onClick={() => setExploded((v) => !v)}>
-                  <Layers size={14} /> {exploded ? 'Juntar' : 'Separar'}
-                </button>
-              )}
-              <button
-                className="chip"
-                onClick={() =>
-                  setViewMode((m) => (m === 'solid' ? 'xray' : m === 'xray' ? 'wire' : 'solid'))
-                }
-                title="Cambiar cómo se ve el modelo"
-              >
-                {viewMode === 'solid' ? 'Sólido' : viewMode === 'xray' ? 'Rayos X' : 'Alámbrico'}
-              </button>
-              <span className="chip readout">{product.label}</span>
-              {dims && (
-                <span className="chip readout" title="Ancho × Largo × Alto">
-                  {dims.w.toFixed(1)} × {dims.l.toFixed(1)} × {dims.h.toFixed(1)} mm
-                </span>
-              )}
-              <span className="chip readout">
-                {stats.tris.toLocaleString('es-ES')} triángulos
-              </span>
-            </div>
-          </>
-        ) : (
-          <div className="empty">
-            <div className="empty-inner">
-              <span className="empty-eyebrow">Taller de moldes 3D</span>
-              <h2>
-                Suelta un dibujo.
-                <br />
-                Sale un molde.
-              </h2>
-              <p>
-                Trazo negro sobre fondo blanco, o un PNG con transparencia. Cuanto más limpio el
-                dibujo, más limpio el filo.
-              </p>
-              <button className="primary" onClick={() => fileRef.current?.click()}>
-                <ImageIcon size={16} /> Elegir imagen
-              </button>
+  return (
+    <div className="app work" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => e.target.files?.[0] && open(e.target.files[0])}
+      />
 
-              <div className="tpl-intro">o empieza con una forma</div>
-              <div className="tpl-grid">
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className="tpl"
-                    onClick={() => useTemplate(t)}
-                    title={t.label}
-                  >
-                    <img src={templatePreview(t)} alt="" aria-hidden />
-                    <span>{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+      <aside className="col col-left">
+        {brand}
+        {imageBlock}
+        <Controls p={params} set={set} reset={reset} view="product" />
+      </aside>
 
-        {busy && <div className="toast">Leyendo la imagen…</div>}
-        {error && <div className="toast error">{error}</div>}
-        {notice && <div className="toast good">{notice}</div>}
-      </main>
+      <main className="stage">{stageInner}</main>
+
+      <aside className="col col-right">
+        <Controls p={params} set={set} reset={reset} view="tune" />
+        {finishBlock}
+        {downloadFooter}
+      </aside>
+
+      {modal}
     </div>
   );
 }

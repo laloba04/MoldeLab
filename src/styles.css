@@ -1335,3 +1335,77 @@ body {
   background: transparent;
   border-width: 1px;
 }
+
+/* ===========================================================================
+   Disposición de trabajo: imagen+productos a la izquierda, visor grande en el
+   centro, ajustes+color+descargar a la derecha (estilo MakerWorld).
+   =========================================================================== */
+.app.work {
+  display: grid;
+  grid-template-columns: 300px 1fr 320px;
+  height: 100%;
+}
+.app.work .col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 16px;
+  background: linear-gradient(180deg, var(--panel), #131b24);
+  overflow-y: auto;
+}
+.app.work .col-left {
+  border-right: 1px solid var(--line);
+}
+.app.work .col-right {
+  border-left: 1px solid var(--line);
+}
+.app.work .stage {
+  position: relative;
+  min-width: 0;
+}
+/* La descarga, siempre a mano al pie de la columna derecha. */
+.app.work .col-right .actions {
+  position: sticky;
+  bottom: 0;
+  margin: auto -16px -20px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+/* --- La disposición de 3 columnas en pantallas estrechas ------------------ */
+@media (max-width: 900px) {
+  .app.work {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .app.work .stage {
+    order: 0;
+    flex: none;
+    height: 42dvh;
+    min-height: 220px;
+  }
+  .app.work .col {
+    flex: none;
+    overflow: visible;
+    border: 0;
+    border-top: 1px solid var(--line);
+    padding: 16px 14px;
+  }
+  .app.work .col-left {
+    order: 1;
+  }
+  .app.work .col-right {
+    order: 2;
+    padding-bottom: 0;
+  }
+  /* La descarga se queda pegada al fondo de la pantalla en el móvil. */
+  .app.work .col-right .actions {
+    position: sticky;
+    bottom: 0;
+    margin: 8px -14px 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  }
+}

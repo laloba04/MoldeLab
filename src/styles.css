@@ -1450,3 +1450,11 @@ body {
     animation: none;
   }
 }
+
+/* El botón del visor cuando está activo (p. ej. «Ver por detrás»). */
+.chip.on {
+  border-color: var(--blade);
+  color: var(--graphite);
+  background: var(--blade);
+  font-weight: 600;
+}

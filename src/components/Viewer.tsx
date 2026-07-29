@@ -80,6 +80,45 @@ function geomOf(positions: number[]): THREE.BufferGeometry {
 
 type ViewMode = 'solid' | 'xray' | 'wire';
 
+/**
+ * «Ver por detrás»: lleva la cámara al otro lado de la cama.
+ *
+ * La marca del taller se graba en la cara de abajo (la que toca la cama), así
+ * que para verla hay que mirar la pieza desde debajo. En vez de pedirle a nadie
+ * que arrastre con el ratón hasta dar la vuelta, se refleja la cámara respecto
+ * al plano del objetivo y se anima el viaje.
+ */
+function FlipCamera({ flipped }: { flipped: boolean }) {
+  const { camera, controls } = useThree();
+  const target = useRef(new THREE.Vector3());
+  const done = useRef(true);
+  const was = useRef(flipped);
+
+  useFrame(() => {
+    const ctl = controls as unknown as { target?: THREE.Vector3; update?: () => void } | null;
+    const look = ctl?.target ?? new THREE.Vector3(0, 0, 8);
+
+    // Al cambiar el interruptor se calcula el destino: el reflejo de donde está
+    // la cámara respecto al plano horizontal que pasa por el objetivo.
+    if (was.current !== flipped) {
+      was.current = flipped;
+      target.current.set(camera.position.x, camera.position.y, 2 * look.z - camera.position.z);
+      done.current = false;
+    }
+    if (done.current) return;
+
+    camera.position.lerp(target.current, 0.16);
+    camera.lookAt(look);
+    ctl?.update?.();
+    if (camera.position.distanceTo(target.current) < 0.4) {
+      camera.position.copy(target.current);
+      done.current = true;
+    }
+  });
+
+  return null;
+}
+
 /** Propiedades del material según el modo de vista. */
 function matProps(mode: ViewMode) {
   if (mode === 'xray') return { transparent: true, opacity: 0.4, depthWrite: false } as const;
@@ -175,6 +214,7 @@ export function Viewer({
   hideTrace = false,
   viewMode = 'solid',
   oneColor = false,
+  flipped = false,
   ring = null,
   onRingMove,
 }: {
@@ -186,6 +226,8 @@ export function Viewer({
   hideTrace?: boolean;
   viewMode?: ViewMode;
   oneColor?: boolean;
+  /** Mirar la pieza desde abajo, para ver la marca grabada en la cara trasera. */
+  flipped?: boolean;
   ring?: { x: number; y: number; z: number } | null;
   onRingMove?: (x: number, y: number) => void;
 }) {
@@ -263,6 +305,7 @@ export function Viewer({
         <DragHandle ring={ring} onMove={onRingMove} onDragChange={setDragging} />
       )}
 
+      <FlipCamera flipped={flipped} />
       <OrbitControls makeDefault enablePan enabled={!dragging} target={[0, 0, 8]} />
     </Canvas>
     {mark ? <span className="viewer-mark">{mark}</span> : null}

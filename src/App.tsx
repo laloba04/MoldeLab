@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Image as ImageIcon, Layers, Send, Wand2 } from 'lucide-react';
+import { Download, FlipVertical, Image as ImageIcon, Layers, Send, Wand2 } from 'lucide-react';
 import { DEFAULTS, type Params, type Piece, type Silhouette } from './types';
 import { autoLevels, loadImageData } from './lib/image';
 import { buildPieces, vectorize } from './lib/pipeline';
@@ -75,6 +75,8 @@ export default function App() {
   const [oneColor, setOneColor] = useState(false);
   // Modo de vista del modelo: sólido, rayos X (transparente) o alámbrico.
   const [viewMode, setViewMode] = useState<'solid' | 'xray' | 'wire'>('solid');
+  // Mirar la pieza desde abajo: la marca del taller se graba en esa cara.
+  const [flipped, setFlipped] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const set = useCallback(<K extends keyof Params>(k: K, v: Params[K]) => {
@@ -655,6 +657,7 @@ export default function App() {
               hideTrace={hideTrace}
               viewMode={viewMode}
               oneColor={oneColor}
+              flipped={flipped}
               ring={ringDrag?.pos ?? null}
               onRingMove={ringDrag?.move}
             />
@@ -672,6 +675,13 @@ export default function App() {
                 title="Cambiar cómo se ve el modelo"
               >
                 {viewMode === 'solid' ? 'Sólido' : viewMode === 'xray' ? 'Rayos X' : 'Alámbrico'}
+              </button>
+              <button
+                className={flipped ? 'chip on' : 'chip'}
+                onClick={() => setFlipped((v) => !v)}
+                title="Mira la pieza desde abajo: ahí va grabada la marca"
+              >
+                <FlipVertical size={14} /> {flipped ? 'Ver por delante' : 'Ver por detrás'}
               </button>
               <span className="chip readout">{product.label}</span>
               {dims && (

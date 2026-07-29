@@ -86,7 +86,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Cortador',
     hint: 'Recorta la masa siguiendo el contorno.',
     fields: [...CUTTER_FIELDS],
-    build: (s, p) => cutterPieces(cutLoops(s, p), p),
+    build: (s, p) => cutterPieces(s.loops, p),
   },
   {
     id: 'cutter-stamp',
@@ -98,7 +98,7 @@ export const PRODUCTS: Entry[] = [
     build: (s, p) => [
       // El cortador se agranda; el sello NO. Ahí está la gracia: el hueco crece
       // y el sello se queda igual, así que entra con holgura de sobra.
-      ...cutterPieces(cutLoops(s, p), p),
+      ...cutterPieces(s.loops, p),
       ...stampPieces(s.loops, s.detail, p),
     ],
   },
@@ -164,10 +164,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Multicortador',
     hint: 'Varias copias del cortador en una sola cama.',
     fields: [...CUTTER_FIELDS, 'copies', 'gridCols', 'spacing'],
-    build: (s, p) => {
-      const loops = cutLoops(s, p);
-      return repeatGrid(cutterPieces(loops, p), loops, p);
-    },
+    build: (s, p) => repeatGrid(cutterPieces(s.loops, p), s.loops, p),
   },
   {
     id: 'practice-plate',
@@ -431,17 +428,6 @@ export const PRODUCTS: Entry[] = [
 // --- Envoltorios para las piezas heredadas ----------------------------------
 
 /**
- * La silueta que CORTA, agrandada el margen que se pida.
- *
- * Solo crece el cortador, nunca el sello: el hueco se ensancha y el sello sigue
- * midiendo lo mismo, que es justo lo que hace que entre sin pelearse. De paso
- * la galleta sale con un borde de masa lisa alrededor del dibujo.
- */
-function cutLoops(s: Silhouette, p: Params): Loop[] {
-  return expandLoops(s.loops, p.cutterGrow);
-}
-
-/**
  * Agrupa los contornos en islas independientes: cada forma cerrada por su
  * cuenta, con los agujeros que le caen dentro. Un dibujo con el círculo arriba y
  * el cuerpo abajo (que no se tocan) da DOS grupos, y de ahí dos cortadores
@@ -475,10 +461,15 @@ function cutterPieces(loops: Loop[], p: Params): Piece[] {
   // Una pieza por forma suelta: así se pueden separar en la cama y salen como
   // cortadores independientes, que es lo que son cuando el dibujo tiene varias
   // formas que no se tocan.
+  //
+  // El «agrandar» se aplica AQUÍ, ya separadas las formas, y a cada una por su
+  // cuenta. Así crecer el cortador nunca funde dos dibujos cercanos: el círculo
+  // engorda, el cuerpo engorda, pero cada uno sigue siendo su propio cortador.
   const groups = islandGroups(loops);
   const pieces: Piece[] = [];
   groups.forEach((g, i) => {
-    const mesh = buildCutter(g, p);
+    const grown = p.cutterGrow > 0 ? expandLoops(g, p.cutterGrow) : g;
+    const mesh = buildCutter(grown, p);
     if (!mesh.positions.length) return;
     pieces.push({
       id: groups.length > 1 ? `cutter-${i + 1}` : 'cutter',

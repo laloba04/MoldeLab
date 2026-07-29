@@ -64,15 +64,26 @@ function toRegions(paths: Path[]): Region[] {
 /**
  * Desplaza un conjunto de anillos `delta` mm (negativo = hacia dentro) y
  * devuelve regiones limpias, listas para triangular.
+ *
+ * La unión por defecto es en pico (miter): conserva las esquinas rectas, que es
+ * lo que quieren las placas y el relieve. Con `join: 'round'` las esquinas se
+ * redondean — imprescindible al agrandar el cortador, porque el pico alargado
+ * de una esquina convexa se convierte luego en un pincho en la pestaña.
  */
-export function offsetRegions(outer: Pt[][], holes: Pt[][], delta: number): Region[] {
+export function offsetRegions(
+  outer: Pt[][],
+  holes: Pt[][],
+  delta: number,
+  join: 'miter' | 'round' = 'miter',
+): Region[] {
   const co = new ClipperLib.ClipperOffset(2, 0.25 * S);
+  const jt = join === 'round' ? ClipperLib.JoinType.jtRound : ClipperLib.JoinType.jtMiter;
 
   for (const o of outer) {
-    co.AddPath(toPath(o), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+    co.AddPath(toPath(o), jt, ClipperLib.EndType.etClosedPolygon);
   }
   for (const h of holes) {
-    co.AddPath(toPath(h), ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+    co.AddPath(toPath(h), jt, ClipperLib.EndType.etClosedPolygon);
   }
 
   const solution: Path[] = [];

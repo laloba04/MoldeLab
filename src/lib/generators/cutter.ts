@@ -49,13 +49,19 @@ function profile(p: Params): Ring[] {
   return rings.filter((r, i, a) => i === 0 || r.z > a[i - 1].z - 1e-6);
 }
 
+// Miter bajo: en una esquina puntiaguda, el offset por normales estira el
+// vértice hasta MITER_LIMIT×distancia y sale un pincho. Con la pestaña ancha
+// (~2 mm) eso es un pincho enorme. Aquí se limita a poco más de 1: la esquina se
+// bisela un pelín en vez de pinchar, que en un cortador ni se nota.
+const CUT_MITER = 1.15;
+
 /** Un tubo siguiendo un anillo. `hole` invierte hacia dónde es "fuera". */
 function tube(line: Pt[], rings: Ring[], hole: boolean): Mesh {
   const m = emptyMesh();
   const s = hole ? -1 : 1;
 
-  const outer = rings.map((r) => offset(line, r.out * s));
-  const inner = rings.map((r) => offset(line, -r.in * s));
+  const outer = rings.map((r) => offset(line, r.out * s, CUT_MITER));
+  const inner = rings.map((r) => offset(line, -r.in * s, CUT_MITER));
 
   for (let i = 0; i < rings.length - 1; i++) {
     loft(m, outer[i], rings[i].z, outer[i + 1], rings[i + 1].z, !hole);

@@ -148,7 +148,7 @@ const MITER_LIMIT = 3;
  * Un agujero va en CW, así que la misma fórmula lo desplaza hacia el lado
  * correcto sin tocar el signo.
  */
-export function offset(pts: Pt[], d: number): Pt[] {
+export function offset(pts: Pt[], d: number, miterLimit = MITER_LIMIT): Pt[] {
   const n = pts.length;
   if (n < 3 || d === 0) return pts;
 
@@ -179,7 +179,7 @@ export function offset(pts: Pt[], d: number): Pt[] {
     my /= mlen;
 
     const cos = mx * n2[0] + my * n2[1];
-    const scale = Math.min(1 / Math.max(cos, 1e-3), MITER_LIMIT);
+    const scale = Math.min(1 / Math.max(cos, 1e-3), miterLimit);
     out.push([pts[i][0] + mx * d * scale, pts[i][1] + my * d * scale]);
   }
   return out;

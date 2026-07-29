@@ -10,7 +10,7 @@
 import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
 import { intersect, offsetRegions, sanitize, subtract, union, type Region } from '../clipper';
-import { pointInPolygon, signedArea } from '../polygon';
+import { dedupe, pointInPolygon, resample, signedArea, simplify, smooth } from '../polygon';
 import { boxOf, circle, heart, roundedRect, shiftLoops, spikes } from '../shapes';
 
 const outerOf = (loops: Loop[]) => loops.filter((l) => !l.hole).map((l) => l.pts);
@@ -32,9 +32,15 @@ export function regionsOf(loops: Loop[], delta = 0): Region[] {
 export function expandLoops(loops: Loop[], mm: number): Loop[] {
   if (Math.abs(mm) < 1e-6) return loops;
   const out: Loop[] = [];
-  for (const r of regionsOf(loops, mm)) {
-    out.push({ pts: r.outer, hole: false });
-    for (const h of r.holes) out.push({ pts: h, hole: true });
+  // El engordado de Clipper, sobre un dibujo hecho a mano, deja vértices
+  // puntiagudos (sobre todo en las curvas cóncavas) que el cortador remata en
+  // pincho. Se pasa por la MISMA limpieza que el vectorizador —simplificar,
+  // suavizar, remuestrear—, que es la que produce contornos sin pinchos. Así el
+  // contorno agrandado queda tan limpio como el original.
+  const clean = (pts: Pt[]): Pt[] => resample(dedupe(smooth(simplify(pts, 0.3), 3)), 1.2);
+  for (const r of offsetRegions(outerOf(loops), holesOf(loops), mm, 'round')) {
+    out.push({ pts: clean(r.outer), hole: false });
+    for (const h of r.holes) out.push({ pts: clean(h), hole: true });
   }
   return out.length ? out : loops;
 }

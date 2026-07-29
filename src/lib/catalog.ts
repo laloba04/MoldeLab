@@ -6,9 +6,10 @@
  * y el pipeline llama a `build`. Añadir un producto es añadir una entrada aquí.
  */
 
-import type { Loop, Params, Piece, Product, ProductId, Silhouette } from '../types';
+import type { Loop, Params, Piece, Product, ProductId, Pt, Silhouette } from '../types';
 import { merge } from './mesh';
 import { pointInPolygon, signedArea } from './polygon';
+import { sanitize } from './clipper';
 import { buildCutter } from './generators/cutter';
 import { stampParts, stampPlate } from './generators/stamp';
 import { buildEjector } from './generators/ejector';
@@ -457,28 +458,59 @@ function islandGroups(loops: Loop[]): Loop[][] {
   return groups;
 }
 
-function cutterPieces(loops: Loop[], p: Params): Piece[] {
-  // Una pieza por forma suelta: así se pueden separar en la cama y salen como
-  // cortadores independientes, que es lo que son cuando el dibujo tiene varias
-  // formas que no se tocan.
-  //
-  // El «agrandar» se aplica AQUÍ, ya separadas las formas, y a cada una por su
-  // cuenta. Así crecer el cortador nunca funde dos dibujos cercanos: el círculo
-  // engorda, el cuerpo engorda, pero cada uno sigue siendo su propio cortador.
+/**
+ * La silueta que corta, ya agrandada.
+ *
+ * Cada forma crece por su cuenta, pero NUNCA hasta meterse en su vecina. Si dos
+ * formas cercanas se solapan al crecer, sus dos tubos se cruzan y sale un aspa;
+ * y si se fusionan en un contorno único, el círculo de la cabeza deja de ser un
+ * círculo y se abre por abajo. Ninguna de las dos cosas sirve.
+ *
+ * Así que el margen se recorta a lo que de verdad cabe: lo justo para que las
+ * paredes lleguen a tocarse —con eso ya sale una sola pieza— sin pisarse. Cada
+ * forma conserva su contorno cerrado.
+ */
+function grownLoops(loops: Loop[], p: Params): Loop[] {
+  if (p.cutterGrow <= 0) return loops;
   const groups = islandGroups(loops);
-  const pieces: Piece[] = [];
-  groups.forEach((g, i) => {
-    const grown = p.cutterGrow > 0 ? expandLoops(g, p.cutterGrow) : g;
-    const mesh = buildCutter(grown, p);
-    if (!mesh.positions.length) return;
-    pieces.push({
-      id: groups.length > 1 ? `cutter-${i + 1}` : 'cutter',
-      label: groups.length > 1 ? `Cortador ${i + 1}` : 'Cortador',
-      role: 'blade',
-      mesh,
-    });
+
+  return groups.flatMap((g, i) => {
+    let room = p.cutterGrow;
+    const mine = g.filter((l) => !l.hole).flatMap((l) => l.pts);
+    for (let j = 0; j < groups.length; j++) {
+      if (j === i) continue;
+      const other = groups[j].filter((l) => !l.hole).flatMap((l) => l.pts);
+      // Las dos crecen a la vez, así que a cada una le toca media distancia; y
+      // hay que dejar sitio para las dos medias paredes, o se cruzarían.
+      room = Math.min(room, (minGap(mine, other) - p.wallThickness) / 2);
+    }
+    return room > 0.05 ? expandLoops(g, Math.min(p.cutterGrow, room)) : g;
   });
-  return pieces;
+}
+
+/** Lo más cerca que llegan a estar dos nubes de puntos. */
+function minGap(a: Pt[], b: Pt[]): number {
+  let best = Infinity;
+  for (const x of a) {
+    for (const y of b) {
+      const d = Math.hypot(x[0] - y[0], x[1] - y[1]);
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+function cutterPieces(loops: Loop[], p: Params): Piece[] {
+  // UN solo cortador, aunque el dibujo traiga varias formas sueltas: las cose
+  // una base baja por abajo (ver `baseWeb` en generators/cutter.ts). Se imprime
+  // de una vez y la cabeza queda siempre en su sitio respecto al cuerpo.
+  //
+  // El «agrandar» se aplica por forma, no en bloque, para que crecer nunca funda
+  // dos dibujos cercanos en un borrón.
+  const mesh = buildCutter(grownLoops(loops, p), p);
+  return mesh.positions.length
+    ? [{ id: 'cutter', label: 'Cortador', role: 'blade', mesh }]
+    : [];
 }
 
 function stampPieces(loops: Loop[], detail: Loop[], p: Params): Piece[] {

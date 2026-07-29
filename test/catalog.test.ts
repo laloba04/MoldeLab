@@ -19,10 +19,22 @@ import { boxOf, shiftLoops } from '../src/lib/shapes';
 import { PRODUCTS, buildProduct } from '../src/lib/catalog';
 import { toStl } from '../src/lib/stl';
 import { dropToBed, spreadPieces } from '../src/lib/layout';
-import { stampBaseRegions } from '../src/lib/generators/stamp';
+import { stampBaseRegions, stampRimRegions } from '../src/lib/generators/stamp';
 import { expandLoops } from '../src/lib/generators/catalog-parts';
 import { offsetRegions, subtract } from '../src/lib/clipper';
 import { DEFAULTS, type Loop, type Mesh, type Pt, type Silhouette } from '../src/types';
+
+const circleOf = (cx: number, cy: number, r: number): Pt[] =>
+  Array.from({ length: 48 }, (_, i) => {
+    const a = (i / 48) * Math.PI * 2;
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)] as Pt;
+  });
+const boxOfPts = (cx: number, cy: number, w: number, h: number): Pt[] => [
+  [cx - w / 2, cy - h / 2],
+  [cx + w / 2, cy - h / 2],
+  [cx + w / 2, cy + h / 2],
+  [cx - w / 2, cy + h / 2],
+];
 
 let failures = 0;
 function check(name: string, ok: boolean, extra = '') {
@@ -273,6 +285,29 @@ console.log('');
     }
   }
   check('el sello cabe dentro del cortador', malos.length === 0, malos.join('; '));
+
+  // Un dibujo con formas sueltas y muy juntas —la cabeza de un muñeco a 2 mm
+  // del cuerpo— tiene dos trampas comprobadas a mano:
+  //   1. el cortador debe salir de UNA pieza, cosido por una base baja;
+  //   2. el reborde del sello NO puede fundir las formas en una plancha, porque
+  //      esa plancha taparía el hueco donde van las paredes del cortador.
+  {
+    const cerca: Loop[] = [
+      { pts: circleOf(0, 26, 12), hole: false },
+      { pts: boxOfPts(0, -8, 40, 34), hole: false },
+    ];
+    const pp = { ...DEFAULTS, product: 'cutter-stamp' as const };
+    const sil2: Silhouette = { loops: cerca, detail: cerca, widthMm: 40, heightMm: 76 };
+    const piezas = buildProduct(sil2, pp);
+
+    const cortadores = piezas.filter((x) => x.role === 'blade');
+    check('formas sueltas: el cortador sale de una sola pieza', cortadores.length === 1,
+      `${cortadores.length} cortador(es)`);
+
+    const rim = stampRimRegions(cerca, pp);
+    check('formas sueltas: el reborde del sello no las funde', rim.length === 2,
+      `${rim.length} region(es); deberian ser 2`);
+  }
 
   // Y agrandar tiene que agrandar de verdad, no quedarse en el comentario.
   const anchoDe = (mm: number) => {

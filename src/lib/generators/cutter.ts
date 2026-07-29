@@ -16,8 +16,9 @@
  */
 
 import type { Loop, Mesh, Params, Pt } from '../../types';
-import { emptyMesh, loft, quad, merge } from '../mesh';
+import { emptyMesh, extrudeRegion, loft, quad, merge } from '../mesh';
 import { offset } from '../polygon';
+import { offsetRegions, sanitize, subtract } from '../clipper';
 
 interface Ring {
   z: number;
@@ -92,6 +93,100 @@ function band(m: Mesh, outer: Pt[], inner: Pt[], z: number, up: boolean, hole: b
   }
 }
 
+/** Los dos puntos más cercanos entre dos contornos, y su distancia. */
+function closestPair(a: Pt[], b: Pt[]): { pa: Pt; pb: Pt; d: number } {
+  let best = { pa: a[0], pb: b[0], d: Infinity };
+  for (const x of a) {
+    for (const y of b) {
+      const d = Math.hypot(x[0] - y[0], x[1] - y[1]);
+      if (d < best.d) best = { pa: x, pb: y, d };
+    }
+  }
+  return best;
+}
+
+function widthOf(pts: Pt[]): number {
+  let a = Infinity;
+  let b = -Infinity;
+  let c = Infinity;
+  let d = -Infinity;
+  for (const [x, y] of pts) {
+    if (x < a) a = x;
+    if (x > b) b = x;
+    if (y < c) c = y;
+    if (y > d) d = y;
+  }
+  return Math.min(b - a, d - c);
+}
+
+/**
+ * Base que cose las formas sueltas.
+ *
+ * Un dibujo con la cabeza separada del cuerpo daría dos cortadores que hay que
+ * imprimir aparte y colocar a ojo cada vez. Aquí se les pone un trozo de base
+ * que las une por abajo: una plancha baja, a la altura de la pestaña, que no
+ * llega a los filos. Sale UNA pieza, la cabeza queda siempre en su sitio, y la
+ * masa se corta igual de limpia porque arriba las dos hojas siguen sueltas.
+ *
+ * Se le quita el hueco de cada cavidad, para que la base no se meta donde tiene
+ * que entrar la masa.
+ */
+function baseWeb(loops: Loop[], p: Params): Mesh {
+  const m = emptyMesh();
+  const shapes = loops.filter((l) => !l.hole).map((l) => l.pts);
+  if (shapes.length < 2) return m;
+
+  const zTop = Math.max(1, Math.min(p.flangeHeight, p.cutterHeight * 0.25));
+  const bars: Pt[][] = [];
+
+  // Árbol de expansión mínima: cada forma se engancha a la más cercana ya unida.
+  const linked = [0];
+  const left = shapes.map((_, i) => i).slice(1);
+
+  while (left.length) {
+    let best = { to: 0, at: 0, d: Infinity, pa: shapes[0][0], pb: shapes[0][0], w: 0 };
+    for (const i of linked) {
+      for (let k = 0; k < left.length; k++) {
+        const n = closestPair(shapes[i], shapes[left[k]]);
+        if (n.d < best.d) {
+          // Ancho generoso, atado al tamaño de las formas que une: una barra
+          // fina se lee como una rebaba; una base ancha, como parte del diseño.
+          const w = Math.min(widthOf(shapes[i]), widthOf(shapes[left[k]])) * 0.45;
+          best = { to: left[k], at: k, d: n.d, pa: n.pa, pb: n.pb, w };
+        }
+      }
+    }
+
+    const w = Math.max(5, Math.min(best.w, 16));
+    const dx = best.pb[0] - best.pa[0];
+    const dy = best.pb[1] - best.pa[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const nx = -uy * (w / 2);
+    const ny = ux * (w / 2);
+    // Se mete dentro de las dos formas para soldar con sus pestañas.
+    const grip = p.wallThickness + p.flangeWidth + 1.5;
+    const a: Pt = [best.pa[0] - ux * grip, best.pa[1] - uy * grip];
+    const b: Pt = [best.pb[0] + ux * grip, best.pb[1] + uy * grip];
+    bars.push([
+      [a[0] + nx, a[1] + ny],
+      [b[0] + nx, b[1] + ny],
+      [b[0] - nx, b[1] - ny],
+      [a[0] - nx, a[1] - ny],
+    ]);
+
+    linked.push(best.to);
+    left.splice(best.at, 1);
+  }
+
+  // La base, menos las cavidades: donde entra la masa no puede haber material.
+  const cavities = offsetRegions(shapes, [], -p.wallThickness / 2);
+  const web = subtract(sanitize(bars, []), cavities);
+  for (const r of web) extrudeRegion(m, r, 0, zTop);
+  return m;
+}
+
 export function buildCutter(loops: Loop[], p: Params): Mesh {
   const rings = profile(p);
   const parts: Mesh[] = [];
@@ -100,6 +195,8 @@ export function buildCutter(loops: Loop[], p: Params): Mesh {
     if (loop.hole && !p.cutHoles) continue;
     parts.push(tube(loop.pts, rings, loop.hole));
   }
+
+  parts.push(baseWeb(loops, p));
 
   return merge(...parts);
 }

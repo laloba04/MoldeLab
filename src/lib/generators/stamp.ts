@@ -15,9 +15,10 @@
  *   ▟▛▔▔▔▔▔▔▜▙  ← placa
  */
 
-import type { Loop, Mesh, Params } from '../../types';
+import type { Loop, Mesh, Params, Pt } from '../../types';
 import { cylinder, emptyMesh, extrudeRegion, merge } from '../mesh';
 import { offsetRegions, type Region } from '../clipper';
+import { pointInPolygon } from '../polygon';
 
 /**
  * Cuánto se encoge la placa del sello respecto al contorno dibujado.
@@ -51,7 +52,41 @@ export function stampRimRegions(loops: Loop[], p: Params): Region[] {
   const outer = loops.filter((l) => !l.hole).map((l) => l.pts);
   const holes = loops.filter((l) => l.hole).map((l) => l.pts);
   if (!outer.length) return [];
-  return offsetRegions(outer, holes, p.stampRim);
+  if (outer.length === 1) return offsetRegions(outer, holes, p.stampRim);
+
+  // El reborde crece hacia FUERA. Con formas cercanas —la cabeza y el cuerpo de
+  // un muñeco— el de una alcanza al de la otra y el sello sale como una plancha
+  // que tapa el hueco. Ahí van las paredes del cortador, así que esa plancha no
+  // entraría; y de paso se pierde la forma del dibujo.
+  //
+  // Cada forma engorda por su cuenta, y solo hasta la mitad de lo que la separa
+  // de su vecina más cercana. El reborde sigue estando —para eso es, para sacar
+  // el sello con el dedo— pero las formas nunca llegan a tocarse.
+  const out: Region[] = [];
+  for (let i = 0; i < outer.length; i++) {
+    let gap = Infinity;
+    for (let j = 0; j < outer.length; j++) {
+      if (i !== j) gap = Math.min(gap, minDistance(outer[i], outer[j]));
+    }
+    const room = Number.isFinite(gap) ? gap / 2 - 0.5 : p.stampRim;
+    const rim = Math.min(p.stampRim, room);
+    if (rim <= 0.05) continue;
+    const mine = holes.filter((h) => pointInPolygon(h[0], outer[i]));
+    for (const r of offsetRegions([outer[i]], mine, rim)) out.push(r);
+  }
+  return out;
+}
+
+/** Lo más cerca que llegan a estar dos contornos. */
+function minDistance(a: Pt[], b: Pt[]): number {
+  let best = Infinity;
+  for (const x of a) {
+    for (const y of b) {
+      const d = Math.hypot(x[0] - y[0], x[1] - y[1]);
+      if (d < best) best = d;
+    }
+  }
+  return best;
 }
 
 /**

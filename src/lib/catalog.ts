@@ -8,6 +8,7 @@
 
 import type { Loop, Params, Piece, Product, ProductId, Silhouette } from '../types';
 import { merge } from './mesh';
+import { pointInPolygon, signedArea } from './polygon';
 import { buildCutter } from './generators/cutter';
 import { stampParts, stampPlate } from './generators/stamp';
 import { buildEjector } from './generators/ejector';
@@ -440,11 +441,53 @@ function cutLoops(s: Silhouette, p: Params): Loop[] {
   return expandLoops(s.loops, p.cutterGrow);
 }
 
+/**
+ * Agrupa los contornos en islas independientes: cada forma cerrada por su
+ * cuenta, con los agujeros que le caen dentro. Un dibujo con el círculo arriba y
+ * el cuerpo abajo (que no se tocan) da DOS grupos, y de ahí dos cortadores
+ * separados en vez de uno solo con una pared rara entre medias.
+ */
+function islandGroups(loops: Loop[]): Loop[][] {
+  const outers = loops.filter((l) => !l.hole);
+  const holes = loops.filter((l) => l.hole);
+  if (outers.length <= 1) return loops.length ? [loops] : [];
+
+  const groups = outers.map((o) => [o]);
+  for (const h of holes) {
+    // El agujero pertenece al contorno más pequeño que lo contiene.
+    let best = -1;
+    let bestArea = Infinity;
+    for (let i = 0; i < outers.length; i++) {
+      if (pointInPolygon(h.pts[0], outers[i].pts)) {
+        const a = Math.abs(signedArea(outers[i].pts));
+        if (a < bestArea) {
+          bestArea = a;
+          best = i;
+        }
+      }
+    }
+    if (best >= 0) groups[best].push(h);
+  }
+  return groups;
+}
+
 function cutterPieces(loops: Loop[], p: Params): Piece[] {
-  const mesh = buildCutter(loops, p);
-  return mesh.positions.length
-    ? [{ id: 'cutter', label: 'Cortador', role: 'blade', mesh }]
-    : [];
+  // Una pieza por forma suelta: así se pueden separar en la cama y salen como
+  // cortadores independientes, que es lo que son cuando el dibujo tiene varias
+  // formas que no se tocan.
+  const groups = islandGroups(loops);
+  const pieces: Piece[] = [];
+  groups.forEach((g, i) => {
+    const mesh = buildCutter(g, p);
+    if (!mesh.positions.length) return;
+    pieces.push({
+      id: groups.length > 1 ? `cutter-${i + 1}` : 'cutter',
+      label: groups.length > 1 ? `Cortador ${i + 1}` : 'Cortador',
+      role: 'blade',
+      mesh,
+    });
+  });
+  return pieces;
 }
 
 function stampPieces(loops: Loop[], detail: Loop[], p: Params): Piece[] {

@@ -270,7 +270,7 @@ export const DEFAULTS: Params = {
   flangeWidth: 1.6,
   flangeHeight: 1.2,
   cutHoles: true,
-  cutterGrow: 2,
+  cutterGrow: 0,
 
   stampBase: 2,
   stampRim: 3,

@@ -90,6 +90,85 @@ function minDistance(a: Pt[], b: Pt[]): number {
 }
 
 /**
+ * Puentes que cosen las placas del sello, a la altura del REBORDE.
+ *
+ * Con formas sueltas el sello saldrían dos placas que hay que colocar a ojo una
+ * a una. Aquí se unen, y el sitio no es casual: el reborde es lo único del sello
+ * que queda por ENCIMA del filo del cortador cuando se mete. Un puente ahí se
+ * apoya en el canto del cortador igual que el propio reborde, y no estorba a la
+ * masa. A la altura de la placa, en cambio, chocaría con las paredes.
+ */
+function rimWeb(regions: Region[], zLo: number, zHi: number): Mesh {
+  const m = emptyMesh();
+  if (regions.length < 2) return m;
+
+  const rings = regions.map((r) => r.outer);
+  const bars: Pt[][] = [];
+  const linked = [0];
+  const left = rings.map((_, i) => i).slice(1);
+
+  while (left.length) {
+    let best = { to: 0, at: 0, d: Infinity, pa: rings[0][0], pb: rings[0][0] };
+    for (const i of linked) {
+      for (let k = 0; k < left.length; k++) {
+        const n = closestPair(rings[i], rings[left[k]]);
+        if (n.d < best.d) best = { to: left[k], at: k, d: n.d, pa: n.pa, pb: n.pb };
+      }
+    }
+
+    // Ancho atado al tamaño de las placas: una barra fina se lee como rebaba.
+    const w = Math.max(4, Math.min(spanOf(rings[best.to]) * 0.4, 14));
+    const dx = best.pb[0] - best.pa[0];
+    const dy = best.pb[1] - best.pa[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const nx = -uy * (w / 2);
+    const ny = ux * (w / 2);
+    const grip = 2; // se mete en las dos placas para soldar
+    const a: Pt = [best.pa[0] - ux * grip, best.pa[1] - uy * grip];
+    const b: Pt = [best.pb[0] + ux * grip, best.pb[1] + uy * grip];
+    bars.push([
+      [a[0] + nx, a[1] + ny],
+      [b[0] + nx, b[1] + ny],
+      [b[0] - nx, b[1] - ny],
+      [a[0] - nx, a[1] - ny],
+    ]);
+
+    linked.push(best.to);
+    left.splice(best.at, 1);
+  }
+
+  for (const r of offsetRegions(bars, [], 0)) extrudeRegion(m, r, zLo, zHi);
+  return m;
+}
+
+function closestPair(a: Pt[], b: Pt[]): { pa: Pt; pb: Pt; d: number } {
+  let best = { pa: a[0], pb: b[0], d: Infinity };
+  for (const x of a) {
+    for (const y of b) {
+      const d = Math.hypot(x[0] - y[0], x[1] - y[1]);
+      if (d < best.d) best = { pa: x, pb: y, d };
+    }
+  }
+  return best;
+}
+
+function spanOf(pts: Pt[]): number {
+  let a = Infinity;
+  let b = -Infinity;
+  let c = Infinity;
+  let d = -Infinity;
+  for (const [x, y] of pts) {
+    if (x < a) a = x;
+    if (x > b) b = x;
+    if (y < c) c = y;
+    if (y > d) d = y;
+  }
+  return Math.min(b - a, d - c);
+}
+
+/**
  * La cara de atrás del sello: la que toca la cama al imprimir y la única donde
  * se puede grabar la marca. Con reborde es la del reborde, porque tapa la placa
  * por debajo; sin reborde, la de la placa. Grabar en la equivocada deja el
@@ -138,6 +217,11 @@ export function stampParts(
   // la placa pasa a ser cuerpo que se conserva tal cual.
   const plate = rim.length ? slab(rim, -RIM_H, 0.01) : baseSolids;
   const keep = rim.length ? baseSolids : [];
+
+  // Con varias formas sueltas, las placas se cosen por el reborde: UNA pieza que
+  // se coloca de una vez, en vez de dos que hay que encajar por separado.
+  if (rim.length > 1) keep.push(rimWeb(rim, -RIM_H, 0.01));
+
   const solids: Mesh[] = [];
 
   // --- Relieve, escalón a escalón ---

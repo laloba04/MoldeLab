@@ -36,6 +36,56 @@ const boxOfPts = (cx: number, cy: number, w: number, h: number): Pt[] => [
   [cx - w / 2, cy + h / 2],
 ];
 
+/**
+ * Trozos sueltos de una malla a una altura dada. Rejilla fina y vecinos solo
+ * pegados: si sale 1, la pieza es un sólido conectado de verdad y se imprime de
+ * una vez, sin trozos que se caigan.
+ */
+function trozosA(m: Mesh, z: number): number {
+  const S = 0.3;
+  const on = new Set<string>();
+  const pos = m.positions;
+  for (let i = 0; i < pos.length; i += 9) {
+    const v = [
+      [pos[i], pos[i + 1], pos[i + 2]],
+      [pos[i + 3], pos[i + 4], pos[i + 5]],
+      [pos[i + 6], pos[i + 7], pos[i + 8]],
+    ];
+    const cr: Pt[] = [];
+    for (let k = 0; k < 3; k++) {
+      const a = v[k];
+      const b = v[(k + 1) % 3];
+      if ((a[2] - z) * (b[2] - z) < 0) {
+        const t = (z - a[2]) / (b[2] - a[2]);
+        cr.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      }
+    }
+    if (cr.length !== 2) continue;
+    const n = Math.max(2, Math.ceil(Math.hypot(cr[1][0] - cr[0][0], cr[1][1] - cr[0][1]) / (S / 2)));
+    for (let k = 0; k <= n; k++) {
+      const x = cr[0][0] + ((cr[1][0] - cr[0][0]) * k) / n;
+      const y = cr[0][1] + ((cr[1][1] - cr[0][1]) * k) / n;
+      on.add(`${Math.round(x / S)},${Math.round(y / S)}`);
+    }
+  }
+  const seen = new Set<string>();
+  let islas = 0;
+  for (const start of on) {
+    if (seen.has(start)) continue;
+    islas++;
+    const st = [start];
+    while (st.length) {
+      const key = st.pop()!;
+      if (seen.has(key) || !on.has(key)) continue;
+      seen.add(key);
+      const [x, y] = key.split(',').map(Number);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]])
+        st.push(`${x + dx},${y + dy}`);
+    }
+  }
+  return islas;
+}
+
 let failures = 0;
 function check(name: string, ok: boolean, extra = '') {
   if (!ok) failures++;
@@ -307,6 +357,15 @@ console.log('');
     const rim = stampRimRegions(cerca, pp);
     check('formas sueltas: el reborde del sello no las funde', rim.length === 2,
       `${rim.length} region(es); deberian ser 2`);
+
+    // Y el sello también tiene que salir de una pieza: sus placas se cosen por
+    // el reborde, que es lo único que queda por encima del filo del cortador.
+    const sellos = piezas.filter((x) => x.role === 'icing');
+    check('formas sueltas: el sello sale de una sola pieza', sellos.length === 1,
+      `${sellos.length} sello(s)`);
+    const unido = sellos[0] && trozosA(sellos[0].mesh, -0.8) === 1;
+    check('formas sueltas: las placas del sello van cosidas', unido,
+      sellos[0] ? `${trozosA(sellos[0].mesh, -0.8)} trozo(s) a la altura del reborde` : 'sin sello');
   }
 
   // Y agrandar tiene que agrandar de verdad, no quedarse en el comentario.

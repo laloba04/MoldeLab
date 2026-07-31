@@ -366,7 +366,9 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   flangeWidth: { label: 'Pestaña', unit: 'mm', min: 0, max: 5, step: 0.2 },
   flangeHeight: { label: 'Altura de la pestaña', unit: 'mm', min: 0, max: 4, step: 0.2 },
   cutHoles: { toggle: true, label: 'Cortar también los huecos' },
-  cutterGrow: { label: 'Agrandar el cortador', unit: 'mm', min: 0, max: 12, step: 0.5 },
+  // De milímetro en milímetro: aquí no hace falta más fino, y los números
+  // redondos se leen de un vistazo (1, 2, 3… en vez de 0,5 · 1 · 1,5).
+  cutterGrow: { label: 'Agrandar el cortador', unit: 'mm', min: 0, max: 12, step: 1 },
 
   stampBase: { label: 'Base', unit: 'mm', min: 1, max: 6, step: 0.2 },
   stampRim: { label: 'Reborde para agarrar', unit: 'mm', min: 0, max: 10, step: 0.5 },

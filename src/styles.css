@@ -1458,3 +1458,9 @@ body {
   background: var(--blade);
   font-weight: 600;
 }
+
+/* Un valor recortado por otro ajuste (p. ej. el filo, limitado por la pared):
+   se marca en ámbar para que se vea que el mando no llega más lejos a propósito. */
+.field-head output.capped {
+  color: var(--warn);
+}

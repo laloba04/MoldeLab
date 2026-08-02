@@ -25,6 +25,31 @@ function Badge({ kind }: { kind?: 'nuevo' | 'popular' }) {
   return <span className={`badge ${kind}`}>{kind === 'nuevo' ? 'Nuevo' : 'Popular'}</span>;
 }
 
+/**
+ * Topes que dependen de otros ajustes.
+ *
+ * Hay valores que la geometría no puede cumplir: un filo más gordo que la pared
+ * de la que sale, o un filo más alto que el propio cortador. Antes el mando
+ * dejaba ponerlos y el generador los recortaba en silencio — movías el mando, no
+ * pasaba nada, y parecía que la app estaba rota. Ahora el mando llega justo
+ * hasta donde tiene sentido, así lo que marca es siempre lo que sale.
+ */
+function limitOf(field: Field, p: Params, max: number): number {
+  switch (field) {
+    // El filo nace de la pared: no puede ser más gordo que ella.
+    case 'bladeThickness':
+      return Math.min(max, p.wallThickness);
+    // El filo y la pestaña viven dentro de la altura del cortador. Los topes son
+    // los mismos que aplica `profile()` en generators/cutter.ts.
+    case 'bladeHeight':
+      return Math.min(max, p.cutterHeight * 0.6);
+    case 'flangeHeight':
+      return Math.min(max, p.cutterHeight * 0.3);
+    default:
+      return max;
+  }
+}
+
 /** Un control se dibuja solo a partir de su metadato. Sin JSX a mano por campo. */
 function Control({ field, p, set }: { field: Field; p: Params; set: Props['set'] }) {
   const meta = FIELD_META[field];
@@ -63,20 +88,26 @@ function Control({ field, p, set }: { field: Field; p: Params; set: Props['set']
     );
   }
 
-  const value = p[field] as unknown as number;
+  const raw = p[field] as unknown as number;
+  const max = limitOf(field, p, meta.max);
+  // Si el tope bajó por culpa de otro ajuste, se enseña el valor que de verdad
+  // se está usando, no el que quedó guardado de antes.
+  const value = Math.min(raw, max);
+  const capped = raw > max + 1e-9;
+
   return (
     <label className="field">
       <span className="field-head">
         <span>{meta.label}</span>
-        <output>
-          {value}
+        <output className={capped ? 'capped' : undefined} title={capped ? `Limitado por otro ajuste (habías puesto ${raw})` : undefined}>
+          {Math.round(value * 100) / 100}
           {meta.unit ? <em>{meta.unit}</em> : null}
         </output>
       </span>
       <input
         type="range"
         min={meta.min}
-        max={meta.max}
+        max={max}
         step={meta.step}
         value={value}
         onChange={(e) => set(field, Number(e.target.value) as never)}

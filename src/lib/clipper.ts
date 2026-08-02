@@ -136,6 +136,12 @@ export function subtract(a: Region[], b: Region[]): Region[] {
   return boolOp(ClipperLib.ClipType.ctDifference, a, b);
 }
 
+/** Lo que queda de `a` dentro de `b`, respetando los agujeros de las dos. */
+export function intersectRegions(a: Region[], b: Region[]): Region[] {
+  if (!a.length || !b.length) return [];
+  return boolOp(ClipperLib.ClipType.ctIntersection, a, b);
+}
+
 /** ¿Se tocan? Para saber si un corte invade el terreno de otro. */
 export function overlaps(a: Region[], b: Region[]): boolean {
   if (!a.length || !b.length) return false;

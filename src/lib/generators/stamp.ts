@@ -17,7 +17,7 @@
 
 import type { Loop, Mesh, Params, Pt } from '../../types';
 import { cylinder, emptyMesh, extrudeRegion, merge } from '../mesh';
-import { offsetRegions, type Region } from '../clipper';
+import { intersectRegions, offsetRegions, subtract, union, type Region } from '../clipper';
 import { pointInPolygon } from '../polygon';
 
 /**
@@ -168,6 +168,62 @@ function spanOf(pts: Pt[]): number {
   return Math.min(b - a, d - c);
 }
 
+/** Área de un anillo, con signo descartado. */
+function areaOf(pts: Pt[]): number {
+  let v = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    v += a[0] * b[1] - b[0] * a[1];
+  }
+  return Math.abs(v / 2);
+}
+
+function perimeterOf(pts: Pt[]): number {
+  let d = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    d += Math.hypot(b[0] - a[0], b[1] - a[1]);
+  }
+  return d;
+}
+
+/**
+ * Grosor del trazo que se ha quedado fuera de la placa.
+ *
+ * Lo que sobresale es una tira que sigue todo el canto, así que su ancho medio
+ * es el área que sobra dividida entre lo que mide ese canto. Si no sobra nada
+ * —un dibujo que ya cabía— devuelve 0 y no se añade ningún borde.
+ */
+function edgeStroke(detail: Region[], base: Region[]): number {
+  const fuera = subtract(detail, base);
+  if (!fuera.length) return 0;
+  const area = fuera.reduce(
+    (n, r) => n + areaOf(r.outer) - r.holes.reduce((h, x) => h + areaOf(x), 0),
+    0,
+  );
+  const canto = base.reduce(
+    (n, r) => n + perimeterOf(r.outer) + r.holes.reduce((h, x) => h + perimeterOf(x), 0),
+    0,
+  );
+  if (canto <= 0) return 0;
+  // Un trazo de menos de 0,4 mm no lo imprime ninguna boquilla, y más de 3 mm ya
+  // no es un contorno sino un marco.
+  return Math.min(3, Math.max(0.4, area / canto));
+}
+
+/** Una tira de `ancho` pegada por dentro al canto de la placa. */
+function edgeBand(base: Region[], ancho: number): Region[] {
+  if (ancho <= 0.05) return [];
+  const dentro = offsetRegions(
+    base.map((r) => r.outer),
+    base.flatMap((r) => r.holes),
+    -ancho,
+  );
+  return subtract(base, dentro);
+}
+
 /**
  * La cara de atrás del sello: la que toca la cama al imprimir y la única donde
  * se puede grabar la marca. Con reborde es la del reborde, porque tapa la placa
@@ -238,13 +294,22 @@ export function stampParts(
   if (dOuter.length) {
     const steps = p.reliefTaper > 0.01 ? STEPS : 1;
     const dz = p.reliefHeight / steps;
+    // El trazo del contorno va a caballo de la línea del dibujo, y la placa está
+    // media pared más holgura hacia dentro. O sea que ese trazo cae medio fuera:
+    // recortarlo lo borra, y dejarlo tal cual deja un anillo colgando en el aire.
+    // Se lleva al borde: se mide lo que sobra y se vuelve a dibujar pegado al
+    // canto de la placa, con el mismo grosor y ya apoyado en algo.
+    const canto = edgeStroke(offsetRegions(dOuter, dHoles, 0), base);
 
     for (let s = 0; s < steps; s++) {
       const shrink = -p.reliefTaper * s;
       const zLo = p.stampBase + dz * s - (s === 0 ? 0.01 : 0);
       const zHi = p.stampBase + dz * (s + 1);
 
-      for (const region of offsetRegions(dOuter, dHoles, shrink)) {
+      const dentro = intersectRegions(offsetRegions(dOuter, dHoles, shrink), base);
+      const borde = canto > 0 ? edgeBand(base, canto + shrink) : [];
+
+      for (const region of union(dentro, borde)) {
         const m = emptyMesh();
         // Cada escalón arranca en la base: son prismas apilados, no un cono.
         extrudeRegion(m, region, zLo, zHi);

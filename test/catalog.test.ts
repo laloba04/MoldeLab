@@ -19,7 +19,7 @@ import { boxOf, shiftLoops } from '../src/lib/shapes';
 import { PRODUCTS, buildProduct } from '../src/lib/catalog';
 import { toStl } from '../src/lib/stl';
 import { dropToBed, spreadPieces } from '../src/lib/layout';
-import { stampBaseRegions, stampRimRegions } from '../src/lib/generators/stamp';
+import { stampBaseRegions, stampParts, stampRimRegions } from '../src/lib/generators/stamp';
 import { expandLoops } from '../src/lib/generators/catalog-parts';
 import { offsetRegions, subtract } from '../src/lib/clipper';
 import { DEFAULTS, type Loop, type Mesh, type Pt, type Silhouette } from '../src/types';
@@ -335,6 +335,41 @@ console.log('');
     }
   }
   check('el sello cabe dentro del cortador', malos.length === 0, malos.join('; '));
+
+  // El relieve tampoco puede sobresalir de la placa. El dibujo se traza sobre
+  // el contorno original, pero la placa se encoge hacia dentro; sin recortar,
+  // el reborde del dibujo cuelga en el aire y la impresora lo suelta.
+  {
+    const dentro = (pt: Pt, rs: { outer: Pt[]; holes: Pt[][] }[]) =>
+      rs.some((r) => pointInPolygon(pt, r.outer) && !r.holes.some((h) => pointInPolygon(pt, h)));
+
+    const colgando: string[] = [];
+    for (const wall of [0.6, 1.2, 3]) {
+      for (const fit of [0, 0.4, 1.5]) {
+        const p = { ...DEFAULTS, wallThickness: wall, stampFit: fit, handle: false };
+        // Un margen de tolerancia: la placa se comprueba engordada 0,02 mm para
+        // no cazar los puntos que caen justo encima del borde.
+        const placa = offsetRegions(
+          stampBaseRegions(loops, p).map((r) => r.outer),
+          stampBaseRegions(loops, p).flatMap((r) => r.holes),
+          0.02,
+        );
+        const { overlay } = stampParts(loops, loops, p);
+        let fuera = 0;
+        for (const m of overlay) {
+          for (let i = 0; i < m.positions.length; i += 3) {
+            if (!dentro([m.positions[i], m.positions[i + 1]], placa)) fuera++;
+          }
+        }
+        if (fuera) colgando.push(`pared ${wall} / holgura ${fit}: ${fuera} puntos fuera`);
+      }
+    }
+    check(
+      'el relieve no sobresale de la placa',
+      colgando.length === 0,
+      colgando.join('; ') || 'ningún punto del relieve cuelga',
+    );
+  }
 
   // Un dibujo con formas sueltas y muy juntas —la cabeza de un muñeco a 2 mm
   // del cuerpo— tiene dos trampas comprobadas a mano:

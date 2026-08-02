@@ -48,11 +48,14 @@ export function stampBaseRegions(loops: Loop[], p: Params): Region[] {
  *  el filo en vez de colarse dentro, y deja un saliente donde meter el dedo
  *  para levantarlo y sacarlo. Con 0 no se genera. */
 export function stampRimRegions(loops: Loop[], p: Params): Region[] {
-  if (p.stampRim <= 0) return [];
   const outer = loops.filter((l) => !l.hole).map((l) => l.pts);
   const holes = loops.filter((l) => l.hole).map((l) => l.pts);
   if (!outer.length) return [];
-  if (outer.length === 1) return offsetRegions(outer, holes, p.stampRim);
+  // Con una sola forma el reborde es opcional: si se pide 0, no hay reborde y ya.
+  if (outer.length === 1) return p.stampRim > 0 ? offsetRegions(outer, holes, p.stampRim) : [];
+  // Con varias formas SIEMPRE hay reborde, aunque salga de ancho cero. No es
+  // capricho: el reborde es la altura a la que se cosen las placas, y sin él el
+  // puente se queda flotando por debajo tocándolas por una décima.
 
   // El reborde crece hacia FUERA. Con formas cercanas —la cabeza y el cuerpo de
   // un muñeco— el de una alcanza al de la otra y el sello sale como una plancha
@@ -69,8 +72,10 @@ export function stampRimRegions(loops: Loop[], p: Params): Region[] {
       if (i !== j) gap = Math.min(gap, minDistance(outer[i], outer[j]));
     }
     const room = Number.isFinite(gap) ? gap / 2 - 0.5 : p.stampRim;
-    const rim = Math.min(p.stampRim, room);
-    if (rim <= 0.05) continue;
+    // Si no cabe reborde, la placa se prolonga hacia abajo sin sobresalir nada
+    // (ancho 0). Sigue habiendo material a la altura del puente, que es lo que
+    // hacía falta, y no invade el hueco por donde pasan las paredes del cortador.
+    const rim = Math.max(0, Math.min(p.stampRim, room));
     const mine = holes.filter((h) => pointInPolygon(h[0], outer[i]));
     for (const r of offsetRegions([outer[i]], mine, rim)) out.push(r);
   }

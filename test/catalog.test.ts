@@ -41,6 +41,31 @@ const boxOfPts = (cx: number, cy: number, w: number, h: number): Pt[] => [
  * pegados: si sale 1, la pieza es un sólido conectado de verdad y se imprime de
  * una vez, sin trozos que se caigan.
  */
+/** Alto que ocupa la sección de la malla a la altura `z`. Sirve para distinguir
+ *  «hay una pieza» de «hay una pieza que además llega a las dos formas». */
+function altoA(m: Mesh, z: number): number {
+  let lo = Infinity;
+  let hi = -Infinity;
+  const pos = m.positions;
+  for (let i = 0; i < pos.length; i += 9) {
+    const v = [
+      [pos[i], pos[i + 1], pos[i + 2]],
+      [pos[i + 3], pos[i + 4], pos[i + 5]],
+      [pos[i + 6], pos[i + 7], pos[i + 8]],
+    ];
+    for (let k = 0; k < 3; k++) {
+      const a = v[k];
+      const b = v[(k + 1) % 3];
+      if ((a[2] - z) * (b[2] - z) < 0) {
+        const y = a[1] + (b[1] - a[1]) * ((z - a[2]) / (b[2] - a[2]));
+        if (y < lo) lo = y;
+        if (y > hi) hi = y;
+      }
+    }
+  }
+  return Number.isFinite(lo) ? hi - lo : 0;
+}
+
 function trozosA(m: Mesh, z: number): number {
   const S = 0.3;
   const on = new Set<string>();
@@ -401,6 +426,28 @@ console.log('');
     const unido = sellos[0] && trozosA(sellos[0].mesh, -0.8) === 1;
     check('formas sueltas: las placas del sello van cosidas', unido,
       sellos[0] ? `${trozosA(sellos[0].mesh, -0.8)} trozo(s) a la altura del reborde` : 'sin sello');
+
+    // «Un trozo» no basta: si las placas no llegan a esa altura, el único trozo
+    // sería el puente él solo, colgando por debajo y tocándolas por una décima.
+    // La impresora se planta con eso. La sección tiene que abarcar las dos
+    // formas, o sea casi los 63 mm que van del pie de una a la coronilla de la otra.
+    const alto = sellos[0] ? altoA(sellos[0].mesh, -0.8) : 0;
+    check('formas sueltas: el puente agarra las dos placas, no cuelga', alto > 55,
+      `la sección a la altura del puente mide ${alto.toFixed(1)} mm de alto; hacen falta más de 55`);
+
+    // Y lo mismo con las formas casi pegadas (0,6 mm), que es donde el reborde
+    // no cabía y desaparecía: ahí el puente se quedaba solo, flotando.
+    {
+      const pegadas: Loop[] = [
+        { pts: circleOf(0, 21.6, 12), hole: false },
+        { pts: circleOf(0, -8, 17), hole: false },
+      ];
+      const sil3: Silhouette = { loops: pegadas, detail: pegadas, widthMm: 34, heightMm: 58.6 };
+      const sello = buildProduct(sil3, pp).filter((x) => x.role === 'icing');
+      const h = sello.length === 1 ? altoA(sello[0].mesh, -0.8) : 0;
+      check('formas pegadas: el puente agarra las dos placas, no cuelga', h > 50,
+        `la sección a la altura del puente mide ${h.toFixed(1)} mm de alto; hacen falta más de 50`);
+    }
 
     // Y tiene que aguantar a CUALQUIER tamaño. Al achicar la pieza el hueco se
     // encoge, el reborde deja de caber, y si el puente colgara del reborde el

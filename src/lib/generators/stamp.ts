@@ -218,9 +218,16 @@ export function stampParts(
   const plate = rim.length ? slab(rim, -RIM_H, 0.01) : baseSolids;
   const keep = rim.length ? baseSolids : [];
 
-  // Con varias formas sueltas, las placas se cosen por el reborde: UNA pieza que
-  // se coloca de una vez, en vez de dos que hay que encajar por separado.
-  if (rim.length > 1) keep.push(rimWeb(rim, -RIM_H, 0.01));
+  // Con varias formas sueltas, las placas se cosen: UNA pieza que se coloca de
+  // una vez, en vez de dos que hay que encajar por separado.
+  //
+  // El puente va SIEMPRE a la altura del reborde, exista o no. En una pieza
+  // pequeña las formas quedan tan juntas que no cabe reborde; si el puente
+  // dependiera de él, el sello se partiría en dos justo al achicar la pieza. Y a
+  // esa altura es el único sitio donde no estorba: queda por encima del filo del
+  // cortador, no dentro de la cavidad.
+  const cosible = rim.length > 1 ? rim : base;
+  if (cosible.length > 1) keep.push(rimWeb(cosible, -RIM_H, 0.01));
 
   const solids: Mesh[] = [];
 

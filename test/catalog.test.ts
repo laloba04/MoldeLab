@@ -366,6 +366,29 @@ console.log('');
     const unido = sellos[0] && trozosA(sellos[0].mesh, -0.8) === 1;
     check('formas sueltas: las placas del sello van cosidas', unido,
       sellos[0] ? `${trozosA(sellos[0].mesh, -0.8)} trozo(s) a la altura del reborde` : 'sin sello');
+
+    // Y tiene que aguantar a CUALQUIER tamaño. Al achicar la pieza el hueco se
+    // encoge, el reborde deja de caber, y si el puente colgara del reborde el
+    // sello se partiría en dos justo al mover el mando de tamaño.
+    const rotos: string[] = [];
+    for (const mm of [20, 30, 45, 70]) {
+      const chico = { ...pp, targetWidthMm: mm };
+      const escala = mm / 76;
+      const loops2: Loop[] = [
+        { pts: circleOf(0, 26 * escala, 12 * escala), hole: false },
+        { pts: boxOfPts(0, -8 * escala, 40 * escala, 34 * escala), hole: false },
+      ];
+      const ps = buildProduct(
+        { loops: loops2, detail: loops2, widthMm: 40 * escala, heightMm: 76 * escala },
+        chico,
+      );
+      for (const pc of ps) {
+        const z = pc.role === 'blade' ? 0.3 : -0.8;
+        const t = trozosA(pc.mesh, z);
+        if (t !== 1) rotos.push(`${mm}mm ${pc.label}: ${t} trozos`);
+      }
+    }
+    check('formas sueltas: aguanta a cualquier tamaño', rotos.length === 0, rotos.join('; '));
   }
 
   // Y agrandar tiene que agrandar de verdad, no quedarse en el comentario.

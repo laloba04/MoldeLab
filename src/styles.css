@@ -1464,3 +1464,24 @@ body {
 .field-head output.capped {
   color: var(--warn);
 }
+
+/* Aviso de versión nueva: aparece si se publica algo mientras la pestaña está
+   abierta. Sin esto, quien no recarga se queda con la versión vieja y no lo sabe. */
+.toast.update {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-color: var(--icing);
+  color: var(--text);
+}
+.toast.update button {
+  padding: 5px 12px;
+  background: var(--icing);
+  color: var(--graphite);
+  border: 0;
+  border-radius: 999px;
+  font-family: var(--body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}

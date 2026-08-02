@@ -29,6 +29,7 @@ import { Viewer } from './components/Viewer';
 import { Controls } from './components/Controls';
 import { deletePreset, loadPresets, upsertPreset, type Preset } from './lib/presets';
 import { loadSession, saveSession } from './lib/session';
+import { watchForUpdates } from './lib/version';
 
 // Lo último que se dejó la vez anterior: producto, ajustes y marca del taller.
 const SAVED = loadSession();
@@ -77,6 +78,8 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'solid' | 'xray' | 'wire'>('solid');
   // Mirar la pieza desde abajo: la marca del taller se graba en esa cara.
   const [flipped, setFlipped] = useState(false);
+  // ¿Se ha publicado una versión nueva mientras esta pestaña estaba abierta?
+  const [stale, setStale] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const set = useCallback(<K extends keyof Params>(k: K, v: Params[K]) => {
@@ -114,6 +117,10 @@ export default function App() {
     },
     [open],
   );
+
+  // Si se publica una versión nueva, esta pestaña se entera y lo dice. Sin esto,
+  // quien la tenga abierta desde antes sigue con la vieja sin saberlo.
+  useEffect(() => watchForUpdates(() => setStale(true)), []);
 
   // Recordar entre visitas: se guarda lo último (producto, ajustes, marca) con
   // un pequeño retardo, para no escribir en cada tirón de deslizador.
@@ -734,6 +741,14 @@ export default function App() {
           <div className="computing" role="status">
             <span className="spinner" aria-hidden />
             Generando…
+          </div>
+        )}
+        {stale && (
+          <div className="toast update">
+            Hay una versión nueva de MoldeLab.
+            <button type="button" onClick={() => location.reload()}>
+              Actualizar
+            </button>
           </div>
         )}
         {busy && <div className="toast">Leyendo la imagen…</div>}

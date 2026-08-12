@@ -146,7 +146,10 @@ function boolOp(op: number, a: Region[], b: Region[]): Region[] {
   addRegions(c, b, ClipperLib.PolyType.ptClip);
   const solution: Path[] = [];
   c.Execute(op, solution, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-  return toRegions(solution);
+  // La salida de Clipper puede traer caminos que se tocan en un vértice. Eso no
+  // se ve, pero earcut lo triangula mal y la pieza queda con aristas sueltas.
+  // `offsetRegions` ya hacía esta limpieza; las booleanas también la necesitan.
+  return toRegions(ClipperLib.Clipper.SimplifyPolygons(solution, ClipperLib.PolyFillType.pftNonZero));
 }
 
 /** Une regiones. */

@@ -1537,3 +1537,8 @@ body {
   font-weight: 400;
   font-display: block;
 }
+
+/* Aviso dentro del cuadro de la marca: no cabe a ese tamaño. */
+.hint.warn {
+  color: var(--warn);
+}

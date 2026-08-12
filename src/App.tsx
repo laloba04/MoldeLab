@@ -61,6 +61,7 @@ export default function App() {
   const [markOn, setMarkOn] = useState(false);
   const [markStyle, setMarkStyle] = useState<FontStyle>(SAVED.markStyle ?? 'redonda');
   const [markArc, setMarkArc] = useState(SAVED.markArc ?? false);
+  const [markSize, setMarkSize] = useState(SAVED.markSize ?? 6);
   // Las tipografías de la marca acaban siendo geometría del STL, así que hay que
   // esperar a tenerlas cargadas: si se rasteriza antes, el canvas dibuja con la
   // letra de reserva y la pieza sale con otra fuente. Al terminar, este estado
@@ -140,9 +141,9 @@ export default function App() {
   // Recordar entre visitas: se guarda lo último (producto, ajustes, marca) con
   // un pequeño retardo, para no escribir en cada tirón de deslizador.
   useEffect(() => {
-    const t = setTimeout(() => saveSession({ params, mark, markStyle, markArc }), 400);
+    const t = setTimeout(() => saveSession({ params, mark, markStyle, markArc, markSize }), 400);
     return () => clearTimeout(t);
-  }, [params, mark, markStyle, markArc]);
+  }, [params, mark, markStyle, markArc, markSize]);
 
   // Pegar del portapapeles: en un editor así se usa más que el botón.
   useEffect(() => {
@@ -253,6 +254,11 @@ export default function App() {
     setComputing(false);
   }, [silhouette, params]);
 
+  // ¿Se ha llegado a grabar algo? Si a ese tamaño el texto no cabe entero dentro
+  // de la pieza no se pone —medio texto al aire no vale— y sin avisar parecería
+  // que la marca está rota.
+  const [markFits, setMarkFits] = useState(true);
+
   // La marca grabada se aplica sobre las piezas ya construidas. Es lo último que
   // toca la geometría: firma del taller, no parte del diseño.
   const marked = useMemo(() => {
@@ -263,7 +269,7 @@ export default function App() {
           text: mark,
           mode: 'engrave',
           depth: 0.6,
-          heightMm: 5,
+          heightMm: markSize,
           style: markStyle,
           arc: markArc,
           // El canvas vive en el navegador; el resto del módulo corre en Node.
@@ -273,6 +279,12 @@ export default function App() {
         return pieces;
       }
     })();
+
+    const grabada =
+      !markOn ||
+      !mark.trim() ||
+      stamped.some((p, i) => p.mesh.positions.length !== pieces[i]?.mesh.positions.length);
+    setMarkFits(grabada);
 
     // Una sola tinta: se le quita a cada pieza tanto su color propio como el
     // relieve marcado aparte. Sin `overlay` no hay segundo color que repartir,
@@ -285,7 +297,7 @@ export default function App() {
     // el usuario, en orden. Si no ha tocado nada, se quedan con el suyo.
     let i = 0;
     return stamped.map((p) => (p.tint ? { ...p, tint: layerColors[i++] ?? p.tint } : p));
-  }, [pieces, markOn, mark, markStyle, markArc, fontsReady, layerColors, oneColor]);
+  }, [pieces, markOn, mark, markStyle, markArc, markSize, fontsReady, layerColors, oneColor]);
 
   const stats = useMemo(
     () => ({
@@ -652,6 +664,30 @@ export default function App() {
                     En arco
                   </button>
                 </div>
+                <div className="field">
+                  <div className="field-head">
+                    <label htmlFor="marca-tam">Tamaño de la letra</label>
+                    <output>
+                      {markSize.toFixed(1)}
+                      <em>mm</em>
+                    </output>
+                  </div>
+                  <input
+                    id="marca-tam"
+                    type="range"
+                    min={3}
+                    max={16}
+                    step={0.5}
+                    value={markSize}
+                    onChange={(e) => setMarkSize(Number(e.target.value))}
+                  />
+                </div>
+                {!markFits && (
+                  <p className="hint warn">
+                    A ese tamaño no cabe entera en la pieza, así que no se graba: no vale poner
+                    media marca. Bájala o escribe menos.
+                  </p>
+                )}
                 <p className="hint">
                   Se graba en la cara de <strong>atrás</strong> (la que toca la cama). Dale la vuelta
                   a la pieza, o usa <strong>Rayos X</strong>, para verla.

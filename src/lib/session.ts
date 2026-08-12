@@ -24,10 +24,16 @@ export interface Session {
   mark: string;
   markStyle: FontStyle;
   markArc: boolean;
+  markSize: number;
 }
 
 /** El estilo de letra, comprobado contra la lista real: del almacén puede venir
  *  cualquier cosa, y solo se acepta un identificador que exista. */
+function cleanSize(raw: unknown): number {
+  const n = typeof raw === 'number' && Number.isFinite(raw) ? raw : 6;
+  return Math.min(16, Math.max(3, Math.round(n * 2) / 2));
+}
+
 function cleanStyle(raw: unknown): FontStyle {
   return FONT_STYLES.some((f) => f.id === raw) ? (raw as FontStyle) : 'redonda';
 }
@@ -48,17 +54,19 @@ export function loadSession(): Partial<Session> {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(KEY) || '{}');
     if (!raw || typeof raw !== 'object') return {};
-    const { params, mark, markStyle, markArc } = raw as {
+    const { params, mark, markStyle, markArc, markSize } = raw as {
       params?: unknown;
       mark?: unknown;
       markStyle?: unknown;
       markArc?: unknown;
+      markSize?: unknown;
     };
     const out: Partial<Session> = {};
     if (params) out.params = cleanParams(params);
     if (typeof mark === 'string') out.mark = cleanMark(mark);
     if (markStyle !== undefined) out.markStyle = cleanStyle(markStyle);
     if (typeof markArc === 'boolean') out.markArc = markArc;
+    if (typeof markSize === 'number') out.markSize = cleanSize(markSize);
     return out;
   } catch {
     return {};
@@ -77,6 +85,7 @@ export function saveSession(s: Session): void {
         mark: cleanMark(s.mark),
         markStyle: cleanStyle(s.markStyle),
         markArc: !!s.markArc,
+        markSize: cleanSize(s.markSize),
       }),
     );
   } catch {

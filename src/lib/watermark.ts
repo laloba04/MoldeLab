@@ -23,7 +23,7 @@
 import type { Loop, Mesh, Piece, Pt } from '../types';
 import { area, orient } from './polygon';
 import { emptyMesh, extrudeRegion, merge } from './mesh';
-import { intersect, offsetRegions, sanitize, strokeOpen } from './clipper';
+import { intersect, offsetRegions, strokeOpen, subtract } from './clipper';
 import { bendPaths, fontCss, fontOf, textPaths, type FontStyle } from './font';
 import { binarize, cleanupMask, pad, type Mask } from './image';
 import { traceContours } from './contours';
@@ -35,7 +35,12 @@ export interface WatermarkOpts {
   /** 'engrave' hunde el texto en la base; 'emboss' lo levanta. */
   mode: 'engrave' | 'emboss';
   depth: number; // mm
-  heightMm: number; // altura de la mayúscula en la pieza
+  /**
+   * Altura de la mayúscula, en milímetros. Es lo que se pide; si a ese tamaño el
+   * texto no cabe entero en la pieza se encoge, pero nunca por debajo de
+   * `MIN_CAP_MM`, que es donde deja de leerse.
+   */
+  heightMm: number;
   /** Tipografía. Por defecto, la redonda. */
   style?: FontStyle;
   /** Curvar el texto sobre un arco. */
@@ -457,12 +462,17 @@ function embossOnPiece(piece: Piece, text: PlacedText, depth: number): Piece {
 }
 
 /**
- * Grabado en 2D, el patrón de `engraved()` en catalog-parts: la placa se
- * recompone en dos capas y en la INFERIOR el texto entra como agujero del
- * polígono, así que el material desaparece de verdad. La pieza se imprime con
- * esa cara contra la cama y la marca queda en la parte de atrás, sin tocar la
- * cara buena. Necesita que la pieza traiga su placa reconstruible
- * (`piece.plate`); si no, devuelve null y el que llama cae a relieve.
+ * Grabado en 2D: la placa se recompone en dos capas y a la INFERIOR se le resta
+ * el texto, así que el material desaparece de verdad. La pieza se imprime con
+ * esa cara contra la cama y la marca queda detrás, sin tocar la cara buena.
+ * Necesita que la pieza traiga su placa reconstruible (`piece.plate`); si no,
+ * devuelve null y el que llama cae a relieve.
+ *
+ * La resta es una booleana de verdad, con sujeto y recorte separados. Con el
+ * truco de meterlo todo en un montón y dejar que decida el número de vueltas
+ * —que es lo que hace `sanitize`— las TRIPAS de las letras se perdían: la
+ * islita de dentro de una «B» o de una «O» no se puede expresar así, y las
+ * letras salían macizas.
  */
 function engraveOnPlate(piece: Piece, text: PlacedText, depth: number): Piece | null {
   const plate = piece.plate;
@@ -475,16 +485,15 @@ function engraveOnPlate(piece: Piece, text: PlacedText, depth: number): Piece | 
   for (const r of plate.regions) extrudeRegion(upper, r, zCut, plate.zHi);
   const parts: Mesh[] = [upper];
 
+  // El texto como regiones de verdad: contorno de cada letra con sus tripas
+  // dentro. Así, al restarlo, la tripa se queda como isla de material.
+  const letras = offsetRegions(text.outer, text.holes, 0);
+
   for (const r of plate.regions) {
     // Solo se talla en la placa donde de verdad cae el texto. Si se intentara en
     // todas, cada trozo suelto de la pieza acabaría con restos del grabado.
     const aqui = intersect([{ outer: r.outer, holes: r.holes }], text.outer).length > 0;
-    const carved = !aqui
-      ? [{ outer: r.outer, holes: r.holes }]
-      : sanitize(
-          [r.outer, ...text.holes],
-          [...r.holes, ...text.outer.map((o) => [...o].reverse() as Pt[])],
-        );
+    const carved = aqui ? subtract([{ outer: r.outer, holes: r.holes }], letras) : [{ outer: r.outer, holes: r.holes }];
     const layer = emptyMesh();
     for (const c of carved) extrudeRegion(layer, c, plate.zLo, zCut);
     parts.push(layer);

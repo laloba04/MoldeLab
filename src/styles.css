@@ -867,6 +867,29 @@ button.ghost:hover {
   border-color: var(--blade);
 }
 
+.mark-fonts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mark-font {
+  padding: 5px 10px;
+  background: var(--bed);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--dim);
+  font-family: var(--body);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.mark-font:hover {
+  color: var(--text);
+}
+.mark-font.on {
+  border-color: var(--blade);
+  color: var(--blade);
+}
+
 .hud {
   position: absolute;
   left: 16px;
@@ -1484,4 +1507,27 @@ body {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* Las tres tipografías de la marca del taller. Se empaquetan con la página
+   (licencia SIL OFL) porque la marca acaba siendo geometría dentro del STL: si
+   dependiera de las fuentes instaladas, la misma pieza saldría distinta en cada
+   ordenador. */
+@font-face {
+  font-family: 'MoldeRedonda';
+  src: url('./fonts/Nunito.woff2') format('woff2');
+  font-weight: 800;
+  font-display: block;
+}
+@font-face {
+  font-family: 'MoldeManuscrita';
+  src: url('./fonts/Caveat.woff2') format('woff2');
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: 'MoldeRecia';
+  src: url('./fonts/Fredoka.woff2') format('woff2');
+  font-weight: 600;
+  font-display: block;
 }

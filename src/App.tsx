@@ -12,6 +12,7 @@ import { toObj, toSvg, zipFiles } from './lib/formats';
 import { isEmbedded, saveBlob } from './lib/save';
 import { to3mf } from './lib/threemf';
 import { applyWatermark, canWatermark, rasterizeText } from './lib/watermark';
+import { FONT_STYLES, fontCss, type FontStyle } from './lib/font';
 import { triangleCount } from './lib/mesh';
 import { dropToBed, spreadPieces } from './lib/layout';
 import { TEMPLATES, templatePreview, templateToBlob, type Template } from './lib/templates';
@@ -58,6 +59,20 @@ export default function App() {
   const [sending, setSending] = useState(false);
   const [mark, setMark] = useState(SAVED.mark ?? 'Barakaldesa Manitas 3D');
   const [markOn, setMarkOn] = useState(false);
+  const [markStyle, setMarkStyle] = useState<FontStyle>(SAVED.markStyle ?? 'redonda');
+  const [markArc, setMarkArc] = useState(SAVED.markArc ?? false);
+  // Las tipografías de la marca acaban siendo geometría del STL, así que hay que
+  // esperar a tenerlas cargadas: si se rasteriza antes, el canvas dibuja con la
+  // letra de reserva y la pieza sale con otra fuente. Al terminar, este estado
+  // cambia y la marca se vuelve a calcular con la buena.
+  const [fontsReady, setFontsReady] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    Promise.all(FONT_STYLES.map((f) => document.fonts.load(fontCss(f.id, 40))))
+      .catch(() => {})
+      .then(() => { if (vivo) setFontsReady(true); });
+    return () => { vivo = false; };
+  }, []);
   // Colores del visor y del 3MF: fondo = placa, trazo = relieve.
   const [bgColor, setBgColor] = useState('#e4d5c1');
   const [traceColor, setTraceColor] = useState('#8a5038');
@@ -125,9 +140,9 @@ export default function App() {
   // Recordar entre visitas: se guarda lo último (producto, ajustes, marca) con
   // un pequeño retardo, para no escribir en cada tirón de deslizador.
   useEffect(() => {
-    const t = setTimeout(() => saveSession({ params, mark }), 400);
+    const t = setTimeout(() => saveSession({ params, mark, markStyle, markArc }), 400);
     return () => clearTimeout(t);
-  }, [params, mark]);
+  }, [params, mark, markStyle, markArc]);
 
   // Pegar del portapapeles: en un editor así se usa más que el botón.
   useEffect(() => {
@@ -248,8 +263,10 @@ export default function App() {
           text: mark,
           mode: 'engrave',
           depth: 0.6,
-          heightMm: 4,
-          // El canvas vive en el navegador; la librería en sí corre también en Node.
+          heightMm: 5,
+          style: markStyle,
+          arc: markArc,
+          // El canvas vive en el navegador; el resto del módulo corre en Node.
           raster: rasterizeText,
         });
       } catch {
@@ -268,7 +285,7 @@ export default function App() {
     // el usuario, en orden. Si no ha tocado nada, se quedan con el suyo.
     let i = 0;
     return stamped.map((p) => (p.tint ? { ...p, tint: layerColors[i++] ?? p.tint } : p));
-  }, [pieces, markOn, mark, layerColors, oneColor]);
+  }, [pieces, markOn, mark, markStyle, markArc, fontsReady, layerColors, oneColor]);
 
   const stats = useMemo(
     () => ({
@@ -615,6 +632,26 @@ export default function App() {
                   placeholder="Tu marca…"
                   onChange={(e) => setMark(e.target.value)}
                 />
+                <div className="mark-fonts">
+                  {FONT_STYLES.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      className={`mark-font${markStyle === f.id ? ' on' : ''}`}
+                      style={{ fontFamily: `"${f.family}", var(--body)`, fontWeight: f.weight }}
+                      onClick={() => setMarkStyle(f.id)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={`mark-font${markArc ? ' on' : ''}`}
+                    onClick={() => setMarkArc((v) => !v)}
+                  >
+                    En arco
+                  </button>
+                </div>
                 <p className="hint">
                   Se graba en la cara de <strong>atrás</strong> (la que toca la cama). Dale la vuelta
                   a la pieza, o usa <strong>Rayos X</strong>, para verla.

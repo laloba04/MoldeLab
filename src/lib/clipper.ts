@@ -93,6 +93,32 @@ export function offsetRegions(
   return toRegions(clean);
 }
 
+/**
+ * Engorda líneas ABIERTAS hasta convertirlas en material, con las puntas y los
+ * codos redondeados.
+ *
+ * Es lo que hace falta para una fuente de trazo: la letra se dibuja como el
+ * esqueleto que trazaría un rotulador, y aquí se le da el grosor. Al ser el
+ * ancho un dato en milímetros, se puede garantizar que el surco grabado nunca
+ * baje de lo que sabe imprimir una boquilla, cosa imposible con una fuente del
+ * sistema, donde el grosor depende de la tipografía que tenga cada ordenador.
+ */
+export function strokeOpen(paths: Pt[][], width: number): Region[] {
+  if (width <= 0) return [];
+  const co = new ClipperLib.ClipperOffset(2, 0.05 * S);
+  let algo = false;
+  for (const p of paths) {
+    if (p.length < 2) continue;
+    co.AddPath(toPath(p), ClipperLib.JoinType.jtRound, ClipperLib.EndType.etOpenRound);
+    algo = true;
+  }
+  if (!algo) return [];
+
+  const solution: Path[] = [];
+  co.Execute(solution, (width / 2) * S);
+  return toRegions(ClipperLib.Clipper.SimplifyPolygons(solution, ClipperLib.PolyFillType.pftNonZero));
+}
+
 /** Sanea sin mover nada: resuelve cruces y orienta islas/agujeros. */
 export function sanitize(outer: Pt[][], holes: Pt[][]): Region[] {
   return offsetRegions(outer, holes, 0);

@@ -2,9 +2,8 @@
  * Marca de agua grabada en la pieza.
  *
  * No es un overlay de pantalla: es geometría real que viaja dentro del STL y
- * del 3MF. El texto se convierte en una máscara binaria, se vectoriza a
- * contornos con el mismo marching squares del pipeline, y se coloca junto al
- * borde inferior de la pieza, en relieve o grabado.
+ * del 3MF. El texto se dibuja con la fuente de trazo del taller, se busca un
+ * hueco donde quepa entero dentro del material, y se graba o se levanta.
  *
  * Vive aparte del pipeline principal a propósito: la marca es del taller, no
  * del diseño. Se aplica al final, sobre las piezas ya construidas, y solo a las
@@ -15,19 +14,21 @@
  * estropear la cara buena: se cala la capa inferior de la placa y el texto se
  * espeja, así se lee bien al dar la vuelta a la pieza.
  *
- * Lo único que necesita navegador es rasterizar el texto con una fuente de
- * verdad (`rasterizeText`, usa canvas): el navegador la inyecta vía
- * `opts.raster`. Sin inyección se usa una máscara sintética de bloques, que
- * corre en Node y basta para los tests. Todo lo demás — colocación, extrusión,
- * resta 2D — es puro y no toca `document`.
+ * El texto no se rasteriza: se dibuja con la fuente de trazo propia del taller
+ * (`font.ts`), que da polilíneas y se engordan a un ancho en milímetros. Así el
+ * módulo entero es puro —corre igual en Node que en el navegador, y la letra
+ * sale idéntica en los dos— y el surco tiene siempre el grosor que se pida, sin
+ * depender de qué tipografías tenga instaladas cada ordenador.
  */
 
 import type { Loop, Mesh, Piece, Pt } from '../types';
-import { traceContours } from './contours';
-import { binarize, cleanupMask, pad, type Mask } from './image';
-import { area, dedupe, orient, pointInPolygon, resample, simplify, smooth } from './polygon';
+import { area, orient } from './polygon';
 import { emptyMesh, extrudeRegion, merge } from './mesh';
-import { intersect, offsetRegions, sanitize } from './clipper';
+import { intersect, offsetRegions, sanitize, strokeOpen } from './clipper';
+import { bendPaths, fontCss, textPaths, type FontStyle } from './font';
+import { binarize, cleanupMask, pad, type Mask } from './image';
+import { traceContours } from './contours';
+import { dedupe, pointInPolygon, resample, simplify, smooth } from './polygon';
 import { boxOf } from './shapes';
 
 export interface WatermarkOpts {
@@ -35,26 +36,37 @@ export interface WatermarkOpts {
   /** 'engrave' hunde el texto en la base; 'emboss' lo levanta. */
   mode: 'engrave' | 'emboss';
   depth: number; // mm
-  heightMm: number; // altura del texto en la pieza
+  heightMm: number; // altura de la mayúscula en la pieza
+  /** Tipografía. Por defecto, la redonda. */
+  style?: FontStyle;
+  /** Curvar el texto sobre un arco. */
+  arc?: boolean;
   /**
-   * Texto -> máscara binaria. El navegador debe pasar `rasterizeText` (canvas,
-   * fuente real). Si no llega, se usan glifos de bloque sintéticos que
-   * funcionan en Node.
+   * Texto -> máscara binaria, con las fuentes de verdad. Lo inyecta el
+   * navegador (`rasterizeText`, necesita canvas). Sin él se usa la fuente de
+   * trazo de `font.ts`, que corre en Node y es la que ven los tests.
    */
-  raster?: (text: string) => Mask;
+  raster?: (text: string, style: FontStyle) => Mask;
 }
 
-/** Texto -> máscara binaria, a través de un canvas. Solo navegador. */
-export function rasterizeText(text: string): Mask {
-  const pad2 = 24;
-  const px = 180;
-  const font = `700 ${px}px "Arial Rounded MT Bold", "Nunito", system-ui, sans-serif`;
+/**
+ * Texto -> máscara binaria, con la tipografía empaquetada. Solo navegador.
+ *
+ * Además de rellenar la letra se la repasa con un trazo redondo. No es un
+ * capricho estético: el surco grabado tiene que medir por lo menos dos pasadas
+ * de boquilla o el laminador no lo rellena, y los palos finos de una tipografía
+ * a 5 mm de altura se quedan justos. El repaso los engorda lo justo sin cerrar
+ * las tripas de las letras.
+ */
+export function rasterizeText(text: string, style: FontStyle): Mask {
+  const px = 260;
+  const margen = 40;
+  const font = fontCss(style, px);
 
   const probe = document.createElement('canvas').getContext('2d')!;
   probe.font = font;
-  const m = probe.measureText(text);
-  const w = Math.ceil(m.width) + pad2 * 2;
-  const h = Math.ceil(px * 1.4) + pad2 * 2;
+  const w = Math.ceil(probe.measureText(text).width) + margen * 2;
+  const h = Math.ceil(px * 1.7) + margen * 2;
 
   const c = document.createElement('canvas');
   c.width = w;
@@ -62,78 +74,90 @@ export function rasterizeText(text: string): Mask {
   const ctx = c.getContext('2d', { willReadFrequently: true })!;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#000';
   ctx.font = font;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = px * 0.07;
+  ctx.strokeStyle = '#000';
+  ctx.fillStyle = '#000';
+  ctx.strokeText(text, w / 2, h / 2);
   ctx.fillText(text, w / 2, h / 2);
 
-  const img = ctx.getImageData(0, 0, w, h);
-  return binarize(img, 128, false);
+  return binarize(ctx.getImageData(0, 0, w, h), 128, false);
 }
 
-/**
- * Máscara sintética sin canvas: cada carácter es un bloque macizo. No es
- * legible, pero ocupa lo mismo que un texto y ejercita todo el camino de
- * vectorizado, colocación y extrusión. Es lo que usan los tests en Node.
- */
-function blockTextMask(text: string): Mask {
-  const cellW = 12;
-  const cellH = 28;
-  const glyphW = 8;
-  const glyphH = 20;
-  const margin = 8;
-  const chars = [...text];
-
-  const w = margin * 2 + cellW * Math.max(1, chars.length);
-  const h = margin * 2 + cellH;
-  const data = new Uint8Array(w * h);
-
-  chars.forEach((ch, i) => {
-    if (!ch.trim()) return;
-    const x0 = margin + i * cellW + (cellW - glyphW) / 2;
-    const y0 = margin + (cellH - glyphH) / 2;
-    for (let y = 0; y < glyphH; y++) {
-      for (let x = 0; x < glyphW; x++) data[(y0 + y) * w + (x0 + x)] = 1;
-    }
-  });
-
-  return { data, w, h };
-}
-
-/** Contornos del texto en mm, escalados para medir `heightMm` de alto. */
-function textLoops(text: string, heightMm: number, raster: (text: string) => Mask): Loop[] {
-  const mask = cleanupMask(raster(text), 1);
-  const raw = traceContours(pad(mask, 2));
-
-  // Primero en píxeles, para saber la altura real y sacar la escala.
+/** Contornos de una máscara de texto, escalados para medir `heightMm`. */
+function loopsFromMask(mask: Mask, heightMm: number): Loop[] {
   let loops: Loop[] = [];
-  for (const c of raw) {
-    let pts: Pt[] = c.map(([x, y]) => [x, -y]);
-    pts = dedupe(pts);
+  for (const c of traceContours(pad(cleanupMask(mask, 1), 2))) {
+    let pts: Pt[] = dedupe(c.map(([x, y]) => [x, -y] as Pt));
     if (pts.length < 3) continue;
-    pts = resample(dedupe(smooth(simplify(pts, 0.6), 1)), 1.5);
+    pts = resample(dedupe(smooth(simplify(pts, 0.5), 1)), 1.2);
     if (pts.length >= 3) loops.push({ pts, hole: false });
   }
   if (!loops.length) return [];
 
   const box = boxOf(loops);
-  const scale = heightMm / box.h;
-
+  const escala = heightMm / box.h;
   loops = loops.map((l) => ({
     hole: false,
-    pts: l.pts.map(([x, y]) => [(x - box.cx) * scale, (y - box.cy) * scale] as Pt),
+    pts: l.pts.map(([x, y]) => [(x - box.cx) * escala, (y - box.cy) * escala] as Pt),
   }));
 
-  // Anidar: la tripa de una "a" o una "o" es un agujero.
+  // Anidar: la tripa de una «a» o de una «o» es un agujero.
   for (const l of loops) {
-    let depth = 0;
-    for (const o of loops) if (o !== l && pointInPolygon(l.pts[0], o.pts)) depth++;
-    l.hole = depth % 2 === 1;
+    let dentro = 0;
+    for (const o of loops) if (o !== l && pointInPolygon(l.pts[0], o.pts)) dentro++;
+    l.hole = dentro % 2 === 1;
     l.pts = orient(l.pts, !l.hole);
   }
-
   return loops;
+}
+
+/** Una línea de texto convertida en material, centrada en el origen. */
+function textLoops(text: string, heightMm: number, opts: WatermarkOpts): Loop[] {
+  const style = opts.style ?? 'redonda';
+  const loops = opts.raster
+    ? loopsFromMask(opts.raster(text, style), heightMm)
+    : loopsDeTrazo(text, heightMm);
+  if (!loops.length || !opts.arc) return loops;
+
+  // Curvar se hace sobre los contornos ya trazados, así vale igual para las
+  // tipografías empaquetadas que para la fuente de trazo de respaldo.
+  const b = boxOf(loops);
+  const curvo = bendPaths(loops.map((l) => l.pts), b.w).map((pts, i) => ({
+    hole: loops[i].hole,
+    pts,
+  }));
+  const c = boxOf(curvo);
+  return curvo.map((l) => ({
+    hole: l.hole,
+    pts: l.pts.map(([x, y]) => [x - c.cx, y - c.cy] as Pt),
+  }));
+}
+
+/** El respaldo sin canvas: la fuente de trazo propia, que corre en Node y es la
+ *  que ven los tests. */
+function loopsDeTrazo(text: string, heightMm: number): Loop[] {
+  const { paths } = textPaths(text);
+  if (!paths.length) return [];
+  const enMm = paths.map((p) => p.map(([x, y]) => [x * heightMm, y * heightMm] as Pt));
+  const regions = strokeOpen(enMm, Math.max(0.8, heightMm * 0.17));
+
+  const loops: Loop[] = [];
+  for (const r of regions) {
+    loops.push({ pts: orient(r.outer, true), hole: false });
+    for (const h of r.holes) loops.push({ pts: orient(h, false), hole: true });
+  }
+  if (!loops.length) return [];
+
+  const box = boxOf(loops);
+  return loops.map((l) => ({
+    hole: l.hole,
+    pts: l.pts.map(([x, y]) => [x - box.cx, y - box.cy] as Pt),
+  }));
 }
 
 /** El rango de Z que ocupa una malla: para encontrar su base y su tapa. */
@@ -235,6 +259,17 @@ function regionsArea(regions: { outer: Pt[]; holes: Pt[][] }[]): number {
 /** Escalas que se prueban antes de rendirse: de tamaño completo a la mitad. */
 const FITS = [1, 0.9, 0.8, 0.7, 0.6, 0.5];
 
+/**
+ * Por debajo de esto la marca deja de leerse.
+ *
+ * El trazo tiene un mínimo de 0,8 mm porque si no la impresora no lo rellena;
+ * con la mayúscula por debajo de 3,2 mm ese trazo se come la letra y el texto
+ * se convierte en un borrón. Antes se encogía hasta la mitad con tal de que
+ * cupiera, y por eso salía ilegible. Más vale partirlo en dos líneas —o no
+ * ponerlo— que grabar una mancha.
+ */
+const MIN_CAP_MM = 3.2;
+
 /** Reparte las palabras en `n` líneas de anchos parecidos, o null si no dan. */
 function splitLines(text: string, n: number): string[] | null {
   const clean = text.trim();
@@ -266,12 +301,12 @@ interface TextBlock {
 }
 
 /** El texto compuesto en una o varias líneas apiladas, centrado en el origen. */
-function textBlock(lines: string[], heightMm: number, raster: (t: string) => Mask): TextBlock | null {
+function textBlock(lines: string[], heightMm: number, opts: WatermarkOpts): TextBlock | null {
   const pitch = heightMm * 1.3; // interlineado
   const all: Loop[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const loops = textLoops(lines[i], heightMm, raster);
+    const loops = textLoops(lines[i], heightMm, opts);
     if (!loops.length) return null;
     const dy = ((lines.length - 1) / 2 - i) * pitch;
     for (const l of loops) {
@@ -339,7 +374,6 @@ function scanSpot(
  * grabar la cara de abajo para que se lea bien al dar la vuelta a la pieza.
  */
 function placeText(piece: Piece, opts: WatermarkOpts, mirror: boolean): PlacedText | null {
-  const raster = opts.raster ?? blockTextMask;
   if (!opts.text.trim()) return null;
 
   let loops: Loop[];
@@ -361,13 +395,18 @@ function placeText(piece: Piece, opts: WatermarkOpts, mirror: boolean): PlacedTe
     for (const n of [1, 2, 3]) {
       const lines = splitLines(opts.text, n);
       if (!lines) continue;
-      const block = textBlock(lines, opts.heightMm, raster);
+      const block = textBlock(lines, opts.heightMm, opts);
       if (block) blocks.push(block);
     }
     if (!blocks.length) return null;
 
+    // Solo las escalas que dejan la letra legible; si ninguna llega, se prueba
+    // al menos la más pequeña antes de rendirse.
+    const escalas = FITS.filter((f) => opts.heightMm * f >= MIN_CAP_MM);
+    if (!escalas.length) escalas.push(FITS[FITS.length - 1]);
+
     let placed: { block: TextBlock; fit: number; cx: number; cy: number } | null = null;
-    for (const f of FITS) {
+    for (const f of escalas) {
       for (const block of blocks) {
         const spot = scanSpot(safe, bounds, block.w * f, block.h * f);
         if (spot) {
@@ -383,7 +422,7 @@ function placeText(piece: Piece, opts: WatermarkOpts, mirror: boolean): PlacedTe
     ({ fit, cx, cy } = placed);
   } else {
     // Sin placa (relieve a ciegas): borde inferior del envolvente, como antes.
-    const block = textBlock([opts.text], opts.heightMm, raster);
+    const block = textBlock([opts.text], opts.heightMm, opts);
     if (!block) return null;
     const fp = footprint(piece.mesh);
     if (!Number.isFinite(fp.minX)) return null;
@@ -438,10 +477,15 @@ function engraveOnPlate(piece: Piece, text: PlacedText, depth: number): Piece | 
   const parts: Mesh[] = [upper];
 
   for (const r of plate.regions) {
-    const carved = sanitize(
-      [r.outer, ...text.holes],
-      [...r.holes, ...text.outer.map((o) => [...o].reverse() as Pt[])],
-    );
+    // Solo se talla en la placa donde de verdad cae el texto. Si se intentara en
+    // todas, cada trozo suelto de la pieza acabaría con restos del grabado.
+    const aqui = intersect([{ outer: r.outer, holes: r.holes }], text.outer).length > 0;
+    const carved = !aqui
+      ? [{ outer: r.outer, holes: r.holes }]
+      : sanitize(
+          [r.outer, ...text.holes],
+          [...r.holes, ...text.outer.map((o) => [...o].reverse() as Pt[])],
+        );
     const layer = emptyMesh();
     for (const c of carved) extrudeRegion(layer, c, plate.zLo, zCut);
     parts.push(layer);

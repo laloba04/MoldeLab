@@ -14,6 +14,7 @@
 
 import type { Params } from '../types';
 import { cleanParams } from './presets';
+import { FONT_STYLES, type FontStyle } from './font';
 
 const KEY = 'moldelab-sesion';
 const MARK_MAX = 40;
@@ -21,6 +22,14 @@ const MARK_MAX = 40;
 export interface Session {
   params: Params;
   mark: string;
+  markStyle: FontStyle;
+  markArc: boolean;
+}
+
+/** El estilo de letra, comprobado contra la lista real: del almacén puede venir
+ *  cualquier cosa, y solo se acepta un identificador que exista. */
+function cleanStyle(raw: unknown): FontStyle {
+  return FONT_STYLES.some((f) => f.id === raw) ? (raw as FontStyle) : 'redonda';
 }
 
 /** La marca, sin caracteres de control ni nada por debajo del espacio, y con
@@ -39,10 +48,17 @@ export function loadSession(): Partial<Session> {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(KEY) || '{}');
     if (!raw || typeof raw !== 'object') return {};
-    const { params, mark } = raw as { params?: unknown; mark?: unknown };
+    const { params, mark, markStyle, markArc } = raw as {
+      params?: unknown;
+      mark?: unknown;
+      markStyle?: unknown;
+      markArc?: unknown;
+    };
     const out: Partial<Session> = {};
     if (params) out.params = cleanParams(params);
     if (typeof mark === 'string') out.mark = cleanMark(mark);
+    if (markStyle !== undefined) out.markStyle = cleanStyle(markStyle);
+    if (typeof markArc === 'boolean') out.markArc = markArc;
     return out;
   } catch {
     return {};
@@ -56,7 +72,12 @@ export function saveSession(s: Session): void {
     // se confía en que alguien lo limpie al leer.
     localStorage.setItem(
       KEY,
-      JSON.stringify({ params: cleanParams(s.params), mark: cleanMark(s.mark) }),
+      JSON.stringify({
+        params: cleanParams(s.params),
+        mark: cleanMark(s.mark),
+        markStyle: cleanStyle(s.markStyle),
+        markArc: !!s.markArc,
+      }),
     );
   } catch {
     // Modo incógnito o cuota llena: no se puede recordar, pero no rompemos nada.

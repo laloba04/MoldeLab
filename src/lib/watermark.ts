@@ -2,8 +2,8 @@
  * Marca de agua grabada en la pieza.
  *
  * No es un overlay de pantalla: es geometría real que viaja dentro del STL y
- * del 3MF. El texto se dibuja con la fuente de trazo del taller, se busca un
- * hueco donde quepa entero dentro del material, y se graba o se levanta.
+ * del 3MF. Se busca un hueco donde el texto quepa ENTERO dentro del material
+ * —medio texto grabado al aire no vale— y ahí se hunde o se levanta.
  *
  * Vive aparte del pipeline principal a propósito: la marca es del taller, no
  * del diseño. Se aplica al final, sobre las piezas ya construidas, y solo a las
@@ -14,18 +14,17 @@
  * estropear la cara buena: se cala la capa inferior de la placa y el texto se
  * espeja, así se lee bien al dar la vuelta a la pieza.
  *
- * El texto no se rasteriza: se dibuja con la fuente de trazo propia del taller
- * (`font.ts`), que da polilíneas y se engordan a un ancho en milímetros. Así el
- * módulo entero es puro —corre igual en Node que en el navegador, y la letra
- * sale idéntica en los dos— y el surco tiene siempre el grosor que se pida, sin
- * depender de qué tipografías tenga instaladas cada ordenador.
+ * En el navegador el texto se rasteriza con las tipografías empaquetadas
+ * (`font.ts`) y se vectoriza. Fuera del navegador no hay canvas, así que se cae
+ * a la fuente de trazo del mismo módulo: los tests recorren en Node todo el
+ * camino de la marca sin montar un navegador.
  */
 
 import type { Loop, Mesh, Piece, Pt } from '../types';
 import { area, orient } from './polygon';
 import { emptyMesh, extrudeRegion, merge } from './mesh';
 import { intersect, offsetRegions, sanitize, strokeOpen } from './clipper';
-import { bendPaths, fontCss, textPaths, type FontStyle } from './font';
+import { bendPaths, fontCss, fontOf, textPaths, type FontStyle } from './font';
 import { binarize, cleanupMask, pad, type Mask } from './image';
 import { traceContours } from './contours';
 import { dedupe, pointInPolygon, resample, simplify, smooth } from './polygon';
@@ -79,10 +78,10 @@ export function rasterizeText(text: string, style: FontStyle): Mask {
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.lineWidth = px * 0.07;
+  ctx.lineWidth = px * fontOf(style).fatten;
   ctx.strokeStyle = '#000';
   ctx.fillStyle = '#000';
-  ctx.strokeText(text, w / 2, h / 2);
+  if (ctx.lineWidth > 0) ctx.strokeText(text, w / 2, h / 2);
   ctx.fillText(text, w / 2, h / 2);
 
   return binarize(ctx.getImageData(0, 0, w, h), 128, false);

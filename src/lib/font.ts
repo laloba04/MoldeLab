@@ -1,7 +1,7 @@
 /**
  * Las tipografías de la marca, y una fuente de trazo de respaldo.
  *
- * En el navegador la marca se dibuja con las tres tipografías empaquetadas en
+ * En el navegador la marca se dibuja con las cuatro tipografías empaquetadas en
  * `src/fonts` (licencia SIL OFL). Van dentro de la página a propósito: la marca
  * acaba siendo geometría del STL, así que si dependiera de las fuentes que tenga
  * instaladas cada ordenador, la misma pieza saldría distinta en el del taller y
@@ -150,7 +150,7 @@ export interface TextPaths {
 }
 
 /**
- * Las tres tipografías de la marca.
+ * Las cuatro tipografías de la marca.
  *
  * Van EMPAQUETADAS con la página (`src/fonts`, licencia SIL OFL, que permite
  * incrustarlas), no se piden a la fuente del sistema. Eso importa: la marca es
@@ -158,14 +158,30 @@ export interface TextPaths {
  * tenga instalado cada ordenador, la misma pieza saldría distinta en el
  * ordenador del taller y en el de casa.
  *
- * Solo el subconjunto latino de cada una: 84 KB entre las tres.
+ * Solo el subconjunto latino de cada una: 95 KB entre las cuatro.
  */
-export type FontStyle = 'redonda' | 'manuscrita' | 'recia';
+export type FontStyle = 'redonda' | 'manuscrita' | 'recia' | 'gordita';
 
-export const FONT_STYLES: { id: FontStyle; label: string; family: string; weight: number }[] = [
-  { id: 'redonda', label: 'Redonda', family: 'MoldeRedonda', weight: 800 },
-  { id: 'manuscrita', label: 'Manuscrita', family: 'MoldeManuscrita', weight: 700 },
-  { id: 'recia', label: 'Recia', family: 'MoldeRecia', weight: 600 },
+export const FONT_STYLES: {
+  id: FontStyle;
+  label: string;
+  family: string;
+  weight: number;
+  /**
+   * Cuánto se repasa la letra al rasterizar, en proporción a su altura.
+   *
+   * Es para que el surco grabado llegue a dos pasadas de boquilla. Cada
+   * tipografía necesita lo suyo: una manuscrita tiene los palos finos y hay que
+   * engordarla, pero una ya gorda no necesita nada — y si se le repasa, las
+   * tripas de la «a» y de la «e» se cierran y la palabra se convierte en una
+   * mancha.
+   */
+  fatten: number;
+}[] = [
+  { id: 'redonda', label: 'Redonda', family: 'MoldeRedonda', weight: 800, fatten: 0.04 },
+  { id: 'manuscrita', label: 'Manuscrita', family: 'MoldeManuscrita', weight: 700, fatten: 0.09 },
+  { id: 'recia', label: 'Recia', family: 'MoldeRecia', weight: 600, fatten: 0.01 },
+  { id: 'gordita', label: 'Gordita', family: 'MoldeGordita', weight: 400, fatten: 0 },
 ];
 
 export function fontOf(style: FontStyle) {

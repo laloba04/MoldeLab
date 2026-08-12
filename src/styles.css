@@ -1531,3 +1531,9 @@ body {
   font-weight: 600;
   font-display: block;
 }
+@font-face {
+  font-family: 'MoldeGordita';
+  src: url('./fonts/TitanOne.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}

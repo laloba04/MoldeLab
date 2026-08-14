@@ -785,7 +785,10 @@ export function buildOutline(loops: Loop[], p: Params): Piece[] {
 export function buildBookmark(loops: Loop[], detail: Loop[], p: Params): Piece[] {
   const box = boxOf(loops);
   const w = box.w + p.border * 2;
-  const h = Math.max(box.h + p.border * 2, w * 3); // proporción de marcapáginas
+  // El largo lo pone quien lo usa, no el dibujo. Solo se respeta el mínimo que
+  // hace falta para que la imagen y el agujero de la borla quepan.
+  const minimo = box.h + p.border * 2 + p.ringInner * 3;
+  const h = Math.max(minimo, p.bookmarkLength);
 
   const plate = roundedRect(box.cx, box.cy, w, h, p.cornerRadius);
   const hole = [...circle(box.cx, box.cy + h / 2 - p.border - p.ringInner, p.ringInner, 28)].reverse() as Pt[];

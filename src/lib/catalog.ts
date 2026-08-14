@@ -372,7 +372,7 @@ export const PRODUCTS: Entry[] = [
     category: 'personalizados',
     label: 'Marcapáginas',
     hint: 'Tira alargada con agujero para la borla.',
-    fields: [...SIZE, 'thickness', 'border', 'cornerRadius', 'ringInner', ...RELIEF_FIELDS],
+    fields: [...SIZE, 'bookmarkLength', 'thickness', 'border', 'cornerRadius', 'ringInner', ...RELIEF_FIELDS],
     build: (s, p) => buildBookmark(s.loops, s.detail, p),
   },
   {

@@ -186,6 +186,15 @@ export interface Params {
   /** Contorno del molde en las placas: seguir la imagen o una forma estándar. */
   moldShape: MoldShape;
 
+  /**
+   * Largo del marcapáginas, en milímetros.
+   *
+   * Va aparte del tamaño de la imagen: el ancho lo manda el dibujo, pero el
+   * largo es cosa del libro. Sin esto la tira salía proporcional al dibujo —tres
+   * veces su ancho— y con una imagen grande daban 60 cm de marcapáginas.
+   */
+  bookmarkLength: number;
+
   // Letrero calado
   cutoutMode: 'figure' | 'lines';
   cutLineWidth: number; // grosor de la línea recortada (modo «solo líneas»)
@@ -284,6 +293,7 @@ export const DEFAULTS: Params = {
   thickness: 3,
   border: 4,
   cornerRadius: 6,
+  bookmarkLength: 150,
   // Por defecto el molde sigue la silueta de la imagen subida: es lo que la
   // usuaria espera («que se adapte a la imagen»), no un rectángulo fijo.
   moldShape: 'image',
@@ -382,6 +392,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   thickness: { label: 'Grosor', unit: 'mm', min: 1, max: 12, step: 0.2 },
   border: { label: 'Marco', unit: 'mm', min: 0, max: 20, step: 0.5 },
   cornerRadius: { label: 'Radio de esquina', unit: 'mm', min: 0, max: 25, step: 0.5 },
+  bookmarkLength: { label: 'Largo', unit: 'mm', min: 60, max: 260, step: 5 },
   moldShape: {
     select: true,
     label: 'Forma del molde',

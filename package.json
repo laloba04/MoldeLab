@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "tsx test/catalog.test.ts && tsx test/geometry.test.ts && tsx test/stroke.test.ts && tsx test/threemf.test.ts && tsx test/watermark.test.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },

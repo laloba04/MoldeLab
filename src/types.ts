@@ -367,7 +367,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   smooth: { label: 'Suavizar', min: 0, max: 5, step: 1 },
   minIslandPct: { label: 'Ignorar islas menores de', unit: '%', min: 0, max: 25, step: 1 },
 
-  targetWidthMm: { label: 'Tamaño', unit: 'mm', min: 15, max: 200, step: 1 },
+  targetWidthMm: { label: 'Tamaño', unit: 'mm', min: 15, max: 250, step: 1 },
 
   cutterHeight: { label: 'Altura', unit: 'mm', min: 6, max: 30, step: 0.5 },
   wallThickness: { label: 'Grosor de pared', unit: 'mm', min: 0.6, max: 3, step: 0.1 },

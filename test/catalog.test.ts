@@ -554,6 +554,35 @@ console.log('');
   );
 }
 
+// -----------------------------------------------------------------------------
+// El llavero de texto, de una pieza aunque sean dos palabras
+// -----------------------------------------------------------------------------
+//
+// El producto une las letras engordándolas con el «borde» hasta que se tocan.
+// Un espacio entre palabras mide bastante más de lo que ese borde puede cerrar,
+// así que «tía abuela» salía en dos trozos que se caen por separado de la
+// impresora. Ahora se enlazan.
+
+console.log('');
+{
+  const cajita = (cx: number, w: number, h: number): Pt[] => boxOfPts(cx, 0, w, h);
+  const sueltos: string[] = [];
+
+  for (const hueco of [4, 10, 20, 35]) {
+    const palabras: Loop[] = [
+      { pts: cajita(-20 - hueco / 2, 30, 18), hole: false },
+      { pts: cajita(25 + hueco / 2, 40, 18), hole: false },
+    ];
+    const p = { ...DEFAULTS, product: 'keychain-text' as const };
+    const pieza = buildProduct({ loops: palabras, detail: palabras, widthMm: 100, heightMm: 18 }, p)[0];
+    const n = pieza?.plate?.regions.length ?? 0;
+    if (n !== 1) sueltos.push(`espacio de ${hueco} mm: ${n} trozos`);
+  }
+
+  check('llavero de texto: dos palabras salen de una pieza', sueltos.length === 0,
+    sueltos.join('; ') || 'de 4 a 35 mm de espacio, siempre una');
+}
+
 console.log(`\n${totalTris.toLocaleString('es-ES')} triángulos en total`);
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');
 process.exitCode = failures ? 1 : 0;

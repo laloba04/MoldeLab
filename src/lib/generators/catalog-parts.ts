@@ -9,7 +9,7 @@
 
 import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
-import { intersect, offsetRegions, sanitize, subtract, union, type Region } from '../clipper';
+import { intersect, offsetRegions, overlaps, sanitize, subtract, union, type Region } from '../clipper';
 import { dedupe, pointInPolygon, resample, signedArea, simplify, smooth } from '../polygon';
 import { boxOf, circle, heart, roundedRect, shiftLoops, spikes } from '../shapes';
 
@@ -447,6 +447,82 @@ function ringAt(loops: Loop[], p: Params): { tab: Pt[]; hole: Pt[] } {
   };
 }
 
+/**
+ * Cose varias regiones sueltas en una sola, con enlaces entre las más cercanas.
+ *
+ * Es lo que le falta a un llavero de texto de dos palabras: el «borde» engorda
+ * las letras hasta que se tocan, pero un espacio entre palabras mide bastante
+ * más de lo que ese borde puede cerrar, y el llavero sale en dos trozos que se
+ * caen por separado de la impresora.
+ *
+ * Se enlaza cada región con la que tenga más cerca hasta que no queda ninguna
+ * suelta —un árbol, no todas contra todas— y el enlace se mete un poco dentro de
+ * las dos para que suelde en vez de quedarse pegado de canto.
+ */
+/** Lo que mide de alto la más baja de las regiones. */
+function alturaDe(regions: Region[]): number {
+  let alto = Infinity;
+  for (const r of regions) {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const [, y] of r.outer) {
+      if (y < lo) lo = y;
+      if (y > hi) hi = y;
+    }
+    alto = Math.min(alto, hi - lo);
+  }
+  return Number.isFinite(alto) ? alto : 0;
+}
+
+export function weldBars(regions: Region[], ancho: number): Region[] {
+  if (regions.length < 2) return [];
+
+  const barras: Pt[][] = [];
+  const unidas = [0];
+  const sueltas = regions.map((_, i) => i).slice(1);
+
+  while (sueltas.length) {
+    let mejor = { at: 0, d: Infinity, pa: regions[0].outer[0], pb: regions[0].outer[0] };
+    for (const i of unidas) {
+      for (let k = 0; k < sueltas.length; k++) {
+        for (const a of regions[i].outer) {
+          for (const b of regions[sueltas[k]].outer) {
+            const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+            if (d < mejor.d) mejor = { at: k, d, pa: a, pb: b };
+          }
+        }
+      }
+    }
+
+    const dx = mejor.pb[0] - mejor.pa[0];
+    const dy = mejor.pb[1] - mejor.pa[1];
+    const largo = Math.hypot(dx, dy) || 1;
+    const ux = dx / largo;
+    const uy = dy / largo;
+    const nx = (-uy * ancho) / 2;
+    const ny = (ux * ancho) / 2;
+    const muerde = 1.5; // se mete en las dos para soldar de verdad
+    const a: Pt = [mejor.pa[0] - ux * muerde, mejor.pa[1] - uy * muerde];
+    const b: Pt = [mejor.pb[0] + ux * muerde, mejor.pb[1] + uy * muerde];
+    barras.push([
+      [a[0] + nx, a[1] + ny],
+      [b[0] + nx, b[1] + ny],
+      [b[0] - nx, b[1] - ny],
+      [a[0] - nx, a[1] - ny],
+    ]);
+
+    unidas.push(sueltas[mejor.at]);
+    sueltas.splice(mejor.at, 1);
+  }
+
+  return sanitize(barras, []);
+}
+
+/** Las mismas regiones, ya cosidas en una. */
+export function weldRegions(regions: Region[], ancho: number): Region[] {
+  return union(regions, weldBars(regions, ancho));
+}
+
 export function buildKeychain(
   loops: Loop[],
   detail: Loop[],
@@ -457,6 +533,7 @@ export function buildKeychain(
   const extras: Mesh[] = [
     solid(sanitize([ring.tab], [ring.hole]), 0, p.thickness), // la pestaña con su agujero
   ];
+  const tabReg = sanitize([ring.tab], []);
 
   let base: Region[];
   if (variant === 'plate') {
@@ -464,6 +541,11 @@ export function buildKeychain(
     // que las letras vecinas se tocan y forman una sola pieza con forma de la
     // palabra, no una placa rectangular. Las letras van en relieve encima.
     base = regionsOf(loops, Math.max(0.6, p.border));
+    // Con dos palabras el espacio es más ancho de lo que cierra el borde, así que
+    // se enlazan. El enlace se hace a la altura de las letras, no más fino de
+    // 2,5 mm: un llavero se lleva en el bolsillo con las llaves y un hilo de un
+    // milímetro se parte al primer tirón.
+    base = weldRegions(base, Math.max(2.5, Math.min(alturaDe(base) * 0.3, 8)));
     extras.push(...reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight));
   } else if (variant === 'cutout') {
     // El dibujo se cala en una etiqueta: se ve a través.
@@ -485,6 +567,13 @@ export function buildKeychain(
     if (variant === 'relief') {
       extras.push(...reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight));
     }
+  }
+
+  // La anilla se coloca donde se la arrastre, y ahí puede no llegar a tocar la
+  // pieza: con dos palabras cae justo sobre el hueco de en medio y se queda
+  // flotando. Si no la toca, se le tira un enlace.
+  if (!overlaps(base, tabReg)) {
+    base = union(base, weldBars([...base, ...tabReg], Math.max(2.5, p.ringOuter * 0.8)));
   }
 
   const overlay = merge(...extras);

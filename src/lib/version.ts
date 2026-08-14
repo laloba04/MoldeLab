@@ -27,9 +27,14 @@ function currentBundle(): string | null {
 
 /** El nombre del bundle que sirve el servidor ahora mismo. */
 async function liveBundle(): Promise<string | null> {
-  // `no-store` es la clave: sin esto el navegador contestaría con su propia
-  // copia en caché y nunca nos enteraríamos de nada.
-  const res = await fetch(new URL('./', location.href).href, { cache: 'no-store' });
+  // La ruta va literal, sin construirla a partir de `location`. Sale la misma
+  // —el navegador resuelve `./` contra la página— pero así no entra en el código
+  // ningún dato que venga de fuera: la dirección se la puede inventar cualquiera
+  // y no queremos que acabe decidiendo a dónde se pide.
+  //
+  // `no-store` es lo otro importante: sin eso el navegador contestaría con su
+  // propia copia en caché y nunca nos enteraríamos de que hay versión nueva.
+  const res = await fetch('./', { cache: 'no-store' });
   if (!res.ok) return null;
   const m = /assets\/index-[A-Za-z0-9_-]+\.js/.exec(await res.text());
   return m ? m[0] : null;

@@ -9,7 +9,7 @@
 
 import type { Mesh, Params, Piece, Pt, Silhouette } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
-import { intersect, offsetRegions, sanitize, type Region } from '../clipper';
+import { intersect, offsetRegions, sanitize, subtract, type Region } from '../clipper';
 import { boxOf, circle, roundedRect, stadium } from '../shapes';
 import { regionsOf, reliefSolids } from './catalog-parts';
 
@@ -245,25 +245,33 @@ export function buildBox(s: Silhouette, p: Params): Piece[] {
   const floorT = Math.min(p.thickness, 3);
 
   // Cuerpo: suelo macizo + paredes (anillo entre la silueta y ella encogida).
+  //
+  // La resta es una booleana de verdad, y tiene que serlo. Antes se le pasaban a
+  // CADA isla los huecos de TODAS, y se dejaba que decidiera el número de
+  // vueltas: un hueco que cae fuera de su isla, en vez de no hacer nada, se
+  // convertía en material macizo. Con este dibujo salían 13.739 mm² de pared
+  // donde tocaban 686 — o sea, la caja llena.
   const innerR = offsetRegions(islands, [], -p.wallThickness);
-  const wallHoles = innerR.map((r) => rev(r.outer));
-
-  const walls: Mesh[] = [];
-  for (const o of outerR) {
-    walls.push(solid(sanitize([o.outer], wallHoles), floorT - 0.01, p.boxHeight));
-  }
+  const walls: Mesh[] = [solid(subtract(outerR, innerR), floorT - 0.01, p.boxHeight)];
 
   // Tapa: placa con la misma silueta + labio interior que encaja en el cuerpo.
   const lipOuter = offsetRegions(islands, [], -(p.wallThickness + 0.25));
   const lipInner = offsetRegions(islands, [], -(p.wallThickness + 0.25 + 1.2));
-  const lipHoles = lipInner.map((r) => rev(r.outer));
 
   const lidExtras: Mesh[] = [];
-  for (const o of lipOuter) {
-    lidExtras.push(solid(sanitize([o.outer], lipHoles), floorT - 0.01, floorT + p.lidLip));
-  }
-  // El relieve decora la tapa, que es la cara que se ve.
-  lidExtras.push(...reliefSolids(s.detail, p, -0.01, -p.reliefHeight));
+  // El labio va por DEBAJO y el dibujo por encima, que es como se usa la tapa:
+  // el labio se mete en la caja y el dibujo queda a la vista.
+  //
+  // Antes era al revés —labio arriba, dibujo hacia abajo— y eso no se podía
+  // imprimir: apoyada, la tapa se sostendría solo sobre las líneas del dibujo y
+  // toda la placa quedaría en el aire. Así apoya en el aro del labio y lo único
+  // que vuela es la pestañita de un milímetro y pico del borde, que cualquier
+  // impresora salva de un puente.
+  lidExtras.push(solid(subtract(lipOuter, lipInner), -p.lidLip, 0.01));
+  // El relieve decora la cara de arriba de la tapa, que es la que se ve. Y va
+  // con altura POSITIVA: en negativo, `reliefSolids` no devuelve nada, y por eso
+  // la tapa salía lisa, sin ningún detalle del dibujo.
+  lidExtras.push(...reliefSolids(s.detail, p, floorT - 0.01, p.reliefHeight));
 
   const pieces: Piece[] = [];
   const bodyOverlay = merge(...walls);

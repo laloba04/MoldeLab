@@ -490,6 +490,70 @@ console.log('');
     `crece ${crece.toFixed(2)} mm`);
 }
 
+// -----------------------------------------------------------------------------
+// La caja de figuritas tiene que salir HUECA
+// -----------------------------------------------------------------------------
+//
+// Es un fallo que no se ve: por fuera la caja está perfecta y por dentro está
+// llena. Solo se caza midiendo el material. Venía de restar los huecos con el
+// truco del número de vueltas, que convierte en macizo el hueco de una isla
+// cuando cae fuera de otra: con un dibujo de siete formas salían 13.739 mm² de
+// pared donde tocaban 686.
+
+console.log('');
+{
+  const volumenDe = (m: Mesh) => {
+    let v = 0;
+    const q = m.positions;
+    for (let i = 0; i < q.length; i += 9) {
+      v +=
+        (q[i] * (q[i + 4] * q[i + 8] - q[i + 5] * q[i + 7]) -
+          q[i + 1] * (q[i + 3] * q[i + 8] - q[i + 5] * q[i + 6]) +
+          q[i + 2] * (q[i + 3] * q[i + 7] - q[i + 4] * q[i + 6])) / 6;
+    }
+    return v;
+  };
+
+  // Cinco formas sueltas. Hacen falta varias: con solo dos el fallo no se
+  // manifiesta, porque cada anillo se traga UN hueco ajeno y la cuenta sale
+  // parecida. Es a partir de tres cuando el material de más se dispara.
+  const dos: Loop[] = [0, 1, 2, 3, 4].map((i) => ({
+    pts: circleOf(-48 + i * 24, 0, 10),
+    hole: false,
+  }));
+  const pp = { ...DEFAULTS, product: 'figure-box' as const };
+  const piezas = buildProduct({ loops: dos, detail: dos, widthMm: 116, heightMm: 20 }, pp);
+  const caja = piezas.find((x) => x.label === 'Caja');
+
+  // Se compara con la cuenta hecha a mano, no con «menos que maciza»: así salta
+  // también si sobra material por poco.
+  const r = 10;
+  const suelo = Math.min(pp.thickness, 3);
+  const anillo = Math.PI * (r * r - (r - pp.wallThickness) ** 2);
+  const esperado = 5 * (Math.PI * r * r * suelo + anillo * (pp.boxHeight - suelo));
+  const vol = caja ? volumenDe(caja.mesh) : 0;
+  const desvio = Math.abs(vol - esperado) / esperado;
+  check(
+    'la caja de figuritas sale hueca',
+    vol > 0 && desvio < 0.05,
+    `${vol.toFixed(0)} mm³ de material; la cuenta da ${esperado.toFixed(0)} (${(desvio * 100).toFixed(1)}% de desvío)`,
+  );
+
+  // Y la tapa tiene que llevar el dibujo: se pedía con altura negativa y
+  // reliefSolids devolvía vacío, así que la tapa salía lisa.
+  const tapa = piezas.find((x) => x.label === 'Tapa');
+  const lisa = buildProduct({ loops: dos, detail: [], widthMm: 116, heightMm: 20 }, pp).find(
+    (x) => x.label === 'Tapa',
+  );
+  const conTris = ((tapa?.mesh.positions.length ?? 0) / 9) | 0;
+  const sinTris = ((lisa?.mesh.positions.length ?? 0) / 9) | 0;
+  check(
+    'la tapa lleva el dibujo en relieve',
+    conTris > sinTris,
+    `${conTris} triángulos con dibujo, ${sinTris} sin él`,
+  );
+}
+
 console.log(`\n${totalTris.toLocaleString('es-ES')} triángulos en total`);
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');
 process.exitCode = failures ? 1 : 0;

@@ -225,7 +225,7 @@ export const PRODUCTS: Entry[] = [
     hint: 'Tu imagen arriba, el nombre debajo, en una pieza.',
     needsText: true,
     fields: ['textScale', 'textX', 'textY', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
-    build: (s, p) => buildKeychain(s.loops, s.detail, p, 'relief'),
+    build: (s, p) => buildKeychain(s.loops, s.detail, p, 'relief', s.textLoops),
   },
   {
     id: 'keychain-layers',

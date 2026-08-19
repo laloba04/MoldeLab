@@ -63,7 +63,12 @@ function loopsFromMask(
   return loops;
 }
 
-export function vectorize(img: ImageData, p: Params): Silhouette {
+/**
+ * `textImg` es el nombre solo, sobre el mismo lienzo y del mismo tamaño que
+ * `img`. Se traza con la misma escala y se centra con la misma caja, así que sus
+ * contornos caen exactamente encima de los del dibujo compuesto.
+ */
+export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null): Silhouette {
   const mmPerPx = p.targetWidthMm / img.width;
 
   // La silueta y el relieve pueden salir de umbrales distintos. En una foto eso
@@ -110,12 +115,19 @@ export function vectorize(img: ImageData, p: Params): Silhouette {
 
   // Todo centrado en el origen: los productos con marco, peana o púas necesitan
   // un bounding box con el que contar, y el visor lo agradece.
+  let textLoops: Loop[] | undefined;
+  if (textImg && textImg.width === img.width && textImg.height === img.height) {
+    const tb = binarize(textImg, 128, false);
+    textLoops = loopsFromMask(p.cleanup > 0 ? cleanupMask(tb, p.cleanup) : tb, p, mmPerPx, 0, 0.5);
+  }
+
   const box = boxOf(loops.length ? loops : detail);
   loops = shiftLoops(loops, -box.cx, -box.cy);
   detail = shiftLoops(detail, -box.cx, -box.cy);
   bands = bands?.map((b) => shiftLoops(b, -box.cx, -box.cy));
+  textLoops = textLoops?.length ? shiftLoops(textLoops, -box.cx, -box.cy) : undefined;
 
-  return { loops, detail, bands, widthMm: box.w, heightMm: box.h };
+  return { loops, detail, bands, textLoops, widthMm: box.w, heightMm: box.h };
 }
 
 export function buildPieces(s: Silhouette, p: Params): Piece[] {

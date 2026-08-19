@@ -56,7 +56,7 @@ function piece(
   label: string,
   role: Piece['role'],
   mesh: Mesh,
-  extra?: Pick<Piece, 'plate' | 'overlay'>,
+  extra?: Pick<Piece, 'plate' | 'overlay' | 'textMesh'>,
 ): Piece[] {
   return mesh.positions.length ? [{ id, label, role, mesh, ...extra }] : [];
 }
@@ -528,6 +528,7 @@ export function buildKeychain(
   detail: Loop[],
   p: Params,
   variant: 'silhouette' | 'relief' | 'cutout' | 'plate',
+  textLoops?: Loop[],
 ): Piece[] {
   const ring = ringAt(loops, p);
   const extras: Mesh[] = [
@@ -584,10 +585,31 @@ export function buildKeychain(
   }
 
   const overlay = merge(...extras);
-  return piece('keychain', 'Llavero', 'body', merge(solid(base, 0, p.thickness), overlay), {
-    plate: { regions: base, zLo: 0, zHi: p.thickness },
-    overlay,
-  });
+
+  // El nombre, levantado un escalón POR ENCIMA del dibujo.
+  //
+  // A la misma altura no se distingue: no queda encima, queda fundido con las
+  // líneas, porque las dos cosas salen del mismo relieve. La única alternativa
+  // era abrirle un hueco alrededor, o sea borrar los adornos que lo rodean. Con
+  // el escalón se lee sin borrar nada.
+  //
+  // Arranca en la placa, no en lo alto del relieve: así las letras son macizas
+  // de abajo arriba y se apoyan en algo, en vez de flotar sobre las líneas.
+  const nombre = textLoops?.length
+    ? merge(...reliefSolids(textLoops, p, p.thickness - 0.01, p.reliefHeight * 2.2))
+    : undefined;
+
+  return piece(
+    'keychain',
+    'Llavero',
+    'body',
+    merge(solid(base, 0, p.thickness), overlay, nombre ?? emptyMesh()),
+    {
+      plate: { regions: base, zLo: 0, zHi: p.thickness },
+      overlay,
+      textMesh: nombre?.positions.length ? nombre : undefined,
+    },
+  );
 }
 
 export function buildTag(loops: Loop[], detail: Loop[], p: Params, round: boolean): Piece[] {

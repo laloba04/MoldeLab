@@ -13,6 +13,18 @@ export interface Silhouette {
   detail: Loop[];
   /** Bandas por umbral, de más clara a más oscura. Solo para productos en capas. */
   bands?: Loop[][];
+  /**
+   * El nombre, aparte del resto del dibujo.
+   *
+   * Va en su propia lista porque se levanta MÁS ALTO. Puesto a la misma altura
+   * que el dibujo no se distingue —no queda encima, queda fundido con él— y la
+   * única forma de leerlo era abrir un hueco alrededor, o sea borrar adornos.
+   * Con un escalón de altura se lee sin borrar nada.
+   *
+   * Está en las mismas coordenadas que `loops` y `detail`: se traza con la misma
+   * escala y se centra con la misma caja.
+   */
+  textLoops?: Loop[];
   widthMm: number;
   heightMm: number;
 }
@@ -43,6 +55,15 @@ export interface Piece {
   /** Sólidos montados sobre la placa (relieve, anillas). Se conservan tal cual
    *  cuando la placa se reconstruye. */
   overlay?: Mesh;
+  /**
+   * El nombre, levantado por encima del dibujo y con su propio color.
+   *
+   * Va aparte del `overlay` por las dos cosas a la vez: se extruye más alto —a
+   * la misma altura no se distingue del dibujo, queda fundido con él— y se pinta
+   * distinto. Siempre es la ÚLTIMA cola de `mesh`, detrás del overlay, que es
+   * como el visor y el 3MF reparten los colores.
+   */
+  textMesh?: Mesh;
   /** La pieza no admite marca de agua de ningún tipo (p. ej. el puzzle o el
    *  articulado, donde cualquier marca soldaría las partes móviles). */
   noMark?: boolean;

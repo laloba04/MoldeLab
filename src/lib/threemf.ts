@@ -29,22 +29,24 @@ import type { Piece } from '../types';
 
 interface Indexed {
   verts: string[]; // "x y z" ya formateados
-  tris: [number, number, number, boolean][]; // a, b, c, esRelieve
+  tris: [number, number, number, number][]; // a, b, c, capa (0 cuerpo, 1 relieve, 2 nombre)
 }
 
 /** 1 µm de cuantización: por debajo de cualquier impresora y del float32 del STL. */
 const q = (v: number) => Math.round(v * 1000) / 1000;
 
 /**
- * Suelda los vértices de la malla y marca cada triángulo como relieve o no.
- * Los triángulos cuyo primer float está en `overlayStart` o más allá son el
- * relieve (el dibujo); como cada pieza se construye siempre como
- * `merge(base, overlay)`, el relieve es justo la cola de `positions`.
+ * Suelda los vértices y dice a qué capa pertenece cada triángulo: 0 el cuerpo,
+ * 1 el relieve, 2 el nombre.
+ *
+ * Va por posición dentro de `positions` porque cada pieza se construye siempre
+ * como `merge(cuerpo, relieve, nombre)`: el relieve y el nombre son las dos
+ * colas, en ese orden.
  */
-function weld(positions: number[], overlayStart: number): Indexed {
+function weld(positions: number[], overlayStart: number, textStart: number): Indexed {
   const index = new Map<string, number>();
   const verts: string[] = [];
-  const tris: [number, number, number, boolean][] = [];
+  const tris: [number, number, number, number][] = [];
   const p = positions;
 
   const idOf = (i: number): number => {
@@ -64,7 +66,8 @@ function weld(positions: number[], overlayStart: number): Indexed {
     const c = idOf(i + 6);
     // Un triángulo que la cuantización ha dejado con dos vértices iguales ya no
     // aporta superficie: fuera.
-    if (a !== b && b !== c && a !== c) tris.push([a, b, c, i >= overlayStart]);
+    if (a !== b && b !== c && a !== c)
+      tris.push([a, b, c, i >= textStart ? 2 : i >= overlayStart ? 1 : 0]);
   }
   return { verts, tris };
 }
@@ -78,7 +81,7 @@ const hex = (h: string) => `#${h.replace('#', '').toUpperCase().slice(0, 6).padE
  * Todas las piezas en UN archivo .3mf. `colors` activa el pintado de Bambu:
  * placa = filamento 1 (fondo), relieve = filamento 2 (trazo).
  */
-export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): Blob {
+export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string; text?: string }): Blob {
   const objects: string[] = [];
   const items: string[] = [];
 
@@ -90,11 +93,15 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
   // caso de «todo de un color»— declararlo igual haría que el laminador pidiera
   // un segundo filamento para pintar cero triángulos.
   const hasTrace = pieces.some((pc) => pc.overlay?.positions.length);
+  const hasText = pieces.some((pc) => pc.textMesh?.positions.length);
   const palette: string[] = colors
     ? hasTrace
       ? [hex(colors.bg), hex(colors.trace)]
       : [hex(colors.bg)]
     : [];
+  // El nombre solo entra en la paleta si de verdad hay nombre: declarar un color
+  // que no pinta nada hace que el laminador pida un filamento de más.
+  const textIdx = colors && hasText && colors.text ? (palette.push(hex(colors.text)), palette.length - 1) : 1;
   const idxOf = (c?: string): number => {
     if (!colors || !c) return 0;
     const h = hex(c);
@@ -106,9 +113,13 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
 
   pieces.forEach((pc, idx) => {
     const id = idx + 1;
+    const textLen = pc.textMesh?.positions.length ?? 0;
+    const textStart = colors && textLen ? pc.mesh.positions.length - textLen : Infinity;
     const overlayStart =
-      colors && pc.overlay ? pc.mesh.positions.length - pc.overlay.positions.length : Infinity;
-    const { verts, tris } = weld(pc.mesh.positions, overlayStart);
+      colors && pc.overlay
+        ? pc.mesh.positions.length - textLen - pc.overlay.positions.length
+        : Infinity;
+    const { verts, tris } = weld(pc.mesh.positions, overlayStart, textStart);
 
     const vx = verts
       .map((v) => {
@@ -120,9 +131,9 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string }): 
     // (fondo) y el relieve al color 1 (trazo). Bambu lo lee como colores reales.
     const baseIdx = idxOf(pc.tint);
     const tr = tris
-      .map(([a, b, c, relieve]) =>
+      .map(([a, b, c, capa]) =>
         colors
-          ? `<triangle v1="${a}" v2="${b}" v3="${c}" pid="1" p1="${relieve ? 1 : baseIdx}"/>`
+          ? `<triangle v1="${a}" v2="${b}" v3="${c}" pid="1" p1="${capa === 2 ? textIdx : capa === 1 ? 1 : baseIdx}"/>`
           : `<triangle v1="${a}" v2="${b}" v3="${c}"/>`,
       )
       .join('');

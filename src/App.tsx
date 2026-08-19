@@ -6,7 +6,7 @@ import { buildPieces, vectorize } from './lib/pipeline';
 import { byId } from './lib/catalog';
 import { boxOf } from './lib/shapes';
 import { ringHandle } from './lib/generators/catalog-parts';
-import { arcTextImage, imageWithText, qrImage, textImage, textLayout } from './lib/sources';
+import { arcTextImage, imageWithText, qrImage, textImage, textLayout, textOnlyImage } from './lib/sources';
 import { toStl } from './lib/stl';
 import { toObj, toSvg, zipFiles } from './lib/formats';
 import { isEmbedded, saveBlob } from './lib/save';
@@ -77,6 +77,7 @@ export default function App() {
   // Colores del visor y del 3MF: fondo = placa, trazo = relieve.
   const [bgColor, setBgColor] = useState('#e4d5c1');
   const [traceColor, setTraceColor] = useState('#8a5038');
+  const [textColor, setTextColor] = useState('#1bc5d4');
   // Colores de las capas (productos «en capas de color»), elegibles uno a uno.
   const [layerColors, setLayerColors] = useState<string[]>([
     '#e4d5c1',
@@ -161,6 +162,8 @@ export default function App() {
   // La fuente real del pipeline: la imagen subida, texto rasterizado, la
   // mezcla de ambos, o un QR. Se recalcula solo cuando cambian sus entradas.
   const [source, setSource] = useState<ImageData | null>(null);
+  // El nombre solo, en el mismo lienzo: es lo que permite levantarlo aparte.
+  const [textSource, setTextSource] = useState<ImageData | null>(null);
   const product = byId(params.product);
 
   useEffect(() => {
@@ -193,7 +196,15 @@ export default function App() {
     const timer = setTimeout(async () => {
       try {
         const composed = await compose();
-        if (alive) setSource(composed);
+        if (!alive) return;
+        setSource(composed);
+        // Y aparte, el nombre solo: el generador lo necesita para levantarlo por
+        // encima del dibujo en vez de dejarlo fundido con él.
+        setTextSource(
+          product.id === 'keychain-image-text' && img && params.textContent.trim()
+            ? textOnlyImage(img, params.textContent, params.textScale, params.textX / 100, params.textY / 100)
+            : null,
+        );
       } catch {
         if (alive) setError('No se ha podido componer la fuente.');
       }
@@ -231,7 +242,7 @@ export default function App() {
     setComputing(true);
     const t = setTimeout(() => {
       try {
-        setSilhouette(vectorize(source, params));
+        setSilhouette(vectorize(source, params, textSource));
         setError(null);
       } catch {
         setError('El contorno ha salido roto. Sube el umbral o la limpieza.');
@@ -240,7 +251,7 @@ export default function App() {
     }, 60);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, vecKey]);
+  }, [source, textSource, vecKey]);
 
   // Mallar es barato: se rehace con cada slider. Aquí se apaga el aviso, cuando
   // la silueta ya está vectorizada y las piezas construidas.
@@ -441,7 +452,7 @@ export default function App() {
       files[fn] = new Uint8Array(await blob.arrayBuffer());
     };
 
-    if (dlFmts.has('3mf')) await add(`${name}.3mf`, to3mf(forExport, { bg: bgColor, trace: traceColor }));
+    if (dlFmts.has('3mf')) await add(`${name}.3mf`, to3mf(forExport, { bg: bgColor, trace: traceColor, text: textColor }));
     if (dlFmts.has('obj')) await add(`${name}.obj`, toObj(forExport.map((p) => ({ name: p.label, mesh: p.mesh }))));
     if (dlFmts.has('svg') && silhouette) await add(`${name}.svg`, toSvg(silhouette.loops));
     if (dlFmts.has('stl')) {
@@ -671,6 +682,16 @@ export default function App() {
                   />
                   <span>Trazo (el dibujo)</span>
                 </label>
+                {marked.some((pc) => pc.textMesh?.positions.length) && (
+                  <label className="color-row">
+                    <input
+                      type="color"
+                      value={textColor}
+                      onChange={(e) => setTextColor(e.target.value)}
+                    />
+                    <span>El nombre</span>
+                  </label>
+                )}
               </>
             )}
             {oneColor && (
@@ -799,6 +820,7 @@ export default function App() {
               mark={markOn ? mark : null}
               bgColor={bgColor}
               traceColor={traceColor}
+              textColor={textColor}
               hideTrace={hideTrace}
               viewMode={viewMode}
               oneColor={oneColor}

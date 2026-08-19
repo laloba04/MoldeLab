@@ -133,6 +133,7 @@ function PieceMesh({
   offset,
   bgColor,
   traceColor,
+  textColor,
   hideTrace,
   viewMode,
   oneColor,
@@ -141,6 +142,7 @@ function PieceMesh({
   offset: number;
   bgColor: string;
   traceColor: string;
+  textColor: string;
   hideTrace: boolean;
   viewMode: ViewMode;
   oneColor: boolean;
@@ -155,16 +157,22 @@ function PieceMesh({
       ? '#1bc5d4'
       : (piece.tint ?? bgColor);
   const overlayLen = piece.overlay?.positions.length ?? 0;
+  // El nombre es la ÚLTIMA cola de la malla, detrás del relieve.
+  const textLen = piece.textMesh?.positions.length ?? 0;
 
-  // Con «ocultar trazo» se pinta solo la placa: la cola de posiciones (el
-  // relieve) se recorta, porque va fusionada dentro de piece.mesh.
+  // Con «ocultar trazo» se pinta solo la placa: las colas de posiciones (el
+  // relieve y el nombre) se recortan, porque van fusionadas dentro de piece.mesh.
   const baseGeom = useMemo(() => {
     const p = piece.mesh.positions;
-    return geomOf(hideTrace && overlayLen ? p.slice(0, p.length - overlayLen) : p);
-  }, [piece.mesh, hideTrace, overlayLen]);
+    return geomOf(hideTrace && overlayLen + textLen ? p.slice(0, p.length - overlayLen - textLen) : p);
+  }, [piece.mesh, hideTrace, overlayLen, textLen]);
   const overlayGeom = useMemo(
     () => (!hideTrace && overlayLen ? geomOf(piece.overlay!.positions) : null),
     [piece.overlay, hideTrace, overlayLen],
+  );
+  const textGeom = useMemo(
+    () => (!hideTrace && textLen ? geomOf(piece.textMesh!.positions) : null),
+    [piece.textMesh, hideTrace, textLen],
   );
 
   const ref = useRef<THREE.Group>(null);
@@ -203,6 +211,21 @@ function PieceMesh({
           />
         </mesh>
       )}
+      {/* Y el nombre encima de todo, con su propio color. */}
+      {textGeom && (
+        <mesh geometry={textGeom} castShadow>
+          <meshStandardMaterial
+            color={oneColor ? bgColor : textColor}
+            metalness={0.15}
+            roughness={0.5}
+            side={THREE.DoubleSide}
+            polygonOffset
+            polygonOffsetFactor={-3}
+            polygonOffsetUnits={-3}
+            {...extra}
+          />
+        </mesh>
+      )}
     </group>
   );
 }
@@ -213,6 +236,7 @@ export function Viewer({
   mark,
   bgColor,
   traceColor,
+  textColor = '#1bc5d4',
   hideTrace = false,
   viewMode = 'solid',
   oneColor = false,
@@ -227,6 +251,8 @@ export function Viewer({
   mark?: string | null;
   bgColor: string;
   traceColor: string;
+  /** Color del nombre levantado, en «Llavero imagen + texto». */
+  textColor?: string;
   hideTrace?: boolean;
   viewMode?: ViewMode;
   oneColor?: boolean;
@@ -302,6 +328,7 @@ export function Viewer({
           offset={exploded && pieces.length > 1 ? (i - (pieces.length - 1) / 2) * span : 0}
           bgColor={bgColor}
           traceColor={traceColor}
+          textColor={textColor}
           hideTrace={hideTrace}
           viewMode={viewMode}
           oneColor={oneColor}

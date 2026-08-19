@@ -9,8 +9,6 @@
  * aquí: alimentan los generadores con máscaras sintéticas.
  */
 
-import { binarize, fillEnclosed, type Mask } from './image';
-
 const W = 900; // ancho de trabajo; el alto se calcula
 
 function makeCanvas(w: number, h: number) {
@@ -117,98 +115,6 @@ function inkBottomCenter(img: ImageData, colFrac = 0.4): number {
     }
   }
   return height;
-}
-
-/** Encoge una máscara `r` píxeles. Dos pasadas de mínimo, una por eje: sale lo
- *  mismo que un círculo y cuesta lo que una línea. */
-function encoger(m: Mask, r: number): Mask {
-  const { w, h } = m;
-  const a = new Uint8Array(w * h);
-  const b = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      let on = 1;
-      for (let d = -r; d <= r && on; d++) {
-        const xx = x + d;
-        if (xx < 0 || xx >= w || !m.data[y * w + xx]) on = 0;
-      }
-      a[y * w + x] = on;
-    }
-  }
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      let on = 1;
-      for (let d = -r; d <= r && on; d++) {
-        const yy = y + d;
-        if (yy < 0 || yy >= h || !a[yy * w + x]) on = 0;
-      }
-      b[y * w + x] = on;
-    }
-  }
-  return { data: b, w, h };
-}
-
-/**
- * Abre un hueco alrededor del nombre, SOLO por dentro de la figura.
- *
- * Sin hueco, un nombre puesto sobre un dibujo de líneas no se lee: las dos cosas
- * se levantan a la misma altura, así que no queda encima, queda mezclado.
- *
- * Y el hueco no puede abrirse a lo bruto. La primera versión borraba un anillo
- * sin mirar dónde: cuando ese anillo cruzaba el CONTORNO EXTERIOR del dibujo, la
- * silueta dejaba de cerrar, el relleno se escapaba y el llavero salía sin placa,
- * en puras líneas sueltas. Aquí se calcula antes qué es «dentro» —la silueta
- * rellena, encogida un margen— y no se borra ni un píxel fuera de ahí. El
- * contorno queda intacto por construcción, así que la pieza no se puede romper.
- */
-function limpiarAlrededor(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  texto: string,
-  cx: number,
-  cy: number,
-  px: number,
-): void {
-  // Lo justo para que se note el escalón y no un milímetro más: el hueco solo
-  // tiene que separar las letras de las líneas, no despejar media figura. Con
-  // uno ancho el nombre se lee, sí, pero se lleva por delante los adornos de
-  // alrededor y la pieza pierde la gracia.
-  const halo = Math.max(6, px * 0.1);
-  const margen = Math.ceil(Math.max(5, px * 0.14));
-
-  const lienzo = ctx.getImageData(0, 0, w, h);
-  const dentro = encoger(fillEnclosed(binarize(lienzo, 128, false)), margen);
-
-  // Dónde borrar: las letras engordadas el ancho del halo.
-  const off = document.createElement('canvas');
-  off.width = w;
-  off.height = h;
-  const o = off.getContext('2d', { willReadFrequently: true })!;
-  o.fillStyle = '#fff';
-  o.fillRect(0, 0, w, h);
-  o.font = ctx.font;
-  o.textAlign = 'center';
-  o.textBaseline = 'middle';
-  o.lineJoin = 'round';
-  o.lineCap = 'round';
-  o.strokeStyle = '#000';
-  o.fillStyle = '#000';
-  o.lineWidth = halo * 2;
-  o.strokeText(texto, cx, cy);
-  o.fillText(texto, cx, cy);
-  const anillo = binarize(o.getImageData(0, 0, w, h), 128, false);
-
-  const d = lienzo.data;
-  for (let i = 0; i < dentro.data.length; i++) {
-    if (!anillo.data[i] || !dentro.data[i]) continue;
-    const j = i * 4;
-    d[j] = 255;
-    d[j + 1] = 255;
-    d[j + 2] = 255;
-    d[j + 3] = 255;
-  }
-  ctx.putImageData(lienzo, 0, 0);
 }
 
 /**
@@ -332,20 +238,45 @@ export function imageWithText(
     ctx.fillStyle = '#000';
     ctx.fillText(t, shiftX + textCx, textCy + shift);
   } else {
-    // Encima de la figura se le abre un hueco alrededor: un anillo de dibujo
-    // borrado para que el nombre no se mezcle con las líneas.
-    //
-    // Solo se borra POR DENTRO de la figura, y con margen respecto a su
-    // contorno. Eso es lo importante: la primera versión borraba a lo bruto, el
-    // anillo cruzaba el contorno exterior, la silueta dejaba de cerrar y el
-    // llavero se quedaba sin placa, en puras líneas sueltas. Aquí se calcula
-    // antes qué es «dentro» y no se toca ni un píxel fuera de ahí.
-    limpiarAlrededor(ctx, c.width, c.height, t, shiftX + textCx, textCy + shift, px);
+    // Encima de la figura el nombre no lleva ningún tratamiento especial: se
+    // dibuja y punto. Lo que lo hace legible es que después se levanta un
+    // escalón por encima del dibujo (ver `textOnlyImage` y buildKeychain), no
+    // que se despeje el sitio. Antes se le borraba un hueco alrededor y eso se
+    // llevaba por delante los adornos que lo rodean.
     ctx.fillStyle = '#000';
     ctx.fillText(t, shiftX + textCx, textCy + shift);
   }
 
 
+  return ctx.getImageData(0, 0, c.width, c.height);
+}
+
+/**
+ * El nombre solo, sobre un lienzo del mismo tamaño y en el mismo sitio que en la
+ * imagen compuesta.
+ *
+ * Sirve para que el generador sepa cuál de los trazos es el nombre y pueda
+ * levantarlo más alto que el dibujo. Comparte con `imageWithText` la función que
+ * calcula la posición, así que los contornos caen exactamente encima; si cada
+ * uno hiciera su cuenta, el nombre saldría levantado en un sitio y dibujado en
+ * otro.
+ */
+export function textOnlyImage(
+  img: ImageData,
+  text: string,
+  scale: number,
+  tx = 0,
+  ty = 0,
+): ImageData | null {
+  const L = textLayout(img, text, scale, tx, ty);
+  if (!L.t) return null;
+
+  const { c, ctx } = makeCanvas(L.cw, L.ch);
+  ctx.font = FONT.replace('%s', String(L.px));
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#000';
+  ctx.fillText(L.t, L.shiftX + L.textCx, L.textCy + L.shift);
   return ctx.getImageData(0, 0, c.width, c.height);
 }
 

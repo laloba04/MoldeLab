@@ -581,6 +581,23 @@ console.log('');
 
   check('llavero de texto: dos palabras salen de una pieza', sueltos.length === 0,
     sueltos.join('; ') || 'de 4 a 35 mm de espacio, siempre una');
+
+  // Y lo mismo con un dibujo de formas separadas, sea cual sea la variante: un
+  // llavero cuelga de una anilla, así que si algo queda suelto se cae.
+  const tresFormas: Loop[] = [
+    { pts: circleOf(0, 25, 18), hole: false },
+    { pts: circleOf(-22, -18, 10), hole: false },
+    { pts: circleOf(22, -18, 10), hole: false },
+  ];
+  const rotos: string[] = [];
+  for (const id of ['keychain-silhouette', 'keychain-relief', 'keychain-image-text'] as const) {
+    const p = { ...DEFAULTS, product: id };
+    const pz = buildProduct({ loops: tresFormas, detail: tresFormas, widthMm: 64, heightMm: 71 }, p)[0];
+    const n = pz?.plate?.regions.length ?? 0;
+    if (n !== 1) rotos.push(`${id}: ${n} trozos`);
+  }
+  check('llaveros: un dibujo de tres formas sale de una pieza', rotos.length === 0,
+    rotos.join('; ') || 'las tres variantes, una sola región');
 }
 
 console.log(`\n${totalTris.toLocaleString('es-ES')} triángulos en total`);

@@ -4,16 +4,18 @@ import { Grid, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Piece } from '../types';
 
-/** Punto arrastrable: la anilla del llavero. Se mueve sobre el plano de arriba
- *  (z constante) y avisa a App de las nuevas coordenadas en mm. */
+/** Punto arrastrable sobre el plano de arriba (z constante). Avisa a App de las
+ *  nuevas coordenadas en mm. Lo usan la anilla y el nombre. */
 function DragHandle({
   ring,
   onMove,
   onDragChange,
+  color = '#ffcf3f',
 }: {
   ring: { x: number; y: number; z: number };
   onMove: (x: number, y: number) => void;
   onDragChange: (d: boolean) => void;
+  color?: string;
 }) {
   const { camera, gl } = useThree();
   const dragging = useRef(false);
@@ -65,7 +67,7 @@ function DragHandle({
       onPointerOut={() => (gl.domElement.style.cursor = '')}
     >
       <sphereGeometry args={[3, 20, 20]} />
-      <meshBasicMaterial color="#ffcf3f" depthTest={false} transparent opacity={0.92} />
+      <meshBasicMaterial color={color} depthTest={false} transparent opacity={0.92} />
     </mesh>
   );
 }
@@ -217,6 +219,8 @@ export function Viewer({
   flipped = false,
   ring = null,
   onRingMove,
+  text = null,
+  onTextMove,
 }: {
   pieces: Piece[];
   exploded: boolean;
@@ -230,6 +234,9 @@ export function Viewer({
   flipped?: boolean;
   ring?: { x: number; y: number; z: number } | null;
   onRingMove?: (x: number, y: number) => void;
+  /** Tirador del nombre, en los productos que llevan texto sobre la imagen. */
+  text?: { x: number; y: number; z: number } | null;
+  onTextMove?: (x: number, y: number) => void;
 }) {
   const [dragging, setDragging] = useState(false);
   // Las piezas se separan en fila, no en montón.
@@ -303,6 +310,9 @@ export function Viewer({
 
       {ring && onRingMove && (
         <DragHandle ring={ring} onMove={onRingMove} onDragChange={setDragging} />
+      )}
+      {text && onTextMove && (
+        <DragHandle ring={text} onMove={onTextMove} onDragChange={setDragging} color="#1bc5d4" />
       )}
 
       <FlipCamera flipped={flipped} />

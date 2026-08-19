@@ -6,7 +6,7 @@ import { buildPieces, vectorize } from './lib/pipeline';
 import { byId } from './lib/catalog';
 import { boxOf } from './lib/shapes';
 import { ringHandle } from './lib/generators/catalog-parts';
-import { arcTextImage, imageWithText, qrImage, textImage } from './lib/sources';
+import { arcTextImage, imageWithText, qrImage, textImage, textLayout } from './lib/sources';
 import { toStl } from './lib/stl';
 import { toObj, toSvg, zipFiles } from './lib/formats';
 import { isEmbedded, saveBlob } from './lib/save';
@@ -178,7 +178,8 @@ export default function App() {
         // del dibujo, y el filtro de islas pequeñas se las comía.
         if (product.id === 'keychain-image-text') {
           if (img && t.trim())
-            return imageWithText(img, t, params.textScale, params.textX, params.textY);
+            // Los deslizadores van en %, la función en fracción.
+            return imageWithText(img, t, params.textScale, params.textX / 100, params.textY / 100);
           if (img) return img;
         }
         if (!t.trim()) return img;
@@ -351,6 +352,70 @@ export default function App() {
       },
     };
   }, [silhouette, params, marked.length]);
+
+  // Tirador del nombre: el mismo gesto que la anilla, pero para el texto.
+  //
+  // Va donde está el nombre DE VERDAD, no donde diga una aproximación. Antes lo
+  // colocaba a ojo desde la caja de la pieza y aparecía muy por debajo, flotando
+  // fuera del llavero, porque esa caja ya incluye el propio nombre.
+  //
+  // La cuenta buena: el nombre se compone en un lienzo, `textLayout` dice en qué
+  // píxel de ese lienzo cae, y el pipeline lo pasa a milímetros con una regla de
+  // tres —el ancho pedido entre el ancho del lienzo— centrando luego en la caja
+  // de tinta. Se rehace ese mismo camino, así que el tirador cae sobre la
+  // palabra.
+  const textDrag = useMemo(() => {
+    const prod = byId(params.product);
+    if (!silhouette || !source || !img || !prod.fields.includes('textX') || marked.length !== 1)
+      return null;
+    if (!params.textContent.trim()) return null;
+
+    const L = textLayout(img, params.textContent, params.textScale, params.textX / 100, params.textY / 100);
+    const mmPerPx = params.targetWidthMm / source.width;
+
+    // Centro de la caja de tinta del lienzo: es el punto que el pipeline lleva
+    // al origen al centrar la pieza.
+    const d = source.data;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let y = 0; y < source.height; y++) {
+      for (let x = 0; x < source.width; x++) {
+        const i = (y * source.width + x) * 4;
+        if (d[i + 3] > 40 && (d[i] + d[i + 1] + d[i + 2]) / 3 < 150) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (!Number.isFinite(minX)) return null;
+    const inkCx = (minX + maxX) / 2;
+    const inkCy = (minY + maxY) / 2;
+
+    const ax = L.textCx + L.shiftX;
+    const ay = L.textCy + L.shift;
+
+    return {
+      pos: {
+        x: (ax - inkCx) * mmPerPx,
+        y: -(ay - inkCy) * mmPerPx,
+        z: params.thickness,
+      },
+      move: (wx: number, wy: number) => {
+        // Del mundo al lienzo, y de ahí a los porcentajes que guardan los
+        // deslizadores. Se usa el desplazamiento actual del lienzo: como el
+        // arrastre va paso a paso, se recalcula en cada movimiento y converge.
+        const nax = wx / mmPerPx + inkCx;
+        const nay = -wy / mmPerPx + inkCy;
+        // textCx = 900/2 + tx * (900/2)  ->  se despeja tx.
+        const ntx = ((nax - L.shiftX - 450) / 450) * 100;
+        const base = L.imgH + 20 + L.textH / 2;
+        const nty = (((nay - L.shift) - base) / (L.textH * 1.5)) * 100;
+        const clamp = (v: number) => Math.max(-100, Math.min(100, Math.round(v / 5) * 5));
+        setParams((prev) => ({ ...prev, textX: clamp(ntx), textY: clamp(nty) }));
+      },
+    };
+  }, [silhouette, source, img, params, marked.length]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -740,6 +805,8 @@ export default function App() {
               flipped={flipped}
               ring={ringDrag?.pos ?? null}
               onRingMove={ringDrag?.move}
+              text={textDrag?.pos ?? null}
+              onTextMove={textDrag?.move}
             />
             <div className="hud">
               {pieces.length > 1 && (

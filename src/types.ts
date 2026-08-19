@@ -236,8 +236,8 @@ export interface Params {
   // Fuentes: texto y QR (se consumen ANTES del pipeline, en la composición)
   textContent: string;
   textScale: number;
-  textX: number; // desplazamiento horizontal del texto (−1 izq … 1 der)
-  textY: number; // desplazamiento vertical del texto (−1 arriba … 1 abajo)
+  textX: number; // desplazamiento horizontal del texto, en % (−100 izq … 100 der)
+  textY: number; // desplazamiento vertical del texto, en % (−100 arriba … 100 abajo)
   textCurve: number;
   qrContent: string;
 
@@ -446,8 +446,10 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   textContent: { toggle: true, label: '' },
   qrContent: { toggle: true, label: '' },
   textScale: { label: 'Tamaño del texto', unit: '%', min: 25, max: 100, step: 5 },
-  textX: { label: 'Mover texto ↔', unit: '', min: -1, max: 1, step: 0.05 },
-  textY: { label: 'Mover texto ↕', unit: '', min: -1, max: 1, step: 0.05 },
+  // En porcentaje y no en milímetros: el desplazamiento es relativo al tamaño
+  // de la pieza, así que al cambiar el tamaño el texto se queda donde estaba.
+  textX: { label: 'Mover texto ↔', unit: '%', min: -100, max: 100, step: 5 },
+  textY: { label: 'Mover texto ↕', unit: '%', min: -100, max: 100, step: 5 },
   textCurve: { label: 'Curvatura', unit: '°', min: 10, max: 180, step: 5 },
 
   layers: { label: 'Capas', min: 2, max: 4, step: 1 },

@@ -9,6 +9,8 @@
  * aquí: alimentan los generadores con máscaras sintéticas.
  */
 
+import { binarize, fillEnclosed, type Mask } from './image';
+
 const W = 900; // ancho de trabajo; el alto se calcula
 
 function makeCanvas(w: number, h: number) {
@@ -117,6 +119,160 @@ function inkBottomCenter(img: ImageData, colFrac = 0.4): number {
   return height;
 }
 
+/** Encoge una máscara `r` píxeles. Dos pasadas de mínimo, una por eje: sale lo
+ *  mismo que un círculo y cuesta lo que una línea. */
+function encoger(m: Mask, r: number): Mask {
+  const { w, h } = m;
+  const a = new Uint8Array(w * h);
+  const b = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let on = 1;
+      for (let d = -r; d <= r && on; d++) {
+        const xx = x + d;
+        if (xx < 0 || xx >= w || !m.data[y * w + xx]) on = 0;
+      }
+      a[y * w + x] = on;
+    }
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let on = 1;
+      for (let d = -r; d <= r && on; d++) {
+        const yy = y + d;
+        if (yy < 0 || yy >= h || !a[yy * w + x]) on = 0;
+      }
+      b[y * w + x] = on;
+    }
+  }
+  return { data: b, w, h };
+}
+
+/**
+ * Abre un hueco alrededor del nombre, SOLO por dentro de la figura.
+ *
+ * Sin hueco, un nombre puesto sobre un dibujo de líneas no se lee: las dos cosas
+ * se levantan a la misma altura, así que no queda encima, queda mezclado.
+ *
+ * Y el hueco no puede abrirse a lo bruto. La primera versión borraba un anillo
+ * sin mirar dónde: cuando ese anillo cruzaba el CONTORNO EXTERIOR del dibujo, la
+ * silueta dejaba de cerrar, el relleno se escapaba y el llavero salía sin placa,
+ * en puras líneas sueltas. Aquí se calcula antes qué es «dentro» —la silueta
+ * rellena, encogida un margen— y no se borra ni un píxel fuera de ahí. El
+ * contorno queda intacto por construcción, así que la pieza no se puede romper.
+ */
+function limpiarAlrededor(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  texto: string,
+  cx: number,
+  cy: number,
+  px: number,
+): void {
+  // Lo justo para que se note el escalón y no un milímetro más: el hueco solo
+  // tiene que separar las letras de las líneas, no despejar media figura. Con
+  // uno ancho el nombre se lee, sí, pero se lleva por delante los adornos de
+  // alrededor y la pieza pierde la gracia.
+  const halo = Math.max(6, px * 0.1);
+  const margen = Math.ceil(Math.max(5, px * 0.14));
+
+  const lienzo = ctx.getImageData(0, 0, w, h);
+  const dentro = encoger(fillEnclosed(binarize(lienzo, 128, false)), margen);
+
+  // Dónde borrar: las letras engordadas el ancho del halo.
+  const off = document.createElement('canvas');
+  off.width = w;
+  off.height = h;
+  const o = off.getContext('2d', { willReadFrequently: true })!;
+  o.fillStyle = '#fff';
+  o.fillRect(0, 0, w, h);
+  o.font = ctx.font;
+  o.textAlign = 'center';
+  o.textBaseline = 'middle';
+  o.lineJoin = 'round';
+  o.lineCap = 'round';
+  o.strokeStyle = '#000';
+  o.fillStyle = '#000';
+  o.lineWidth = halo * 2;
+  o.strokeText(texto, cx, cy);
+  o.fillText(texto, cx, cy);
+  const anillo = binarize(o.getImageData(0, 0, w, h), 128, false);
+
+  const d = lienzo.data;
+  for (let i = 0; i < dentro.data.length; i++) {
+    if (!anillo.data[i] || !dentro.data[i]) continue;
+    const j = i * 4;
+    d[j] = 255;
+    d[j + 1] = 255;
+    d[j + 2] = 255;
+    d[j + 3] = 255;
+  }
+  ctx.putImageData(lienzo, 0, 0);
+}
+
+/**
+ * Dónde acaba el nombre en el lienzo compuesto, en píxeles.
+ *
+ * Lo comparten el dibujado y el tirador de la vista 3D: si cada uno hiciera su
+ * cuenta, el tirador acabaría en un sitio y el nombre en otro — que es justo lo
+ * que pasaba cuando el tirador se calculaba «a ojo» desde la caja de la pieza.
+ */
+export function textLayout(img: ImageData, text: string, scale: number, tx = 0, ty = 0) {
+  const t = text.trim();
+  const imgW = W * 0.9;
+  const k = imgW / img.width;
+  const imgH = img.height * k;
+  const imgTop = 20;
+
+  // Dónde acaba de verdad el dibujo: la tinta más baja, no el borde de la imagen.
+  const inkY0 = imgTop + inkBottomCenter(img) * k;
+
+  const probe = makeCanvas(8, 8).ctx;
+
+  // Primer tanteo con el tamaño que se ha pedido, solo para saber DÓNDE cae.
+  const px0 = fit(probe, t, W * (scale / 100), 200);
+  const cae = (alto: number) => imgH + 20 + alto / 2 + ty * alto * 1.5;
+  const encima = cae(px0 * 1.6) - (px0 * 1.6) / 2 <= inkY0 + 2;
+
+  // Encima de la figura el nombre lleva tope de ancho.
+  //
+  // «Tamaño del texto» es el porcentaje del ancho de trabajo, y eso vale cuando
+  // el nombre va debajo, en su propia fila. Encima no: un 70% tapa la figura
+  // entera y la pieza deja de ser un elefante con un nombre para ser un cartel
+  // con orejas. Aquí se le limita a media anchura del dibujo, que es lo que mide
+  // una chapa de nombre de verdad; el deslizador sigue mandando por debajo de
+  // ese tope.
+  const px = encima ? Math.min(px0, fit(probe, t, imgW * 0.5, px0)) : px0;
+  probe.font = FONT.replace('%s', String(px));
+  const textH = px * 1.6;
+  const textW = probe.measureText(t).width;
+
+  // Posición: parte de «centrado, debajo de la imagen» y se desplaza con el
+  // control, sin tope. Puede acabar encima del dibujo, que es lo que se quiere
+  // para poner el nombre sobre la figura.
+  const textCy = cae(textH);
+  const textCx = W / 2 + tx * (W * 0.5);
+
+  // El lienzo crece por donde haga falta: a lo alto y también a lo ANCHO.
+  //
+  // Antes solo crecía a lo alto y el texto se recortaba contra los bordes
+  // laterales. El efecto era que a partir de cierto punto movías el deslizador
+  // y no pasaba nada —el texto se quedaba clavado en el borde— sin que nada lo
+  // explicara. Ahora el lienzo se estira y el deslizador siempre responde.
+  const margen = textW / 2 + 30;
+  const left = Math.min(0, textCx - margen);
+  const right = Math.max(W, textCx + margen);
+  const bottom = Math.max(imgH + textH + 60, textCy + textH / 2 + 30);
+  const top = Math.min(0, textCy - textH / 2 - 30);
+  const cw = Math.ceil(right - left);
+  const ch = Math.ceil(bottom - top);
+  const shift = -top; // todo se dibuja desplazado si el texto sube por encima
+  const shiftX = -left; // y lo mismo si se va por la izquierda
+
+  return { t, px, textH, textW, textCx, textCy, shift, shiftX, cw, ch, imgW, imgH, imgTop, k, inkY0 };
+}
+
 export function imageWithText(
   img: ImageData,
   text: string,
@@ -124,56 +280,71 @@ export function imageWithText(
   tx = 0,
   ty = 0,
 ): ImageData {
-  const t = text.trim();
+  const L = textLayout(img, text, scale, tx, ty);
+  const { t, px, textH, textW, textCx, textCy, shift, shiftX, cw, ch, imgW, imgH, imgTop, inkY0 } = L;
   if (!t) return img;
 
-  const probe = makeCanvas(8, 8).ctx;
-  const px = fit(probe, t, W * (scale / 100), 200);
-  probe.font = FONT.replace('%s', String(px));
-  const textH = px * 1.6;
-  const textW = probe.measureText(t).width;
-
-  const imgW = W * 0.9;
-  const k = imgW / img.width;
-  const imgH = img.height * k;
-  const imgTop = 20;
-
-  // Posición del texto: parte de «centrado, debajo de la imagen» y se desplaza
-  // con los deslizadores. Se recorta para no salirse del lienzo.
-  const baseCy = imgH + 20 + textH / 2;
-  const textCy = baseCy + ty * textH;
-  const half = textW / 2 + 12;
-  const textCx = Math.max(half, Math.min(W - half, W / 2 + tx * (W * 0.3)));
-
-  // El lienzo crece lo necesario para que el texto quepa lo bajes o lo subas.
-  const bottom = Math.max(imgH + textH + 60, textCy + textH / 2 + 30);
-  const top = Math.min(0, textCy - textH / 2 - 30);
-  const { c, ctx } = makeCanvas(W, Math.ceil(bottom - top));
-  const shift = -top; // todo se dibuja desplazado si el texto sube por encima
+  const { c, ctx } = makeCanvas(cw, ch);
 
   // ImageData no se puede dibujar escalado: pasa por un canvas intermedio.
   const tmp = document.createElement('canvas');
   tmp.width = img.width;
   tmp.height = img.height;
   tmp.getContext('2d')!.putImageData(img, 0, 0);
-  ctx.drawImage(tmp, (W - imgW) / 2, imgTop + shift, imgW, imgH);
+  ctx.drawImage(tmp, shiftX + (W - imgW) / 2, imgTop + shift, imgW, imgH);
 
   // Puente: une la tinta más baja del dibujo con el texto para que salgan
   // soldados en UNA pieza (si no, el texto flota o se pierde como isla suelta).
-  // Es una barra recta entre ambos, así que aguanta que el texto se mueva.
-  const inkY = imgTop + shift + inkBottomCenter(img) * k;
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = Math.max(40, px * 0.4);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(W / 2, inkY);
-  ctx.lineTo(textCx, textCy + shift);
-  ctx.stroke();
-
+  //
+  // Va desde el dibujo hasta el BORDE DE ARRIBA del texto, no hasta su centro.
+  // Antes llegaba al centro y por tanto cruzaba las letras: con el texto pegado
+  // al dibujo, esa barra se veía como un pegote atravesándolo todo. Y si el
+  // texto ya toca el dibujo no se dibuja ninguna barra, que no hace falta.
   ctx.font = FONT.replace('%s', String(px));
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(t, textCx, textCy + shift);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  const inkY = inkY0 + shift;
+  const textTop = textCy + shift - textH / 2;
+  const debajo = textTop > inkY + 2;
+
+  // El puente solo hace falta cuando el nombre cuelga por DEBAJO del dibujo: ahí
+  // es una isla suelta y hay que soldarla. Si cae encima, ya se apoya en la
+  // placa y no hay nada que unir.
+  //
+  // Y llega hasta el borde de ARRIBA de las letras, no hasta su centro. Antes
+  // iba al centro y cruzaba la palabra entera de lado a lado: ese era el pegote
+  // que se veía atravesando la pieza.
+  if (debajo) {
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = Math.max(22, px * 0.28);
+    ctx.beginPath();
+    ctx.moveTo(shiftX + W / 2, inkY);
+    ctx.lineTo(shiftX + textCx, textTop + textH * 0.22);
+    ctx.stroke();
+  }
+
+  if (debajo) {
+    // Colgando por debajo, el nombre va en tinta y se levanta en relieve sobre
+    // la placa lisa: se lee solo.
+    ctx.fillStyle = '#000';
+    ctx.fillText(t, shiftX + textCx, textCy + shift);
+  } else {
+    // Encima de la figura se le abre un hueco alrededor: un anillo de dibujo
+    // borrado para que el nombre no se mezcle con las líneas.
+    //
+    // Solo se borra POR DENTRO de la figura, y con margen respecto a su
+    // contorno. Eso es lo importante: la primera versión borraba a lo bruto, el
+    // anillo cruzaba el contorno exterior, la silueta dejaba de cerrar y el
+    // llavero se quedaba sin placa, en puras líneas sueltas. Aquí se calcula
+    // antes qué es «dentro» y no se toca ni un píxel fuera de ahí.
+    limpiarAlrededor(ctx, c.width, c.height, t, shiftX + textCx, textCy + shift, px);
+    ctx.fillStyle = '#000';
+    ctx.fillText(t, shiftX + textCx, textCy + shift);
+  }
+
 
   return ctx.getImageData(0, 0, c.width, c.height);
 }

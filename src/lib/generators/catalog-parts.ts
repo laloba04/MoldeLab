@@ -541,11 +541,6 @@ export function buildKeychain(
     // que las letras vecinas se tocan y forman una sola pieza con forma de la
     // palabra, no una placa rectangular. Las letras van en relieve encima.
     base = regionsOf(loops, Math.max(0.6, p.border));
-    // Con dos palabras el espacio es más ancho de lo que cierra el borde, así que
-    // se enlazan. El enlace se hace a la altura de las letras, no más fino de
-    // 2,5 mm: un llavero se lleva en el bolsillo con las llaves y un hilo de un
-    // milímetro se parte al primer tirón.
-    base = weldRegions(base, Math.max(2.5, Math.min(alturaDe(base) * 0.3, 8)));
     extras.push(...reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight));
   } else if (variant === 'cutout') {
     // El dibujo se cala en una etiqueta: se ve a través.
@@ -569,11 +564,23 @@ export function buildKeychain(
     }
   }
 
-  // La anilla se coloca donde se la arrastre, y ahí puede no llegar a tocar la
-  // pieza: con dos palabras cae justo sobre el hueco de en medio y se queda
-  // flotando. Si no la toca, se le tira un enlace.
+  // Un llavero cuelga de una anilla, así que TIENE que ser una sola pieza —da
+  // igual la variante. Si queda algo suelto se enlaza: dos palabras que el borde
+  // no llega a juntar, una letra que se queda descolgada al mover el texto, un
+  // dibujo con formas separadas. El enlace va con la altura de lo que une y
+  // nunca baja de 2,5 mm: esto se lleva en el bolsillo con las llaves, y un hilo
+  // de un milímetro se parte al primer tirón.
+  if (base.length > 1) {
+    base = weldRegions(base, Math.max(2.5, Math.min(alturaDe(base) * 0.3, 8)));
+  }
+
+  // Y la anilla se coloca donde se la arrastre, así que puede no llegar a tocar
+  // la pieza y quedarse flotando. Si no la toca, se le tira el mismo enlace.
+  // El enlace es tan ancho como la propia anilla, no un hilo: así se lee como su
+  // rabito y no como un alfiler clavado, y aguanta el tirón de las llaves. Es
+  // por donde cuelga TODA la pieza, o sea el sitio donde menos conviene ahorrar.
   if (!overlaps(base, tabReg)) {
-    base = union(base, weldBars([...base, ...tabReg], Math.max(2.5, p.ringOuter * 0.8)));
+    base = union(base, weldBars([...base, ...tabReg], p.ringOuter * 2));
   }
 
   const overlay = merge(...extras);

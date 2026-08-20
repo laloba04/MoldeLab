@@ -281,21 +281,16 @@ export function imageWithText(
     ctx.stroke();
   }
 
-  if (debajo) {
-    // Colgando por debajo, el nombre va en tinta y se levanta en relieve sobre
-    // la placa lisa: se lee solo.
-    ctx.fillStyle = '#000';
-    ctx.fillText(t, shiftX + textCx, textCy + shift);
-  } else {
-    // Encima de la figura el nombre no lleva ningún tratamiento especial: se
-    // dibuja y punto. Lo que lo hace legible es que después se levanta un
-    // escalón por encima del dibujo (ver `textOnlyImage` y buildKeychain), no
-    // que se despeje el sitio. Antes se le borraba un hueco alrededor y eso se
-    // llevaba por delante los adornos que lo rodean.
-    ctx.fillStyle = '#000';
-    ctx.fillText(t, shiftX + textCx, textCy + shift);
-  }
-
+  // El nombre, en tinta y con su giro. Caiga encima o debajo se dibuja igual:
+  // lo que lo hace legible sobre la figura es que luego se levanta un escalón
+  // por encima del dibujo (ver `textOnlyImage` y buildKeychain), no un trato
+  // especial aquí.
+  //
+  // Y tiene que girar EXACTAMENTE igual que en `textOnlyImage`, que es la capa
+  // que se levanta. Si uno gira y el otro no, el nombre sale por duplicado: uno
+  // tumbado y otro recto, cada uno de su color.
+  ctx.fillStyle = '#000';
+  escribirGirado(ctx, t, shiftX + textCx, textCy + shift, rad);
 
   return ctx.getImageData(0, 0, c.width, c.height);
 }

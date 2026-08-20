@@ -11,11 +11,16 @@ function DragHandle({
   onMove,
   onDragChange,
   color = '#ffcf3f',
+  radio = 2.7,
+  girar = false,
 }: {
   ring: { x: number; y: number; z: number };
   onMove: (x: number, y: number) => void;
   onDragChange: (d: boolean) => void;
   color?: string;
+  radio?: number;
+  /** Dibuja la flecha curva de girar en vez del aro de mover. */
+  girar?: boolean;
 }) {
   const { camera, gl } = useThree();
   const dragging = useRef(false);
@@ -55,10 +60,13 @@ function DragHandle({
     };
   }, [camera, gl, ring.z, onDragChange]);
 
+  const material = (
+    <meshBasicMaterial color={color} depthTest={false} transparent opacity={0.92} />
+  );
+
   return (
-    <mesh
+    <group
       position={[ring.x, ring.y, ring.z + 1.5]}
-      rotation={[0, 0, 0]}
       onPointerDown={(e) => {
         e.stopPropagation();
         dragging.current = true;
@@ -67,12 +75,29 @@ function DragHandle({
       onPointerOver={() => (gl.domElement.style.cursor = 'grab')}
       onPointerOut={() => (gl.domElement.style.cursor = '')}
     >
-      {/* Un aro y no una bola: el tirador cae justo encima de lo que mueve —el
-          nombre, la anilla— y una bola maciza lo tapa. Con el aro se ve por el
-          agujero, que es lo que hace falta para colocarlo a ojo. */}
-      <torusGeometry args={[2.7, 0.8, 10, 26]} />
-      <meshBasicMaterial color={color} depthTest={false} transparent opacity={0.92} />
-    </mesh>
+      {girar ? (
+        <>
+          {/* La flecha curva de toda la vida. Dos tiradores con la misma forma no
+              dicen cuál hace qué; esta se entiende sin explicarla. */}
+          <mesh>
+            <torusGeometry args={[radio, radio * 0.3, 8, 22, Math.PI * 1.45]} />
+            {material}
+          </mesh>
+          <mesh position={[0, -radio, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <coneGeometry args={[radio * 0.62, radio * 1.1, 12]} />
+            {material}
+          </mesh>
+        </>
+      ) : (
+        /* Un aro y no una bola: el tirador cae justo encima de lo que mueve —el
+           nombre, la anilla— y una bola maciza lo tapa. Con el aro se ve por el
+           agujero, que es lo que hace falta para colocarlo a ojo. */
+        <mesh>
+          <torusGeometry args={[radio, radio * 0.3, 10, 26]} />
+          {material}
+        </mesh>
+      )}
+    </group>
   );
 }
 
@@ -249,6 +274,8 @@ export function Viewer({
   onRingMove,
   text = null,
   onTextMove,
+  textRot = null,
+  onTextRot,
 }: {
   pieces: Piece[];
   exploded: boolean;
@@ -267,6 +294,9 @@ export function Viewer({
   /** Tirador del nombre, en los productos que llevan texto sobre la imagen. */
   text?: { x: number; y: number; z: number } | null;
   onTextMove?: (x: number, y: number) => void;
+  /** Tirador para GIRAR el nombre: orbita alrededor del anterior. */
+  textRot?: { x: number; y: number; z: number } | null;
+  onTextRot?: (x: number, y: number) => void;
 }) {
   const [dragging, setDragging] = useState(false);
   // Las piezas se separan en fila, no en montón.
@@ -344,6 +374,18 @@ export function Viewer({
       )}
       {text && onTextMove && (
         <DragHandle ring={text} onMove={onTextMove} onDragChange={setDragging} color="#1bc5d4" />
+      )}
+      {/* El de girar es más pequeño y de otro color: orbita alrededor del de
+          mover, y con los dos iguales no se sabría cuál es cuál. */}
+      {textRot && onTextRot && (
+        <DragHandle
+          ring={textRot}
+          onMove={onTextRot}
+          onDragChange={setDragging}
+          color="#a78bfa"
+          radio={2.2}
+          girar
+        />
       )}
 
       <FlipCamera flipped={flipped} />

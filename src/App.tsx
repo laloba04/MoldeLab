@@ -430,11 +430,32 @@ export default function App() {
     const ax = L.textCx + L.shiftX;
     const ay = L.textCy + L.shift;
 
+    const cx = (ax - inkCx) * mmPerPx;
+    const cy = -(ay - inkCy) * mmPerPx;
+
+    // El tirador de girar orbita alrededor del de mover, a la altura de la
+    // coronilla de las letras y un poco más allá. Con el nombre en recto queda
+    // justo encima; al girarlo, lo acompaña.
+    //
+    // El giro se cuenta como en el lienzo (a favor del reloj visto desde
+    // arriba), así que la «vertical» del nombre apunta a 90° menos el giro.
+    const radio = Math.max(9, (L.textH / 2) * mmPerPx + 6);
+    const aUp = ((90 - params.textRot) * Math.PI) / 180;
+
     return {
-      pos: {
-        x: (ax - inkCx) * mmPerPx,
-        y: -(ay - inkCy) * mmPerPx,
+      pos: { x: cx, y: cy, z: params.thickness },
+      rot: {
+        x: cx + Math.cos(aUp) * radio,
+        y: cy + Math.sin(aUp) * radio,
         z: params.thickness,
+      },
+      girar: (wx: number, wy: number) => {
+        const a = (Math.atan2(wy - cy, wx - cx) * 180) / Math.PI;
+        // El inverso: del ángulo del tirador al giro del nombre.
+        let g = Math.round((90 - a) / 5) * 5;
+        while (g > 180) g -= 360;
+        while (g < -180) g += 360;
+        setParams((prev) => ({ ...prev, textRot: g }));
       },
       move: (wx: number, wy: number) => {
         // Del mundo al lienzo, y de ahí a los porcentajes que guardan los
@@ -856,6 +877,8 @@ export default function App() {
               onRingMove={ringDrag?.move}
               text={textDrag?.pos ?? null}
               onTextMove={textDrag?.move}
+              textRot={textDrag?.rot ?? null}
+              onTextRot={textDrag?.girar}
             />
             <div className="hud">
               {pieces.length > 1 && (

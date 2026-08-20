@@ -58,6 +58,7 @@ function DragHandle({
   return (
     <mesh
       position={[ring.x, ring.y, ring.z + 1.5]}
+      rotation={[0, 0, 0]}
       onPointerDown={(e) => {
         e.stopPropagation();
         dragging.current = true;
@@ -66,7 +67,10 @@ function DragHandle({
       onPointerOver={() => (gl.domElement.style.cursor = 'grab')}
       onPointerOut={() => (gl.domElement.style.cursor = '')}
     >
-      <sphereGeometry args={[3, 20, 20]} />
+      {/* Un aro y no una bola: el tirador cae justo encima de lo que mueve —el
+          nombre, la anilla— y una bola maciza lo tapa. Con el aro se ve por el
+          agujero, que es lo que hace falta para colocarlo a ojo. */}
+      <torusGeometry args={[2.7, 0.8, 10, 26]} />
       <meshBasicMaterial color={color} depthTest={false} transparent opacity={0.92} />
     </mesh>
   );
@@ -236,7 +240,7 @@ export function Viewer({
   mark,
   bgColor,
   traceColor,
-  textColor = '#1bc5d4',
+  textColor = '#ff5fa2',
   hideTrace = false,
   viewMode = 'solid',
   oneColor = false,

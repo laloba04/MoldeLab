@@ -77,7 +77,9 @@ export default function App() {
   // Colores del visor y del 3MF: fondo = placa, trazo = relieve.
   const [bgColor, setBgColor] = useState('#e4d5c1');
   const [traceColor, setTraceColor] = useState('#8a5038');
-  const [textColor, setTextColor] = useState('#1bc5d4');
+  // Rosa glaseado y no cian: el cian es el del tirador de la vista, y un nombre
+  // del mismo color que el tirador hace que la bola parezca fondo de las letras.
+  const [textColor, setTextColor] = useState('#ff5fa2');
   // Colores de las capas (productos «en capas de color»), elegibles uno a uno.
   const [layerColors, setLayerColors] = useState<string[]>([
     '#e4d5c1',

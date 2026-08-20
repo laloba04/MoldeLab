@@ -224,7 +224,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Llavero imagen + texto',
     hint: 'Tu imagen arriba, el nombre debajo, en una pieza.',
     needsText: true,
-    fields: ['textFont', 'textScale', 'textX', 'textY', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
+    fields: ['textFont', 'textScale', 'textRot', 'textX', 'textY', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'relief', s.textLoops),
   },
   {

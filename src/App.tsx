@@ -203,7 +203,7 @@ export default function App() {
         if (product.id === 'keychain-image-text') {
           if (img && t.trim())
             // Los deslizadores van en %, la función en fracción.
-            return imageWithText(img, t, params.textScale, params.textX / 100, params.textY / 100);
+            return imageWithText(img, t, params.textScale, params.textX / 100, params.textY / 100, params.textRot);
           if (img) return img;
         }
         if (!t.trim()) return img;
@@ -226,7 +226,7 @@ export default function App() {
         // encima del dibujo en vez de dejarlo fundido con él.
         setTextSource(
           product.id === 'keychain-image-text' && img && params.textContent.trim()
-            ? textOnlyImage(img, params.textContent, params.textScale, params.textX / 100, params.textY / 100)
+            ? textOnlyImage(img, params.textContent, params.textScale, params.textX / 100, params.textY / 100, params.textRot)
             : null,
         );
       } catch {
@@ -237,7 +237,7 @@ export default function App() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [img, product, params.textContent, params.textScale, params.textFont, params.textX, params.textY, params.textCurve, params.qrContent, params.product, fontsReady]);
+  }, [img, product, params.textContent, params.textScale, params.textFont, params.textRot, params.textX, params.textY, params.textCurve, params.qrContent, params.product, fontsReady]);
 
   // Vectorizar es lo caro: solo cuando cambia algo que afecta al contorno.
   const vecKey = [
@@ -405,7 +405,7 @@ export default function App() {
       return null;
     if (!params.textContent.trim()) return null;
 
-    const L = textLayout(img, params.textContent, params.textScale, params.textX / 100, params.textY / 100);
+    const L = textLayout(img, params.textContent, params.textScale, params.textX / 100, params.textY / 100, params.textRot);
     const mmPerPx = params.targetWidthMm / source.width;
 
     // Centro de la caja de tinta del lienzo: es el punto que el pipeline lleva

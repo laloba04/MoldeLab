@@ -46,6 +46,25 @@ function fit(ctx: CanvasRenderingContext2D, text: string, maxW: number, startPx:
   return px;
 }
 
+/** Escribe centrado en (cx, cy), girado `rad` radianes sobre ese mismo punto. */
+function escribirGirado(
+  ctx: CanvasRenderingContext2D,
+  t: string,
+  cx: number,
+  cy: number,
+  rad: number,
+): void {
+  if (!rad) {
+    ctx.fillText(t, cx, cy);
+    return;
+  }
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rad);
+  ctx.fillText(t, 0, 0);
+  ctx.restore();
+}
+
 /** Qué tipografía usan las funciones de este módulo. */
 export function useFont(style: FontStyle): void {
   FUENTE = style;
@@ -136,7 +155,7 @@ function inkBottomCenter(img: ImageData, colFrac = 0.4): number {
  * cuenta, el tirador acabaría en un sitio y el nombre en otro — que es justo lo
  * que pasaba cuando el tirador se calculaba «a ojo» desde la caja de la pieza.
  */
-export function textLayout(img: ImageData, text: string, scale: number, tx = 0, ty = 0) {
+export function textLayout(img: ImageData, text: string, scale: number, tx = 0, ty = 0, rot = 0) {
   const t = text.trim();
   const imgW = W * 0.9;
   const k = imgW / img.width;
@@ -181,23 +200,31 @@ export function textLayout(img: ImageData, text: string, scale: number, tx = 0, 
   const textCy = cae(textH);
   const textCx = W / 2 + tx * (W * 0.5);
 
+  // Media caja del texto, contando el giro: un texto girado ocupa más a lo alto
+  // y a lo ancho que el mismo texto en recto, y si no se cuenta, se sale.
+  const rad = (rot * Math.PI) / 180;
+  const ca = Math.abs(Math.cos(rad));
+  const sa = Math.abs(Math.sin(rad));
+  const halfW = (textW / 2) * ca + (textH / 2) * sa;
+  const halfH = (textW / 2) * sa + (textH / 2) * ca;
+
   // El lienzo crece por donde haga falta: a lo alto y también a lo ANCHO.
   //
   // Antes solo crecía a lo alto y el texto se recortaba contra los bordes
   // laterales. El efecto era que a partir de cierto punto movías el deslizador
   // y no pasaba nada —el texto se quedaba clavado en el borde— sin que nada lo
   // explicara. Ahora el lienzo se estira y el deslizador siempre responde.
-  const margen = textW / 2 + 30;
+  const margen = halfW + 30;
   const left = Math.min(0, textCx - margen);
   const right = Math.max(W, textCx + margen);
-  const bottom = Math.max(imgH + textH + 60, textCy + textH / 2 + 30);
-  const top = Math.min(0, textCy - textH / 2 - 30);
+  const bottom = Math.max(imgH + textH + 60, textCy + halfH + 30);
+  const top = Math.min(0, textCy - halfH - 30);
   const cw = Math.ceil(right - left);
   const ch = Math.ceil(bottom - top);
   const shift = -top; // todo se dibuja desplazado si el texto sube por encima
   const shiftX = -left; // y lo mismo si se va por la izquierda
 
-  return { t, px, textH, textW, textCx, textCy, shift, shiftX, cw, ch, imgW, imgH, imgTop, k, inkY0 };
+  return { t, px, textH, textW, textCx, textCy, shift, shiftX, cw, ch, imgW, imgH, imgTop, k, inkY0, rad, halfH };
 }
 
 export function imageWithText(
@@ -206,9 +233,10 @@ export function imageWithText(
   scale: number,
   tx = 0,
   ty = 0,
+  rot = 0,
 ): ImageData {
-  const L = textLayout(img, text, scale, tx, ty);
-  const { t, px, textH, textW, textCx, textCy, shift, shiftX, cw, ch, imgW, imgH, imgTop, inkY0 } = L;
+  const L = textLayout(img, text, scale, tx, ty, rot);
+  const { t, px, textH, textCx, textCy, shift, shiftX, cw, ch, imgW, imgH, imgTop, inkY0, rad, halfH } = L;
   if (!t) return img;
 
   const { c, ctx } = makeCanvas(cw, ch);
@@ -234,7 +262,7 @@ export function imageWithText(
   ctx.lineCap = 'round';
 
   const inkY = inkY0 + shift;
-  const textTop = textCy + shift - textH / 2;
+  const textTop = textCy + shift - halfH;
   const debajo = textTop > inkY + 2;
 
   // El puente solo hace falta cuando el nombre cuelga por DEBAJO del dibujo: ahí
@@ -288,8 +316,9 @@ export function textOnlyImage(
   scale: number,
   tx = 0,
   ty = 0,
+  rot = 0,
 ): ImageData | null {
-  const L = textLayout(img, text, scale, tx, ty);
+  const L = textLayout(img, text, scale, tx, ty, rot);
   if (!L.t) return null;
 
   const { c, ctx } = makeCanvas(L.cw, L.ch);
@@ -297,7 +326,7 @@ export function textOnlyImage(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#000';
-  ctx.fillText(L.t, L.shiftX + L.textCx, L.textCy + L.shift);
+  escribirGirado(ctx, L.t, L.shiftX + L.textCx, L.textCy + L.shift, L.rad);
   return ctx.getImageData(0, 0, c.width, c.height);
 }
 

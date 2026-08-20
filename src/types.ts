@@ -261,6 +261,8 @@ export interface Params {
   textScale: number;
   /** Tipografía del texto de la pieza. Las mismas cuatro que la marca. */
   textFont: FontStyle;
+  /** Giro del texto sobre sí mismo, en grados. */
+  textRot: number;
   textX: number; // desplazamiento horizontal del texto, en % (−100 izq … 100 der)
   textY: number; // desplazamiento vertical del texto, en % (−100 arriba … 100 abajo)
   textCurve: number;
@@ -356,6 +358,7 @@ export const DEFAULTS: Params = {
   textContent: '',
   textScale: 70,
   textFont: 'redonda',
+  textRot: 0,
   textX: 0,
   textY: 0,
   textCurve: 90,
@@ -479,6 +482,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
     label: 'Tipografía',
     options: FONT_STYLES.map((f) => ({ value: f.id, label: f.label })),
   },
+  textRot: { label: 'Girar texto', unit: '°', min: -180, max: 180, step: 5 },
   textX: { label: 'Mover texto ↔', unit: '%', min: -100, max: 100, step: 5 },
   textY: { label: 'Mover texto ↕', unit: '%', min: -100, max: 100, step: 5 },
   textCurve: { label: 'Curvatura', unit: '°', min: 10, max: 180, step: 5 },

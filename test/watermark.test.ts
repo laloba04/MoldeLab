@@ -171,5 +171,36 @@ check('engrave: sigue siendo un sólido válido', engVol > 0 && openEdges(engPie
 const none = applyWatermark(base, { text: '   ', mode: 'emboss', depth: 0.6, heightMm: 4 });
 check('marca vacía: la pieza queda idéntica', tris(none[0].mesh) === baseTris);
 
+// --- el nombre levantado sigue siendo la ÚLTIMA cola de la malla -------------
+//
+// El visor y el 3MF saben qué triángulos son el nombre contando desde el FINAL
+// de `mesh`. Al grabar la marca la pieza se recompone entera, y si esa cola no
+// vuelve a quedar al final pasan tres cosas, ninguna visible en pantalla: el
+// nombre desaparece del archivo exportado, los colores del 3MF se corren, y
+// «ocultar trazo» recorta placa de verdad. Se comprueba en los dos caminos.
+
+console.log('');
+{
+  const nombre = { positions: [0, 0, 9, 4, 0, 9, 4, 4, 9, 0, 0, 9, 4, 4, 9, 0, 4, 9] };
+  const conNombre = {
+    ...plate,
+    mesh: { positions: [...plate.mesh.positions, ...nombre.positions] },
+    textMesh: nombre,
+  };
+
+  for (const mode of ['engrave', 'emboss'] as const) {
+    const [out] = applyWatermark([conNombre], { text: MARK, mode, depth: 0.6, heightMm: 4 });
+    const cola = out.mesh.positions.slice(-nombre.positions.length);
+    const igual =
+      cola.length === nombre.positions.length &&
+      cola.every((v, i) => v === nombre.positions[i]);
+    check(
+      `${mode}: el nombre sigue siendo la última cola de la malla`,
+      igual,
+      igual ? 'la cola coincide' : 'la cola NO es el nombre: colores corridos y nombre perdido',
+    );
+  }
+}
+
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');
 process.exitCode = failures ? 1 : 0;

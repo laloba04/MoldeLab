@@ -164,6 +164,20 @@ function loopsDeTrazo(text: string, heightMm: number): Loop[] {
   }));
 }
 
+/**
+ * La malla sin la cola del nombre.
+ *
+ * El nombre levantado tiene que ser SIEMPRE lo último de `mesh`: así es como el
+ * visor y el 3MF saben qué triángulos pintar de su color, contando desde el
+ * final. Al grabar la marca se recompone la pieza, y si esa cola no se vuelve a
+ * poner al final, los colores se corren y el nombre se pierde del archivo.
+ */
+function sinNombre(piece: Piece): Mesh {
+  const n = piece.textMesh?.positions.length ?? 0;
+  if (!n) return piece.mesh;
+  return { positions: piece.mesh.positions.slice(0, piece.mesh.positions.length - n) };
+}
+
 /** El rango de Z que ocupa una malla: para encontrar su base y su tapa. */
 function zRange(mesh: Mesh): { min: number; max: number } {
   let min = Infinity;
@@ -458,7 +472,11 @@ function embossOnPiece(piece: Piece, text: PlacedText, depth: number): Piece {
   const wm = emptyMesh();
   for (const r of regions) extrudeRegion(wm, r, zTop - 0.01, zTop + depth);
 
-  return { ...piece, mesh: merge(piece.mesh, wm) };
+  // La marca se mete ANTES del nombre, no detrás: el nombre cierra la malla.
+  return {
+    ...piece,
+    mesh: merge(sinNombre(piece), wm, piece.textMesh ?? emptyMesh()),
+  };
 }
 
 /**
@@ -503,7 +521,13 @@ function engraveOnPlate(piece: Piece, text: PlacedText, depth: number): Piece | 
   // como el visor y el 3MF distinguen el dibujo del resto.
   return {
     ...piece,
-    mesh: merge(...parts, piece.keep ?? emptyMesh(), piece.overlay ?? emptyMesh()),
+    mesh: merge(
+      ...parts,
+      piece.keep ?? emptyMesh(),
+      piece.overlay ?? emptyMesh(),
+      // Y el nombre al final del todo, que es donde tiene que estar.
+      piece.textMesh ?? emptyMesh(),
+    ),
   };
 }
 

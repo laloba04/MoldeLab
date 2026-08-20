@@ -9,6 +9,8 @@
  * aquí: alimentan los generadores con máscaras sintéticas.
  */
 
+import { fontCss, type FontStyle } from './font';
+
 const W = 900; // ancho de trabajo; el alto se calcula
 
 function makeCanvas(w: number, h: number) {
@@ -24,19 +26,29 @@ function makeCanvas(w: number, h: number) {
 }
 
 /**
- * Una fuente gorda y redonda aguanta la impresión; una fina se rompe en el
- * primer lavado. Nunito/Arial Rounded si están, y si no, sans-serif en negrita.
+ * La tipografía del texto de la pieza: las mismas cuatro empaquetadas que usa la
+ * marca del taller (`font.ts`).
+ *
+ * Empaquetadas y no del sistema por lo de siempre: esto acaba siendo geometría
+ * dentro del STL, así que con la fuente del sistema la misma pieza saldría
+ * distinta en cada ordenador según lo que tuviera instalado.
  */
-const FONT = '900 %spx "Arial Rounded MT Bold", "Nunito", "Segoe UI", system-ui, sans-serif';
+let FUENTE: FontStyle = 'redonda';
+const font = (px: number) => fontCss(FUENTE, px);
 
 function fit(ctx: CanvasRenderingContext2D, text: string, maxW: number, startPx: number): number {
   let px = startPx;
   do {
-    ctx.font = FONT.replace('%s', String(px));
+    ctx.font = font(px);
     if (ctx.measureText(text).width <= maxW) return px;
     px -= 8;
   } while (px > 20);
   return px;
+}
+
+/** Qué tipografía usan las funciones de este módulo. */
+export function useFont(style: FontStyle): void {
+  FUENTE = style;
 }
 
 /** Texto recto. `scale` = % del ancho que puede ocupar. */
@@ -45,12 +57,12 @@ export function textImage(text: string, scale: number): ImageData {
   const probe = makeCanvas(8, 8).ctx;
   const px = fit(probe, t, W * (scale / 100), 320);
 
-  probe.font = FONT.replace('%s', String(px));
+  probe.font = font(px);
   const m = probe.measureText(t);
   const h = Math.ceil((m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) * 1.5) + 40;
 
   const { c, ctx } = makeCanvas(W, Math.max(h, 120));
-  ctx.font = FONT.replace('%s', String(px));
+  ctx.font = font(px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(t, W / 2, c.height / 2);
@@ -65,7 +77,7 @@ export function arcTextImage(text: string, scale: number, curve: number): ImageD
   const t = text.trim() || 'Texto';
   const probe = makeCanvas(8, 8).ctx;
   const px = fit(probe, t, W * (scale / 100), 240);
-  probe.font = FONT.replace('%s', String(px));
+  probe.font = font(px);
 
   const arcLen = probe.measureText(t).width * 1.08;
   const theta = (Math.max(10, curve) * Math.PI) / 180;
@@ -75,7 +87,7 @@ export function arcTextImage(text: string, scale: number, curve: number): ImageD
   const h = Math.ceil(sag + px * 2.4);
   const { c, ctx } = makeCanvas(W, Math.max(h, 160));
 
-  ctx.font = FONT.replace('%s', String(px));
+  ctx.font = font(px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -138,19 +150,28 @@ export function textLayout(img: ImageData, text: string, scale: number, tx = 0, 
 
   // Primer tanteo con el tamaño que se ha pedido, solo para saber DÓNDE cae.
   const px0 = fit(probe, t, W * (scale / 100), 200);
-  const cae = (alto: number) => imgH + 20 + alto / 2 + ty * alto * 1.5;
+
+  // Cuánto se mueve el nombre a lo alto con el deslizador.
+  //
+  // Hacia ARRIBA se mide contra el dibujo: al -100% llega justo a su coronilla.
+  // Antes se medía en alturas de letra, y en un dibujo alto —una cinta, un
+  // muñeco de cuerpo entero— el deslizador se quedaba corto: lo ponías al tope y
+  // el nombre seguía abajo, sin llegar ni a la mitad de la figura.
+  //
+  // Hacia ABAJO se mide en alturas de letra, que es lo que se quiere ahí: alejar
+  // el nombre un poco del dibujo, no mandarlo a tomar viento.
+  const cae = (alto: number) => imgH + 20 + alto / 2 + ty * (ty < 0 ? imgH : alto * 1.5);
   const encima = cae(px0 * 1.6) - (px0 * 1.6) / 2 <= inkY0 + 2;
 
   // Encima de la figura el nombre lleva tope de ancho.
   //
   // «Tamaño del texto» es el porcentaje del ancho de trabajo, y eso vale cuando
-  // el nombre va debajo, en su propia fila. Encima no: un 70% tapa la figura
-  // entera y la pieza deja de ser un elefante con un nombre para ser un cartel
-  // con orejas. Aquí se le limita a media anchura del dibujo, que es lo que mide
-  // una chapa de nombre de verdad; el deslizador sigue mandando por debajo de
-  // ese tope.
-  const px = encima ? Math.min(px0, fit(probe, t, imgW * 0.5, px0)) : px0;
-  probe.font = FONT.replace('%s', String(px));
+  // el nombre va debajo, en su propia fila. Encima no: al 100% se sale de la
+  // figura por los dos lados. Se le limita a tres cuartos del ancho del dibujo,
+  // que deja el nombre bien grande sin desbordarlo; el deslizador sigue mandando
+  // por debajo de ese tope.
+  const px = encima ? Math.min(px0, fit(probe, t, imgW * 0.75, px0)) : px0;
+  probe.font = font(px);
   const textH = px * 1.6;
   const textW = probe.measureText(t).width;
 
@@ -206,7 +227,7 @@ export function imageWithText(
   // Antes llegaba al centro y por tanto cruzaba las letras: con el texto pegado
   // al dibujo, esa barra se veía como un pegote atravesándolo todo. Y si el
   // texto ya toca el dibujo no se dibuja ninguna barra, que no hace falta.
-  ctx.font = FONT.replace('%s', String(px));
+  ctx.font = font(px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
@@ -272,7 +293,7 @@ export function textOnlyImage(
   if (!L.t) return null;
 
   const { c, ctx } = makeCanvas(L.cw, L.ch);
-  ctx.font = FONT.replace('%s', String(L.px));
+  ctx.font = font(L.px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#000';

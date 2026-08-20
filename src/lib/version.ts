@@ -41,14 +41,21 @@ async function liveBundle(): Promise<string | null> {
 }
 
 /**
- * Avisa una sola vez cuando aparezca una versión nueva. Devuelve la función para
- * dejar de comprobar.
+ * Avisa cuando aparezca una versión nueva, y la primera vez recarga sola.
+ *
+ * `onUpdate` recibe si el aviso llega NADA MÁS abrir (los primeros segundos). En
+ * ese caso quien llama puede recargar sin preguntar: no hay trabajo que perder.
+ * Es el caso de quien abre la página desde un acceso directo del escritorio: el
+ * navegador sirve su copia guardada, y como no ha vuelto de otra pestaña ni han
+ * pasado cinco minutos, antes no se comprobaba nada — se quedaba con la versión
+ * vieja para siempre por mucho F5 que le diera.
  */
-export function watchForUpdates(onUpdate: () => void): () => void {
+export function watchForUpdates(onUpdate: (recienAbierta: boolean) => void): () => void {
   const mine = currentBundle();
   // En desarrollo no hay bundle con huella: no hay nada que vigilar.
   if (!mine) return () => {};
 
+  const abierta = Date.now();
   let done = false;
   const check = async () => {
     if (done || document.hidden) return;
@@ -56,13 +63,16 @@ export function watchForUpdates(onUpdate: () => void): () => void {
       const live = await liveBundle();
       if (live && live !== mine) {
         done = true;
-        onUpdate();
+        onUpdate(Date.now() - abierta < 15000);
       }
     } catch {
       // Sin conexión o el servidor no contesta: se reintenta a la próxima.
     }
   };
 
+  // La primera comprobación es enseguida, no a los cinco minutos: es justo la
+  // que hace falta cuando se abre con una copia vieja en caché.
+  const primera = setTimeout(check, 1200);
   const timer = setInterval(check, CHECK_MS);
   // Al volver a la pestaña es cuando más probable es haberse quedado atrás.
   const onShow = () => {
@@ -72,6 +82,7 @@ export function watchForUpdates(onUpdate: () => void): () => void {
 
   return () => {
     done = true;
+    clearTimeout(primera);
     clearInterval(timer);
     document.removeEventListener('visibilitychange', onShow);
   };

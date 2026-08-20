@@ -6,7 +6,7 @@ import { buildPieces, vectorize } from './lib/pipeline';
 import { byId } from './lib/catalog';
 import { boxOf } from './lib/shapes';
 import { ringHandle } from './lib/generators/catalog-parts';
-import { arcTextImage, imageWithText, qrImage, textImage, textLayout, textOnlyImage } from './lib/sources';
+import { arcTextImage, imageWithText, qrImage, textImage, textLayout, textOnlyImage, useFont } from './lib/sources';
 import { toStl } from './lib/stl';
 import { toObj, toSvg, zipFiles } from './lib/formats';
 import { isEmbedded, saveBlob } from './lib/save';
@@ -137,7 +137,26 @@ export default function App() {
 
   // Si se publica una versión nueva, esta pestaña se entera y lo dice. Sin esto,
   // quien la tenga abierta desde antes sigue con la vieja sin saberlo.
-  useEffect(() => watchForUpdates(() => setStale(true)), []);
+  useEffect(
+    () =>
+      watchForUpdates((recienAbierta) => {
+        // Recién abierta y con versión vieja en caché: se recarga sola, que es lo
+        // que se esperaba del F5. Una sola vez por pestaña, con un pestillo en
+        // sessionStorage: si el servidor contestara raro, no queremos una página
+        // recargándose en bucle.
+        try {
+          if (recienAbierta && !sessionStorage.getItem('moldelab-recargada')) {
+            sessionStorage.setItem('moldelab-recargada', '1');
+            location.reload();
+            return;
+          }
+        } catch {
+          // Modo incógnito sin almacenamiento: se cae al aviso de siempre.
+        }
+        setStale(true);
+      }),
+    [],
+  );
 
   // Recordar entre visitas: se guarda lo último (producto, ajustes, marca) con
   // un pequeño retardo, para no escribir en cada tirón de deslizador.
@@ -192,6 +211,9 @@ export default function App() {
       }
       return img;
     };
+    // La tipografía elegida, antes de componer nada.
+    useFont(params.textFont);
+
     // Pequeño debounce: que teclear un nombre no vectorice letra a letra.
     const timer = setTimeout(async () => {
       try {
@@ -213,7 +235,7 @@ export default function App() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [img, product, params.textContent, params.textScale, params.textX, params.textY, params.textCurve, params.qrContent, params.product]);
+  }, [img, product, params.textContent, params.textScale, params.textFont, params.textX, params.textY, params.textCurve, params.qrContent, params.product, fontsReady]);
 
   // Vectorizar es lo caro: solo cuando cambia algo que afecta al contorno.
   const vecKey = [
@@ -420,8 +442,11 @@ export default function App() {
         const nay = -wy / mmPerPx + inkCy;
         // textCx = 900/2 + tx * (900/2)  ->  se despeja tx.
         const ntx = ((nax - L.shiftX - 450) / 450) * 100;
+        // El inverso de `cae`: hacia arriba se mide contra el dibujo, hacia
+        // abajo en alturas de letra.
         const base = L.imgH + 20 + L.textH / 2;
-        const nty = (((nay - L.shift) - base) / (L.textH * 1.5)) * 100;
+        const d = nay - L.shift - base;
+        const nty = (d < 0 ? d / L.imgH : d / (L.textH * 1.5)) * 100;
         const clamp = (v: number) => Math.max(-100, Math.min(100, Math.round(v / 5) * 5));
         setParams((prev) => ({ ...prev, textX: clamp(ntx), textY: clamp(nty) }));
       },

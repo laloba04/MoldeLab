@@ -6,6 +6,8 @@ export interface Loop {
   hole: boolean;
 }
 
+import { FONT_STYLES, type FontStyle } from './lib/font';
+
 export interface Silhouette {
   /** Silueta maciza: perímetro exterior + agujeros pasantes. */
   loops: Loop[];
@@ -257,6 +259,8 @@ export interface Params {
   // Fuentes: texto y QR (se consumen ANTES del pipeline, en la composición)
   textContent: string;
   textScale: number;
+  /** Tipografía del texto de la pieza. Las mismas cuatro que la marca. */
+  textFont: FontStyle;
   textX: number; // desplazamiento horizontal del texto, en % (−100 izq … 100 der)
   textY: number; // desplazamiento vertical del texto, en % (−100 arriba … 100 abajo)
   textCurve: number;
@@ -351,6 +355,7 @@ export const DEFAULTS: Params = {
 
   textContent: '',
   textScale: 70,
+  textFont: 'redonda',
   textX: 0,
   textY: 0,
   textCurve: 90,
@@ -469,6 +474,11 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   textScale: { label: 'Tamaño del texto', unit: '%', min: 25, max: 100, step: 5 },
   // En porcentaje y no en milímetros: el desplazamiento es relativo al tamaño
   // de la pieza, así que al cambiar el tamaño el texto se queda donde estaba.
+  textFont: {
+    select: true,
+    label: 'Tipografía',
+    options: FONT_STYLES.map((f) => ({ value: f.id, label: f.label })),
+  },
   textX: { label: 'Mover texto ↔', unit: '%', min: -100, max: 100, step: 5 },
   textY: { label: 'Mover texto ↕', unit: '%', min: -100, max: 100, step: 5 },
   textCurve: { label: 'Curvatura', unit: '°', min: 10, max: 180, step: 5 },

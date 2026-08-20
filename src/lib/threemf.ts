@@ -101,7 +101,8 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string; tex
     : [];
   // El nombre solo entra en la paleta si de verdad hay nombre: declarar un color
   // que no pinta nada hace que el laminador pida un filamento de más.
-  const textIdx = colors && hasText && colors.text ? (palette.push(hex(colors.text)), palette.length - 1) : 1;
+  const textIdx =
+    colors && hasText && colors.text ? (palette.push(hex(colors.text)), palette.length - 1) : 0;
   const idxOf = (c?: string): number => {
     if (!colors || !c) return 0;
     const h = hex(c);

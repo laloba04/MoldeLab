@@ -116,7 +116,10 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
   // Todo centrado en el origen: los productos con marco, peana o púas necesitan
   // un bounding box con el que contar, y el visor lo agradece.
   let textLoops: Loop[] | undefined;
-  if (textImg && textImg.width === img.width && textImg.height === img.height) {
+  // Con «invertir claro/oscuro» el dibujo se da la vuelta y lo que era tinta pasa
+  // a ser fondo. El nombre lo dibujamos nosotros siempre en negro, asi que
+  // levantarlo ahi lo dejaria flotando sobre un agujero: mejor no levantarlo.
+  if (!p.invert && textImg && textImg.width === img.width && textImg.height === img.height) {
     const tb = binarize(textImg, 128, false);
     textLoops = loopsFromMask(p.cleanup > 0 ? cleanupMask(tb, p.cleanup) : tb, p, mmPerPx, 0, 0.5);
   }

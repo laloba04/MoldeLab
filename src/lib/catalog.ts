@@ -215,7 +215,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Llavero de texto',
     hint: 'Escribe un nombre. El «borde» engorda las letras hasta que se unen.',
     needsText: true,
-    fields: ['textScale', 'thickness', 'border', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
+    fields: ['textFont', 'textScale', 'thickness', 'border', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'plate'),
   },
   {
@@ -224,7 +224,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Llavero imagen + texto',
     hint: 'Tu imagen arriba, el nombre debajo, en una pieza.',
     needsText: true,
-    fields: ['textScale', 'textX', 'textY', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
+    fields: ['textFont', 'textScale', 'textX', 'textY', 'thickness', ...SIZE, 'ringOuter', 'ringInner', 'ringPos', 'ringNeck', ...RELIEF_FIELDS],
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'relief', s.textLoops),
   },
   {
@@ -243,7 +243,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Llavero matrícula',
     hint: 'Placa con marco, como una matrícula en miniatura.',
     needsText: true,
-    fields: ['textScale', ...SIZE, 'thickness', 'border', 'cornerRadius', ...RELIEF_FIELDS, 'ringOuter', 'ringInner'],
+    fields: ['textFont', 'textScale', ...SIZE, 'thickness', 'border', 'cornerRadius', ...RELIEF_FIELDS, 'ringOuter', 'ringInner'],
     build: (s, p) => buildPlateTag(s, p),
   },
   {
@@ -304,7 +304,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Letrero de letra grande',
     hint: 'Escribe la palabra: sale de pie. El «borde» une las letras.',
     needsText: true,
-    fields: ['textScale', ...SIZE, 'thickness', 'border', 'standAngle', 'standDepth'],
+    fields: ['textFont', 'textScale', ...SIZE, 'thickness', 'border', 'standAngle', 'standDepth'],
     build: (s, p) => buildStandingSign(s.loops, p, Math.max(0.6, p.border / 4), s.detail),
   },
   {
@@ -313,7 +313,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Letrero curvo',
     hint: 'El texto en arco. El «borde» une las letras en una pieza.',
     needsText: true,
-    fields: ['textScale', 'textCurve', ...SIZE, 'thickness', 'border'],
+    fields: ['textFont', 'textScale', 'textCurve', ...SIZE, 'thickness', 'border'],
     build: (s, p) => buildExtrude(s.loops, p, Math.max(0.6, p.border / 4), s.detail),
   },
   {

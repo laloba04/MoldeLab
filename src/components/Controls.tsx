@@ -231,7 +231,7 @@ export function Controls({ p, set, reset, view = 'all' }: Props) {
               {current.needsQr
                 ? 'Enlace, texto o Wi-Fi. Cuanto más corto, más gordos los módulos y mejor se escanea impreso.'
                 : current.id === 'keychain-image-text'
-                  ? 'Se coloca debajo de tu imagen, soldado a ella.'
+                  ? 'Debajo de tu imagen o encima de ella: se mueve con «Mover texto» o arrastrando el punto de la vista.'
                   : 'Fuente redonda y en negrita: aguanta la impresión.'}
             </small>
           </div>

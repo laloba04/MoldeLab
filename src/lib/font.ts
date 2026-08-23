@@ -1,7 +1,7 @@
 /**
  * Las tipografías de la marca, y una fuente de trazo de respaldo.
  *
- * En el navegador la marca se dibuja con las cuatro tipografías empaquetadas en
+ * En el navegador la marca se dibuja con las tipografías empaquetadas en
  * `src/fonts` (licencia SIL OFL). Van dentro de la página a propósito: la marca
  * acaba siendo geometría del STL, así que si dependiera de las fuentes que tenga
  * instaladas cada ordenador, la misma pieza saldría distinta en el del taller y
@@ -150,7 +150,7 @@ export interface TextPaths {
 }
 
 /**
- * Las cuatro tipografías de la marca.
+ * Las ocho tipografías de la marca.
  *
  * Van EMPAQUETADAS con la página (`src/fonts`, licencia SIL OFL, que permite
  * incrustarlas), no se piden a la fuente del sistema. Eso importa: la marca es
@@ -158,9 +158,17 @@ export interface TextPaths {
  * tenga instalado cada ordenador, la misma pieza saldría distinta en el
  * ordenador del taller y en el de casa.
  *
- * Solo el subconjunto latino de cada una: 95 KB entre las cuatro.
+ * Solo el subconjunto latino de cada una: unos 170 KB entre las ocho.
  */
-export type FontStyle = 'redonda' | 'manuscrita' | 'recia' | 'gordita';
+export type FontStyle =
+  | 'redonda'
+  | 'manuscrita'
+  | 'cursiva'
+  | 'recia'
+  | 'gordita'
+  | 'estrecha'
+  | 'cartel'
+  | 'divertida';
 
 export const FONT_STYLES: {
   id: FontStyle;
@@ -179,9 +187,13 @@ export const FONT_STYLES: {
   fatten: number;
 }[] = [
   { id: 'redonda', label: 'Redonda', family: 'MoldeRedonda', weight: 800, fatten: 0.04 },
-  { id: 'manuscrita', label: 'Manuscrita', family: 'MoldeManuscrita', weight: 700, fatten: 0.09 },
   { id: 'recia', label: 'Recia', family: 'MoldeRecia', weight: 600, fatten: 0.01 },
   { id: 'gordita', label: 'Gordita', family: 'MoldeGordita', weight: 400, fatten: 0 },
+  { id: 'estrecha', label: 'Estrecha', family: 'MoldeEstrecha', weight: 400, fatten: 0.01 },
+  { id: 'cartel', label: 'Cartel', family: 'MoldeCartel', weight: 400, fatten: 0 },
+  { id: 'divertida', label: 'Divertida', family: 'MoldeDivertida', weight: 400, fatten: 0.01 },
+  { id: 'manuscrita', label: 'Manuscrita', family: 'MoldeManuscrita', weight: 700, fatten: 0.09 },
+  { id: 'cursiva', label: 'Cursiva', family: 'MoldeCursiva', weight: 400, fatten: 0.05 },
 ];
 
 export function fontOf(style: FontStyle) {

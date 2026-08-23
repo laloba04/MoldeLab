@@ -1543,3 +1543,27 @@ body {
   color: var(--warn);
 }
 
+@font-face {
+  font-family: 'MoldeCursiva';
+  src: url('./fonts/Pacifico.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: 'MoldeEstrecha';
+  src: url('./fonts/LilitaOne.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: 'MoldeCartel';
+  src: url('./fonts/Bungee.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: 'MoldeDivertida';
+  src: url('./fonts/Chewy.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}

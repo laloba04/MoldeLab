@@ -2,7 +2,7 @@
  * Fuentes de imagen.
  *
  * El pipeline solo entiende ImageData. Todo lo que no sea un archivo subido
- * (texto, texto curvo, QR, imagen+texto) se rasteriza aquí a un canvas y entra
+ * (texto, texto curvo, imagen+texto) se rasteriza aquí a un canvas y entra
  * por la misma puerta. Los generadores nunca saben de dónde salió el dibujo.
  *
  * Solo funciona en navegador (usa canvas 2D). Los tests de Node no pasan por
@@ -325,28 +325,3 @@ export function textOnlyImage(
   return ctx.getImageData(0, 0, c.width, c.height);
 }
 
-/**
- * QR como ImageData. Cada módulo es un cuadrado de píxeles; marching squares
- * fusionará los adyacentes él solo. Nivel M: aguanta el relieve y el filamento.
- */
-export async function qrImage(content: string): Promise<ImageData> {
-  const { default: qrcode } = await import('qrcode-generator');
-  const qr = qrcode(0, 'M'); // 0 = el tamaño lo decide el contenido
-  qr.addData(content.trim() || 'https://example.com');
-  qr.make();
-
-  const n = qr.getModuleCount();
-  const cell = 14;
-  const quiet = 2 * cell; // zona de silencio: sin ella muchos lectores fallan
-  const size = n * cell + quiet * 2;
-
-  const { c, ctx } = makeCanvas(size, size);
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      if (qr.isDark(y, x)) {
-        ctx.fillRect(quiet + x * cell, quiet + y * cell, cell, cell);
-      }
-    }
-  }
-  return ctx.getImageData(0, 0, c.width, c.height);
-}

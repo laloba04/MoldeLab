@@ -6,7 +6,7 @@ import { buildPieces, vectorize } from './lib/pipeline';
 import { byId } from './lib/catalog';
 import { boxOf } from './lib/shapes';
 import { ringHandle } from './lib/generators/catalog-parts';
-import { arcTextImage, imageWithText, qrImage, textImage, textLayout, textOnlyImage, useFont } from './lib/sources';
+import { arcTextImage, imageWithText, textImage, textLayout, textOnlyImage, useFont } from './lib/sources';
 import { toStl } from './lib/stl';
 import { toObj, toSvg, zipFiles } from './lib/formats';
 import { isEmbedded, saveBlob } from './lib/save';
@@ -190,10 +190,6 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     const compose = async (): Promise<ImageData | null> => {
-      if (product.needsQr) {
-        if (!params.qrContent.trim()) return null;
-        return qrImage(params.qrContent);
-      }
       if (product.needsText) {
         const t = params.textContent;
         // Solo «Llavero imagen + texto» combina las dos cosas. En el resto de
@@ -237,7 +233,7 @@ export default function App() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [img, product, params.textContent, params.textScale, params.textFont, params.textRot, params.textX, params.textY, params.textCurve, params.qrContent, params.product, fontsReady]);
+  }, [img, product, params.textContent, params.textScale, params.textFont, params.textRot, params.textX, params.textY, params.textCurve, params.product, fontsReady]);
 
   // Vectorizar es lo caro: solo cuando cambia algo que afecta al contorno.
   const vecKey = [

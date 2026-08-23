@@ -214,25 +214,23 @@ export function Controls({ p, set, reset, view = 'all' }: Props) {
 
       {view !== 'product' && (
       <>
-      {(current.needsText || current.needsQr) && (
+      {current.needsText && (
         <section>
-          <h3>{current.needsQr ? 'Contenido del QR' : 'Texto'}</h3>
+          <h3>Texto</h3>
           <div className="textsource">
             <input
               type="text"
-              placeholder={current.needsQr ? 'https://tu-enlace.com' : 'Escribe aquí…'}
-              value={current.needsQr ? p.qrContent : p.textContent}
-              maxLength={current.needsQr ? 300 : 40}
+              placeholder="Escribe aquí…"
+              value={p.textContent}
+              maxLength={40}
               onChange={(e) =>
-                set(current.needsQr ? 'qrContent' : 'textContent', e.target.value as never)
+                set('textContent', e.target.value as never)
               }
             />
             <small>
-              {current.needsQr
-                ? 'Enlace, texto o Wi-Fi. Cuanto más corto, más gordos los módulos y mejor se escanea impreso.'
-                : current.id === 'keychain-image-text'
-                  ? 'Debajo de tu imagen o encima de ella: se mueve con «Mover texto» o arrastrando el punto de la vista.'
-                  : 'Fuente redonda y en negrita: aguanta la impresión.'}
+              {current.id === 'keychain-image-text'
+                ? 'Debajo de tu imagen o encima de ella: se mueve con «Mover texto» o arrastrando el punto de la vista.'
+                : 'Fuente redonda y en negrita: aguanta la impresión.'}
             </small>
           </div>
         </section>

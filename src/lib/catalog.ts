@@ -14,14 +14,11 @@ import { buildCutter } from './generators/cutter';
 import { stampParts, stampPlate } from './generators/stamp';
 import { buildEjector } from './generators/ejector';
 import {
-  buildArticulated,
   buildBox,
   buildColoringPlate,
   buildLayered,
   buildOpener,
   buildPlateTag,
-  buildPuzzle,
-  buildWireJig,
 } from './generators/extra-parts';
 import {
   buildBookmark,
@@ -29,9 +26,7 @@ import {
   expandLoops,
   buildExtrude,
   buildImprintMold,
-  buildInlayPlate,
   buildKeychain,
-  buildOutline,
   buildPracticePlate,
   buildReliefPlate,
   buildStandingSign,
@@ -202,14 +197,6 @@ export const PRODUCTS: Entry[] = [
     build: (s, p) => buildKeychain(s.loops, s.detail, p, 'relief'),
   },
   {
-    id: 'keychain-cutout',
-    category: 'llaveros',
-    label: 'Llavero calado',
-    hint: 'El dibujo atraviesa la etiqueta. Se ve la luz.',
-    fields: [...SIZE, 'thickness', 'border', 'cornerRadius', 'ringOuter', 'ringInner', 'ringPos', 'ringNeck'],
-    build: (s, p) => buildKeychain(s.loops, s.detail, p, 'cutout'),
-  },
-  {
     id: 'keychain-text',
     category: 'llaveros',
     label: 'Llavero de texto',
@@ -245,14 +232,6 @@ export const PRODUCTS: Entry[] = [
     needsText: true,
     fields: ['textFont', 'textScale', ...SIZE, 'thickness', 'border', 'cornerRadius', ...RELIEF_FIELDS, 'ringOuter', 'ringInner'],
     build: (s, p) => buildPlateTag(s, p),
-  },
-  {
-    id: 'keychain-articulated',
-    category: 'llaveros',
-    label: 'Llavero articulado',
-    hint: 'Segmentos con bisagra viva: se dobla sin romperse.',
-    fields: [...SIZE, 'thickness', 'segments', 'hingeGap', 'ringOuter', 'ringInner'],
-    build: (s, p) => buildArticulated(s, p),
   },
   {
     id: 'tag-round',
@@ -328,36 +307,12 @@ export const PRODUCTS: Entry[] = [
 
   // ─── Personalizados ────────────────────────────────────────────────────────
   {
-    id: 'extrude',
-    category: 'personalizados',
-    label: 'Extrusión',
-    hint: 'La silueta, sin más. El punto de partida de todo.',
-    fields: [...SIZE, 'thickness'],
-    build: (s, p) => buildExtrude(s.loops, p),
-  },
-  {
     id: 'relief-plate',
     category: 'personalizados',
     label: 'Placa con relieve',
     hint: 'El dibujo levantado sobre una placa. Elige la forma del molde.',
     fields: [...SIZE, 'thickness', 'border', 'moldShape', 'cornerRadius', ...RELIEF_FIELDS],
     build: (s, p) => buildReliefPlate(s.loops, s.detail, p),
-  },
-  {
-    id: 'inlay-plate',
-    category: 'personalizados',
-    label: 'Placa grabada',
-    hint: 'El dibujo hundido. Se puede rellenar con otro color.',
-    fields: [...PLATE_FIELDS, 'engraveDepth'],
-    build: (s, p) => buildInlayPlate(s.loops, s.detail, p),
-  },
-  {
-    id: 'outline-only',
-    category: 'personalizados',
-    label: 'Solo contorno',
-    hint: 'Un aro que sigue la silueta, hueco por dentro.',
-    fields: [...SIZE, 'thickness', 'wallThickness'],
-    build: (s, p) => buildOutline(s.loops, p),
   },
   {
     id: 'coaster',
@@ -376,29 +331,12 @@ export const PRODUCTS: Entry[] = [
     build: (s, p) => buildBookmark(s.loops, s.detail, p),
   },
   {
-    id: 'wire-jig',
-    category: 'personalizados',
-    label: 'Molde guía para alambre',
-    hint: 'El contorno como muro: dobla el alambre apoyado en él.',
-    fields: [...SIZE, 'thickness', 'border', 'wallThickness', 'reliefHeight'],
-    build: (s, p) => buildWireJig(s, p),
-  },
-  {
     id: 'coloring-plate',
     category: 'personalizados',
     label: 'Placa para colorear',
     hint: 'Las líneas en relieve, los huecos para pintar.',
     fields: [...PLATE_FIELDS, 'reliefHeight'],
     build: (s, p) => buildColoringPlate(s, p),
-  },
-  {
-    id: 'qr-plate',
-    category: 'personalizados',
-    label: 'Placa QR',
-    hint: 'Pega un enlace: sale un QR que se escanea de verdad.',
-    needsQr: true,
-    fields: [...SIZE, 'thickness', 'border', 'cornerRadius', ...RELIEF_FIELDS],
-    build: (s, p) => buildReliefPlate(s.loops, s.detail, p),
   },
   {
     id: 'opener-stamp',
@@ -415,14 +353,6 @@ export const PRODUCTS: Entry[] = [
     hint: 'La silueta hecha caja, con tapa que encaja.',
     fields: [...SIZE, 'wallThickness', 'boxHeight', 'lidLip', 'thickness', ...RELIEF_FIELDS],
     build: (s, p) => buildBox(s, p),
-  },
-  {
-    id: 'puzzle',
-    category: 'personalizados',
-    label: 'Rompecabezas de imagen',
-    hint: 'La placa cortada en piezas que encajan. Con tu dibujo encima.',
-    fields: [...SIZE, 'thickness', 'border', 'puzzleRows', 'puzzleCols', 'reliefHeight'],
-    build: (s, p) => buildPuzzle(s, p),
   },
 ];
 

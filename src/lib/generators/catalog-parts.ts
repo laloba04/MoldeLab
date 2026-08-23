@@ -864,42 +864,7 @@ export function buildReliefPlate(loops: Loop[], detail: Loop[], p: Params, round
   });
 }
 
-export function buildInlayPlate(loops: Loop[], detail: Loop[], p: Params): Piece[] {
-  const box = boxOf(loops);
-  const base = sanitize(
-    [roundedRect(box.cx, box.cy, box.w + p.border * 2, box.h + p.border * 2, p.cornerRadius)],
-    [],
-  );
-
-  // La capa de abajo es maciza: ahí puede grabarse la marca de agua.
-  const zCut = p.thickness - p.engraveDepth;
-  const layers = engraved(base, detail, p, 0, p.thickness);
-  const overlay = merge(...layers.slice(1));
-
-  return piece('inlay', 'Placa grabada', 'body', merge(layers[0], overlay), {
-    plate: { regions: base, zLo: 0, zHi: zCut > 0 ? zCut : p.thickness },
-    overlay,
-  });
-}
-
-/** Solo el contorno: un aro que sigue la silueta, sin relleno. */
-export function buildOutline(loops: Loop[], p: Params): Piece[] {
-  const parts: Mesh[] = [];
-  const half = p.wallThickness / 2;
-
-  for (const l of loops) {
-    const outer = offsetRegions([l.pts], [], half);
-    const inner = offsetRegions([l.pts], [], -half);
-    const holes = inner.flatMap((r) => [[...r.outer].reverse() as Pt[]]);
-
-    for (const o of outer) {
-      const ring = sanitize([o.outer], holes);
-      parts.push(solid(ring, 0, p.thickness));
-    }
-  }
-  return piece('outline', 'Contorno', 'blade', merge(...parts));
-}
-
+/** Marcapáginas: tira alargada con el agujero de la borla arriba. */
 export function buildBookmark(loops: Loop[], detail: Loop[], p: Params): Piece[] {
   const box = boxOf(loops);
   const w = box.w + p.border * 2;

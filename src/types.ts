@@ -156,8 +156,6 @@ export interface Product {
   badge?: 'nuevo' | 'popular';
   /** La imagen se compone con texto antes de vectorizar. */
   needsText?: boolean;
-  /** La imagen ES un código QR generado a partir de `qrContent`. */
-  needsQr?: boolean;
   /** El pipeline calcula bandas por umbral además de la silueta. */
   needsBands?: boolean;
 }
@@ -266,7 +264,6 @@ export interface Params {
   textX: number; // desplazamiento horizontal del texto, en % (−100 izq … 100 der)
   textY: number; // desplazamiento vertical del texto, en % (−100 arriba … 100 abajo)
   textCurve: number;
-  qrContent: string;
 
   // Capas de color
   layers: number;
@@ -362,7 +359,6 @@ export const DEFAULTS: Params = {
   textX: 0,
   textY: 0,
   textCurve: 90,
-  qrContent: '',
 
   layers: 3,
   layerHeight: 1.2,
@@ -473,7 +469,6 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   spikeCount: { label: 'Número de púas', min: 1, max: 4, step: 1 },
 
   textContent: { toggle: true, label: '' },
-  qrContent: { toggle: true, label: '' },
   textScale: { label: 'Tamaño del texto', unit: '%', min: 25, max: 100, step: 5 },
   // En porcentaje y no en milímetros: el desplazamiento es relativo al tamaño
   // de la pieza, así que al cambiar el tamaño el texto se queda donde estaba.

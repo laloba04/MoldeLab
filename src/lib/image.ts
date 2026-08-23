@@ -109,17 +109,40 @@ export function autoLevels(img: ImageData): { threshold: number; invert: boolean
  * Binariza. Con alfa: opaco = material. Sin alfa: oscuro = material
  * (el caso típico de un dibujo negro sobre blanco).
  */
-export function binarize(img: ImageData, threshold: number, invert: boolean): Mask {
+/**
+ * Imagen a máscara de tinta.
+ *
+ * `modo` decide qué cuenta como tinta cuando la imagen trae transparencia:
+ *
+ *   'auto' — manda la transparencia: es tinta todo lo opaco. Es lo que quiere la
+ *            SILUETA de un PNG recortado, donde el contorno es justo el borde de
+ *            lo que no es fondo.
+ *   'luz'  — manda siempre la luz, y lo transparente se trata como blanco. Es lo
+ *            que quiere el RELIEVE: con 'auto', en un recorte la figura entera es
+ *            opaca, o sea tinta entera, y sale una silueta maciza sin un solo
+ *            detalle dentro. Mirando la luz aparecen las líneas del dibujo.
+ */
+export function binarize(
+  img: ImageData,
+  threshold: number,
+  invert: boolean,
+  modo: 'auto' | 'luz' = 'auto',
+): Mask {
   const { width: w, height: h, data } = img;
   const out = new Uint8Array(w * h);
-  const alpha = hasAlpha(img);
+  const porAlfa = modo === 'auto' && hasAlpha(img);
 
   for (let i = 0, p = 0; i < out.length; i++, p += 4) {
     let on: boolean;
-    if (alpha) {
+    if (porAlfa) {
       on = data[p + 3] > threshold;
     } else {
-      const lum = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+      // Lo transparente se compone sobre blanco. Sin esto, un píxel invisible
+      // con RGB negro —que es lo normal en un PNG recortado— contaría como
+      // tinta y el fondo entero se volvería dibujo.
+      const a = data[p + 3] / 255;
+      const lum =
+        (0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]) * a + 255 * (1 - a);
       on = lum < threshold;
     }
     out[i] = (invert ? !on : on) ? 1 : 0;

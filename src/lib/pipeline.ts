@@ -73,10 +73,12 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
 
   // La silueta y el relieve pueden salir de umbrales distintos. En una foto eso
   // marca la diferencia entre un contorno limpio y un contorno con detalle.
+  // La silueta puede salir de la transparencia; el relieve, nunca. En un PNG
+  // recortado toda la figura es opaca, así que por transparencia el relieve
+  // saldría macizo: la pieza entera de una pieza, sin un detalle dentro. Por eso
+  // el detalle mira siempre la luz.
   const solidBin = binarize(img, p.threshold, p.invert);
-  const detailBin = p.useDetailThreshold
-    ? binarize(img, p.detailThreshold, p.invert)
-    : solidBin;
+  const detailBin = binarize(img, p.useDetailThreshold ? p.detailThreshold : p.threshold, p.invert, 'luz');
 
   const solidMask = fillEnclosed(p.cleanup > 0 ? cleanupMask(solidBin, p.cleanup) : solidBin);
   const detailMask = p.cleanup > 0 ? cleanupMask(detailBin, p.cleanup) : detailBin;
@@ -107,7 +109,7 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
     const nExtra = Math.max(1, p.layers - 1);
     for (let i = 1; i <= nExtra; i++) {
       const t = Math.max(10, Math.round(p.threshold * (1 - i / (nExtra + 1))));
-      const bin = binarize(img, t, p.invert);
+      const bin = binarize(img, t, p.invert, 'luz');
       const m = p.cleanup > 0 ? cleanupMask(bin, p.cleanup) : bin;
       bands.push(loopsFromMask(m, p, mmPerPx, minArea * 0.05, 0.6));
     }

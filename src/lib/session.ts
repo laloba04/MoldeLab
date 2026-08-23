@@ -35,7 +35,11 @@ function cleanSize(raw: unknown): number {
 }
 
 function cleanStyle(raw: unknown): FontStyle {
-  return FONT_STYLES.some((f) => f.id === raw) ? (raw as FontStyle) : 'redonda';
+  // Se devuelve NUESTRO identificador, no el que vino: comprobar que son iguales
+  // y luego reenviar el de fuera deja pasar el valor ajeno tal cual. Buscándolo y
+  // devolviendo el de la lista, lo que se guarda es siempre de la casa.
+  const encontrada = FONT_STYLES.find((f) => f.id === raw);
+  return encontrada ? encontrada.id : 'redonda';
 }
 
 /** La marca, sin caracteres de control ni nada por debajo del espacio, y con

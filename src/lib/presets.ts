@@ -39,6 +39,17 @@ const MAX_TEXT = 2000; // tope de los campos de texto (nombre, contenido del QR�
  * cual, se RECONSTRUYE: se parte de los valores por defecto y solo se copia lo
  * que existe y es del tipo correcto. Cualquier cosa rara se queda fuera sola.
  */
+/** Copia un texto sin caracteres de control y con tope de longitud. Se
+ *  reconstruye en vez de reenviarlo, para no guardar la cadena de fuera. */
+function cleanText(raw: string): string {
+  let out = '';
+  for (const ch of raw) {
+    if (ch >= ' ' && ch.codePointAt(0) !== 0x7f) out += ch;
+    if (out.length >= MAX_TEXT) break;
+  }
+  return out;
+}
+
 export function cleanParams(raw: unknown): Params {
   const out = { ...DEFAULTS };
   if (!raw || typeof raw !== 'object') return out;
@@ -48,10 +59,21 @@ export function cleanParams(raw: unknown): Params {
     if (typeof v !== typeof DEFAULTS[k]) continue;
     // Un número que no es número (NaN, infinito) reventaría la geometría.
     if (typeof v === 'number' && !Number.isFinite(v)) continue;
-    // Con los textos no basta el tipo: «product» tiene que ser un producto que
-    // exista de verdad, o la app intentaría construir algo que no está.
-    if (k === 'product' && !PRODUCTS.some((prod) => prod.id === v)) continue;
-    if (typeof v === 'string' && v.length > MAX_TEXT) continue;
+    // «product» tiene que ser un producto que exista de verdad, o la app
+    // intentaría construir algo que no está. Y se guarda el identificador de
+    // NUESTRA lista, no el que vino: comprobar que son iguales y luego reenviar
+    // el de fuera deja pasar el valor ajeno tal cual.
+    if (k === 'product') {
+      const prod = PRODUCTS.find((x) => x.id === v);
+      if (prod) out.product = prod.id;
+      continue;
+    }
+    // Los textos se copian carácter a carácter, no se reenvían: así lo que queda
+    // guardado es una cadena construida aquí, sin caracteres de control.
+    if (typeof v === 'string') {
+      (out as Record<string, unknown>)[k] = cleanText(v);
+      continue;
+    }
     (out as Record<string, unknown>)[k] = v;
   }
   return out;

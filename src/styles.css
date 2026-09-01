@@ -1567,3 +1567,38 @@ body {
   font-weight: 400;
   font-display: block;
 }
+
+/* El valor del ajuste, escribible. El deslizador es para tantear; el número,
+   para dar con la medida exacta cuando la pieza tiene que encajar con algo. */
+.field-head .num {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+}
+.field-head .num input {
+  width: 4.2em;
+  padding: 2px 4px;
+  background: var(--bed);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--blade);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-align: right;
+}
+.field-head .num input:hover {
+  border-color: var(--line);
+}
+.field-head .num input:focus {
+  border-color: var(--blade);
+  outline: none;
+}
+.field-head .num.capped input {
+  color: var(--warn);
+}
+
+/* Un botón del HUD apagado: deshacer sin nada que deshacer. */
+.hud .chip:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

@@ -95,24 +95,48 @@ function Control({ field, p, set }: { field: Field; p: Params; set: Props['set']
   const value = Math.min(raw, max);
   const capped = raw > max + 1e-9;
 
+  // El valor se puede ESCRIBIR, no solo arrastrar.
+  //
+  // Con el deslizador solo, dar con una medida exacta es una lotería: para poner
+  // 2,6 mm hay que acertar el píxel. Y es justo lo que se pide cuando la pieza
+  // tiene que encajar con algo. El deslizador se queda para tantear a ojo.
+  //
+  // Se recorta a lo que el ajuste admite: escribir 500 en un tope de 250 pondría
+  // 250, no dejaría la pieza en un estado imposible.
+  const escribir = (texto: string) => {
+    const n = Number(texto.replace(',', '.'));
+    if (!Number.isFinite(n)) return;
+    set(field, Math.min(max, Math.max(meta.min, n)) as never);
+  };
+
   return (
-    <label className="field">
-      <span className="field-head">
-        <span>{meta.label}</span>
-        <output className={capped ? 'capped' : undefined} title={capped ? `Limitado por otro ajuste (habías puesto ${raw})` : undefined}>
-          {Math.round(value * 100) / 100}
+    <div className="field">
+      <div className="field-head">
+        <label htmlFor={`c-${field}`}>{meta.label}</label>
+        <span className={capped ? 'num capped' : 'num'}
+          title={capped ? `Limitado por otro ajuste (habías puesto ${raw})` : undefined}>
+          <input
+            id={`c-${field}`}
+            type="number"
+            min={meta.min}
+            max={max}
+            step={meta.step}
+            value={Math.round(value * 100) / 100}
+            onChange={(e) => escribir(e.target.value)}
+          />
           {meta.unit ? <em>{meta.unit}</em> : null}
-        </output>
-      </span>
+        </span>
+      </div>
       <input
         type="range"
+        aria-label={meta.label}
         min={meta.min}
         max={max}
         step={meta.step}
         value={value}
         onChange={(e) => set(field, Number(e.target.value) as never)}
       />
-    </label>
+    </div>
   );
 }
 

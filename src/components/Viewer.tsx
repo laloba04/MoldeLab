@@ -223,6 +223,7 @@ function PieceMesh({
   );
 
   const ref = useRef<THREE.Group>(null);
+  const [resaltada, setResaltada] = useState<string | null>(null);
 
   useFrame((_, dt) => {
     if (!ref.current) return;
@@ -247,18 +248,38 @@ function PieceMesh({
    *    pintaba la tapa entera. Entre los choques más cercanos se elige el que NO
    *    es la placa.
    */
-  const pintar = (e: ThreeEvent<MouseEvent>) => {
-    if (!onPaint || e.delta > 4) return;
-    e.stopPropagation();
+  const zonaTocada = (e: ThreeEvent<MouseEvent>): string | null => {
     const hits = e.intersections.filter((h) => (h.object.userData as Zona)?.zona);
-    if (!hits.length) return;
+    if (!hits.length) return null;
     const cerca = hits.filter((h) => h.distance <= hits[0].distance + 0.05);
     const elegido = cerca.find((h) => (h.object.userData as Zona).zona !== 'base') ?? cerca[0];
-    onPaint(piece.id, (elegido.object.userData as Zona).zona!);
+    return (elegido.object.userData as Zona).zona ?? null;
   };
 
+  const pintar = (e: ThreeEvent<MouseEvent>) => {
+    if (!onPaint || e.delta > 4) return;
+    const zona = zonaTocada(e);
+    if (!zona) return;
+    e.stopPropagation();
+    onPaint(piece.id, zona);
+  };
+
+  // Lo que se va a pintar se ILUMINA antes de tocarlo. Sin esto no hay forma de
+  // saber si el cursor está sobre una línea del dibujo o sobre la placa que hay
+  // debajo: se apuntaba a un lazo, se fallaba por dos píxeles y se pintaba la
+  // placa entera sin entender por qué.
+  const brillo = (zona: string) =>
+    resaltada === zona
+      ? ({ emissive: '#ffffff', emissiveIntensity: 0.28 } as const)
+      : ({ emissiveIntensity: 0 } as const);
+
   return (
-    <group ref={ref} onClick={onPaint ? pintar : undefined}>
+    <group
+      ref={ref}
+      onClick={onPaint ? pintar : undefined}
+      onPointerMove={onPaint ? (e) => setResaltada(zonaTocada(e)) : undefined}
+      onPointerOut={onPaint ? () => setResaltada(null) : undefined}
+    >
       <mesh
         geometry={baseGeom}
         castShadow
@@ -270,6 +291,7 @@ function PieceMesh({
           metalness={0.15}
           roughness={0.5}
           side={THREE.DoubleSide}
+          {...brillo('base')}
           {...extra}
         />
       </mesh>
@@ -287,6 +309,7 @@ function PieceMesh({
             metalness={0.15}
             roughness={0.5}
             side={THREE.DoubleSide}
+            {...brillo(`p${i}`)}
             polygonOffset
             polygonOffsetFactor={-2}
             polygonOffsetUnits={-2}
@@ -306,6 +329,7 @@ function PieceMesh({
             metalness={0.15}
             roughness={0.5}
             side={THREE.DoubleSide}
+            {...brillo('name')}
             polygonOffset
             polygonOffsetFactor={-3}
             polygonOffsetUnits={-3}
@@ -374,7 +398,7 @@ export function Viewer({
   }, [pieces]);
 
   return (
-    <div className="viewer-wrap">
+    <div className={`viewer-wrap${onPaint ? ' pintando' : ''}`}>
     <Canvas
       shadows
       camera={{ position: [80, -130, 100], fov: 40, up: [0, 0, 1], near: 1, far: 3000 }}

@@ -86,6 +86,31 @@ export function reliefSolids(
   height: number,
   clip?: Pt[][],
 ): Mesh[] {
+  // El dibujo en dos niveles, cuando viene marcada la línea (ver `Loop.line`):
+  // la MANCHA de color abajo y la LÍNEA un escalón por encima. Se restan, así
+  // que no se pisan: quedan una al lado de la otra, como en la imagen, y cada
+  // una es su propia zona con su propio color.
+  //
+  // El escalón importa aunque se imprima de un solo color: a la misma altura el
+  // dibujo sería una plancha lisa y no se vería nada. Y no es un adorno grande,
+  // porque lo que se lee es el canto de la línea, no su altura.
+  const lineas = detail.filter((l) => l.line);
+  if (lineas.length && height > 0) {
+    const manchas = detail.filter((l) => !l.line);
+    const rLinea = offsetRegions(outerOf(lineas), holesOf(lineas), 0);
+    const rMancha = subtract(offsetRegions(outerOf(manchas), holesOf(manchas), 0), rLinea);
+    const paso = Math.max(0.4, height * 0.35);
+    const sinMarca = (rs: Region[]): Loop[] =>
+      rs.flatMap((r) => [
+        { pts: r.outer, hole: false },
+        ...r.holes.map((h) => ({ pts: h, hole: true })),
+      ]);
+    return [
+      ...reliefSolids(sinMarca(rMancha), p, z0, height, clip),
+      ...reliefSolids(sinMarca(rLinea), p, z0, height + paso, clip),
+    ];
+  }
+
   const dOuter = outerOf(detail);
   const dHoles = holesOf(detail);
   if (!dOuter.length || height <= 0) return [];

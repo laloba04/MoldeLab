@@ -4,6 +4,18 @@ export type Pt = [number, number];
 export interface Loop {
   pts: Pt[];
   hole: boolean;
+  /**
+   * Este contorno es LÍNEA del dibujo, no mancha de color.
+   *
+   * Solo aparece con «los colores claros también son dibujo». El relieve viene
+   * entonces en dos niveles: las manchas abajo y la línea un escalón por encima,
+   * cada cosa su zona y su color. Así un dibujo con vestido rosa y contorno
+   * negro sale como en la imagen, en vez de como un pegote.
+   *
+   * Quien use `detail` entero no nota nada: la línea está DENTRO de la mancha,
+   * así que la unión de las dos es exactamente el dibujo de siempre.
+   */
+  line?: boolean;
 }
 
 import { FONT_STYLES, type FontStyle } from './lib/font';
@@ -180,6 +192,18 @@ export interface Params {
   threshold: number;
   detailThreshold: number;
   useDetailThreshold: boolean;
+  /**
+   * Contar como dibujo lo que tiene COLOR aunque sea claro.
+   *
+   * Por luz sola, los mofletes rosas de un dibujo infantil son más claros que el
+   * umbral y se leen como fondo. Con esto puesto cuentan como tinta.
+   *
+   * Va apagado por defecto, y a propósito: un dibujo con manchas de color
+   * grandes —un vestido, un lazo— se levanta ENTERO, y las líneas negras de
+   * dentro se pierden dentro del pegote, porque el relieve es de una sola
+   * altura. Apagado, solo se levanta la línea y se ve el dibujo.
+   */
+  colorAsInk: boolean;
   invert: boolean;
   cleanup: number;
   simplify: number;
@@ -297,6 +321,7 @@ export const DEFAULTS: Params = {
   threshold: 128,
   detailThreshold: 128,
   useDetailThreshold: false,
+  colorAsInk: false,
   invert: false,
   cleanup: 1,
   simplify: 0.15,
@@ -395,6 +420,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   threshold: { label: 'Umbral', min: 8, max: 248, step: 1 },
   detailThreshold: { label: 'Umbral del detalle', min: 8, max: 248, step: 1 },
   useDetailThreshold: { toggle: true, label: 'Umbral aparte para el detalle' },
+  colorAsInk: { toggle: true, label: 'Los colores claros también son dibujo' },
   invert: { toggle: true, label: 'Invertir claro/oscuro' },
   cleanup: { label: 'Limpieza', unit: 'px', min: 0, max: 5, step: 1 },
   simplify: { label: 'Simplificar', unit: 'mm', min: 0, max: 1, step: 0.05 },
@@ -509,6 +535,7 @@ export const TRACE_FIELDS: Field[] = [
   'threshold',
   'useDetailThreshold',
   'detailThreshold',
+  'colorAsInk',
   'invert',
   'cleanup',
   'simplify',

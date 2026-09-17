@@ -728,6 +728,11 @@ button.ghost:hover {
   border-radius: 2px;
 }
 
+/* Con el pincel encendido el cursor avisa: aquí se pinta, no solo se gira. */
+.viewer-wrap.pintando canvas {
+  cursor: crosshair;
+}
+
 /* Pintar zonas a mano: se elige una tinta y se toca la pieza en el visor. */
 .paint {
   display: flex;

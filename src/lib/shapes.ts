@@ -104,6 +104,7 @@ export function boxOf(loops: Loop[]): Box {
 export function shiftLoops(loops: Loop[], dx: number, dy: number): Loop[] {
   return loops.map((l) => ({
     hole: l.hole,
+    line: l.line,
     pts: l.pts.map(([x, y]) => [x + dx, y + dy] as Pt),
   }));
 }

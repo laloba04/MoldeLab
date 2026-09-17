@@ -78,7 +78,13 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
   // saldría macizo: la pieza entera de una pieza, sin un detalle dentro. Por eso
   // el detalle mira siempre la luz.
   const solidBin = binarize(img, p.threshold, p.invert);
-  const detailBin = binarize(img, p.useDetailThreshold ? p.detailThreshold : p.threshold, p.invert, 'luz');
+  const detailBin = binarize(
+    img,
+    p.useDetailThreshold ? p.detailThreshold : p.threshold,
+    p.invert,
+    'luz',
+    p.colorAsInk,
+  );
 
   const solidMask = fillEnclosed(p.cleanup > 0 ? cleanupMask(solidBin, p.cleanup) : solidBin);
   const detailMask = p.cleanup > 0 ? cleanupMask(detailBin, p.cleanup) : detailBin;
@@ -99,6 +105,26 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
   // El detalle lleva las líneas finas (venas, filigranas): se remuestrea a un
   // paso fino (0.5 mm) para que no se redondeen ni se emborronen.
   let detail = loopsFromMask(detailMask, p, mmPerPx, minArea * 0.02, 0.5);
+
+  // Con «los colores claros también son dibujo», el dibujo viene en dos cosas
+  // distintas que no se pueden mezclar: las MANCHAS de color y la LÍNEA que las
+  // rodea. Metidas en el mismo saco sale un pegote —el vestido entero levantado
+  // y las rayas negras perdidas dentro—, que es justo lo que pasaba antes.
+  //
+  // La línea se saca aparte mirando solo la luz, que es lo que hacía siempre. Va
+  // marcada, y el relieve la levanta un escalón por encima de la mancha: se ve
+  // el dibujo como en la imagen y cada cosa se puede pintar de su color.
+  //
+  // Se AÑADE a `detail`, no lo sustituye. La línea cae dentro de la mancha, así
+  // que la unión de las dos sigue siendo el dibujo entero: quien use `detail` a
+  // pelo —la plantilla, el calado— no nota ninguna diferencia.
+  if (p.colorAsInk) {
+    const lineBin = binarize(img, p.useDetailThreshold ? p.detailThreshold : p.threshold, p.invert, 'luz');
+    const lineMask = p.cleanup > 0 ? cleanupMask(lineBin, p.cleanup) : lineBin;
+    for (const l of loopsFromMask(lineMask, p, mmPerPx, minArea * 0.02, 0.5)) {
+      detail.push({ ...l, line: true });
+    }
+  }
 
   // Bandas por umbral para los productos en capas: la capa 0 es la silueta
   // entera y cada banda siguiente es lo que queda por debajo de un umbral más

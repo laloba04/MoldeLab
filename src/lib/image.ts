@@ -127,6 +127,8 @@ export function binarize(
   threshold: number,
   invert: boolean,
   modo: 'auto' | 'luz' = 'auto',
+  /** Contar como tinta lo que tiene color aunque sea claro. Ver `colorAsInk`. */
+  color = false,
 ): Mask {
   const { width: w, height: h, data } = img;
   const out = new Uint8Array(w * h);
@@ -154,7 +156,7 @@ export function binarize(
       // Se mira cuánto se separan entre sí el canal más alto y el más bajo —eso
       // es la saturación—, y con un teñido claro ya cuenta como tinta. Los
       // grises no se ven afectados: en un gris los tres canales valen igual.
-      const tenido = Math.max(r, g, bl) - Math.min(r, g, bl) > 28;
+      const tenido = color && Math.max(r, g, bl) - Math.min(r, g, bl) > 28;
       on = lum < threshold || (tenido && lum < 245);
     }
     out[i] = (invert ? !on : on) ? 1 : 0;

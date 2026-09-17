@@ -329,6 +329,7 @@ export default function App() {
     params.threshold,
     params.detailThreshold,
     params.useDetailThreshold,
+    params.colorAsInk,
     params.invert,
     params.cleanup,
     params.simplify,

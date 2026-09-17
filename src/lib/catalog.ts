@@ -458,6 +458,7 @@ function stampPieces(loops: Loop[], detail: Loop[], p: Params): Piece[] {
     plate: stampPlate(loops, p),
     keep: keep.length ? merge(...keep) : undefined,
     overlay: merge(...overlay),
+    overlayParts: overlay,
   }];
 }
 

@@ -141,9 +141,21 @@ export function binarize(
       // con RGB negro —que es lo normal en un PNG recortado— contaría como
       // tinta y el fondo entero se volvería dibujo.
       const a = data[p + 3] / 255;
-      const lum =
-        (0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]) * a + 255 * (1 - a);
-      on = lum < threshold;
+      const r = data[p] * a + 255 * (1 - a);
+      const g = data[p + 1] * a + 255 * (1 - a);
+      const bl = data[p + 2] * a + 255 * (1 - a);
+      const lum = 0.299 * r + 0.587 * g + 0.114 * bl;
+      // Lo que tiene COLOR es dibujo aunque sea claro.
+      //
+      // Por luz sola, los mofletes rosas de un dibujo infantil son más claros
+      // que el umbral y se leían como fondo: había que activar a mano el umbral
+      // aparte del detalle y subirlo hasta que aparecieran. Pero un rosa no es
+      // blanco: lo que lo separa del papel no es el brillo, es que está teñido.
+      // Se mira cuánto se separan entre sí el canal más alto y el más bajo —eso
+      // es la saturación—, y con un teñido claro ya cuenta como tinta. Los
+      // grises no se ven afectados: en un gris los tres canales valen igual.
+      const tenido = Math.max(r, g, bl) - Math.min(r, g, bl) > 28;
+      on = lum < threshold || (tenido && lum < 245);
     }
     out[i] = (invert ? !on : on) ? 1 : 0;
   }

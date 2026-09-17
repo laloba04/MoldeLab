@@ -80,6 +80,21 @@ export default function App() {
   // Rosa glaseado y no cian: el cian es el del tirador de la vista, y un nombre
   // del mismo color que el tirador hace que la bola parezca fondo de las letras.
   const [textColor, setTextColor] = useState('#ff5fa2');
+  // La CUARTA tinta. Fondo, trazo y nombre son los tres colores que la pieza
+  // reparte sola; este no lo usa nada por su cuenta, está para pintar zonas a
+  // mano. Así siempre hay cuatro colores a mano, salga la imagen que salga.
+  const [extraColor, setExtraColor] = useState('#4e8cff');
+  const palette = useMemo(
+    () => [bgColor, traceColor, textColor, extraColor],
+    [bgColor, traceColor, textColor, extraColor],
+  );
+  // Zonas pintadas a mano: 'idPieza#zona' -> número de color de la paleta. La
+  // zona es 'base' (la placa), 'name' (el nombre) o 'pN' (cada trozo suelto del
+  // dibujo). Lo que no esté aquí se queda con el color que le toca por defecto.
+  const [zoneInk, setZoneInk] = useState<Record<string, number>>({});
+  // Color con el que se pinta al tocar la pieza. Sin él, tocar no hace nada y el
+  // ratón sigue sirviendo solo para girar el modelo.
+  const [brush, setBrush] = useState<number | null>(null);
   // Colores de las capas (productos «en capas de color»), elegibles uno a uno.
   const [layerColors, setLayerColors] = useState<string[]>([
     '#e4d5c1',
@@ -436,6 +451,23 @@ export default function App() {
   const markable = pieces.some(canWatermark);
   const hasTrace = marked.some((p) => (p.overlay?.positions.length ?? 0) > 0);
 
+  // El color pintado a mano de una zona, si lo tiene. Lo comparten el visor y el
+  // 3MF, así que el archivo sale pintado exactamente igual que se ve.
+  const colorOf = useCallback(
+    (pieceId: string, zone: string): string | undefined => {
+      const n = zoneInk[`${pieceId}#${zone}`];
+      return n === undefined ? undefined : palette[n];
+    },
+    [zoneInk, palette],
+  );
+  const paint = useCallback(
+    (pieceId: string, zone: string) => {
+      if (brush === null) return;
+      setZoneInk((prev) => ({ ...prev, [`${pieceId}#${zone}`]: brush }));
+    },
+    [brush],
+  );
+
   // Tirador de la anilla: solo en llaveros (los que exponen «ringPos») y con una
   // sola pieza. Arrastrarlo mueve la anilla a mano, como en MakerLab.
   const ringDrag = useMemo(() => {
@@ -570,7 +602,17 @@ export default function App() {
       files[fn] = new Uint8Array(await blob.arrayBuffer());
     };
 
-    if (dlFmts.has('3mf')) await add(`${name}.3mf`, to3mf(forExport, { bg: bgColor, trace: traceColor, text: textColor }));
+    if (dlFmts.has('3mf'))
+      await add(
+        `${name}.3mf`,
+        to3mf(forExport, {
+          bg: bgColor,
+          trace: traceColor,
+          text: textColor,
+          // Sin «todo de un color», las zonas pintadas a mano viajan al archivo.
+          zone: oneColor ? undefined : colorOf,
+        }),
+      );
     if (dlFmts.has('obj')) await add(`${name}.obj`, toObj(forExport.map((p) => ({ name: p.label, mesh: p.mesh }))));
     if (dlFmts.has('svg') && silhouette) await add(`${name}.svg`, toSvg(silhouette.loops));
     if (dlFmts.has('stl')) {
@@ -800,22 +842,72 @@ export default function App() {
                   />
                   <span>Trazo (el dibujo)</span>
                 </label>
-                {marked.some((pc) => pc.textMesh?.positions.length) && (
-                  <label className="color-row">
-                    <input
-                      type="color"
-                      value={textColor}
-                      onChange={(e) => setTextColor(e.target.value)}
-                    />
-                    <span>El nombre</span>
-                  </label>
-                )}
+                <label className="color-row">
+                  <input
+                    type="color"
+                    value={textColor}
+                    onChange={(e) => setTextColor(e.target.value)}
+                  />
+                  <span>
+                    {marked.some((pc) => pc.textMesh?.positions.length)
+                      ? 'El nombre'
+                      : 'Tercer color'}
+                  </span>
+                </label>
+                <label className="color-row">
+                  <input
+                    type="color"
+                    value={extraColor}
+                    onChange={(e) => setExtraColor(e.target.value)}
+                  />
+                  <span>Cuarto color</span>
+                </label>
               </>
             )}
             {oneColor && (
               <p className="hint">
                 Una sola tinta: sale del laminador sin cambios de filamento.
               </p>
+            )}
+            {!oneColor && (
+              <div className="paint">
+                <p className="hint">
+                  Para pintar una parte suelta —un moflete, un ojo, el contorno—, elige un color
+                  aquí y tócala en la pieza.
+                </p>
+                <div className="paint-swatches">
+                  {palette.map((c, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className={`swatch${brush === i ? ' on' : ''}`}
+                      style={{ background: c }}
+                      title={`Pintar con el color ${i + 1}`}
+                      aria-pressed={brush === i}
+                      onClick={() => setBrush((b) => (b === i ? null : i))}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="mini"
+                    disabled={!Object.keys(zoneInk).length}
+                    onClick={() => {
+                      setZoneInk({});
+                      setBrush(null);
+                    }}
+                  >
+                    Quitar
+                  </button>
+                </div>
+                {brush !== null && (
+                  <p className="hint warn">
+                    Pincel encendido: toca las partes que quieras pintar. Vuelve a pulsar el color
+                    para apagarlo y poder girar la pieza a gusto.
+                  </p>
+                )}
+              </div>
             )}
             {hasTrace && !oneColor && (
               <label className="toggle">
@@ -939,6 +1031,8 @@ export default function App() {
               bgColor={bgColor}
               traceColor={traceColor}
               textColor={textColor}
+              colorOf={oneColor ? undefined : colorOf}
+              onPaint={brush === null || oneColor ? undefined : paint}
               hideTrace={hideTrace}
               viewMode={viewMode}
               oneColor={oneColor}

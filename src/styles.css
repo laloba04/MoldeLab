@@ -728,6 +728,41 @@ button.ghost:hover {
   border-radius: 2px;
 }
 
+/* Pintar zonas a mano: se elige una tinta y se toca la pieza en el visor. */
+.paint {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.paint-swatches {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.swatch {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  /* El número se lee sobre cualquier tinta, clara u oscura, gracias al contorno. */
+  color: #fff;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+}
+.swatch:hover {
+  border-color: var(--muted);
+}
+.swatch.on {
+  border-color: var(--blade);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--blade) 35%, transparent);
+}
+
 /* El desplegable de «Forma del molde» y otros selects. */
 .field.select select {
   padding: 7px 9px;

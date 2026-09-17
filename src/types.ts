@@ -58,6 +58,15 @@ export interface Piece {
    *  cuando la placa se reconstruye. */
   overlay?: Mesh;
   /**
+   * Los trozos sueltos de `overlay`, en el MISMO orden en que se fundieron.
+   *
+   * `overlay` es siempre `merge(...overlayParts)`. Separados son las zonas que
+   * se pueden pintar a mano: cada isla del dibujo, el marco, la anilla. El visor
+   * dibuja una por una para saber cuál se toca con el ratón, y el 3MF le da a
+   * cada una su color. Fundidas, la pieza es exactamente la misma.
+   */
+  overlayParts?: Mesh[];
+  /**
    * El nombre, levantado por encima del dibujo y con su propio color.
    *
    * Va aparte del `overlay` por las dos cosas a la vez: se extruye más alto —a

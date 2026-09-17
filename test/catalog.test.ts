@@ -600,6 +600,45 @@ console.log('');
     rotos.join('; ') || 'las tres variantes, una sola región');
 }
 
+// --- Las zonas que se pintan a mano ------------------------------------------
+//
+// `overlayParts` son los trozos sueltos del relieve: lo que el visor dibuja por
+// separado para saber cuál se toca con el ratón, y lo que el 3MF pinta con un
+// filamento distinto. La regla es que `overlay` sea EXACTAMENTE la suma de esos
+// trozos, en ese orden. Si se rompe, los colores se corren de zona: se pintaría
+// el moflete del vecino, o directamente media placa.
+
+console.log('');
+{
+  const rotos: string[] = [];
+  const conZonas: string[] = [];
+
+  for (const prod of PRODUCTS) {
+    let piezas;
+    try {
+      piezas = buildProduct(sil, { ...DEFAULTS, product: prod.id });
+    } catch {
+      continue;
+    }
+    for (const pz of piezas) {
+      if (!pz.overlayParts) continue;
+      const trozos = pz.overlayParts.flatMap((m) => m.positions);
+      const relieve = pz.overlay?.positions ?? [];
+      if (trozos.length !== relieve.length) {
+        rotos.push(`${prod.id}/${pz.id}: ${trozos.length} != ${relieve.length}`);
+      } else if (trozos.some((v, i) => v !== relieve[i])) {
+        rotos.push(`${prod.id}/${pz.id}: los trozos no casan con el relieve`);
+      }
+      if (pz.overlayParts.length > 1) conZonas.push(`${prod.id}: ${pz.overlayParts.length}`);
+    }
+  }
+
+  check('el relieve es exactamente la suma de sus trozos', rotos.length === 0,
+    rotos.join('; ') || 'todos los productos cuadran');
+  check('hay productos con varias zonas que pintar', conZonas.length > 0,
+    conZonas.slice(0, 6).join(', '));
+}
+
 console.log(`\n${totalTris.toLocaleString('es-ES')} triángulos en total`);
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');
 process.exitCode = failures ? 1 : 0;

@@ -148,6 +148,43 @@ async function main() {
     usados.size <= 1 && !usados.has('1'),
     `usados: [${[...usados].join(',')}]`,
   );
+  // --- Zonas pintadas a mano -------------------------------------------------
+  //
+  // Lo que se pinta tocando la pieza tiene que llegar al archivo, o el laminador
+  // enseña la pieza de un color y sale de otro. Se pintan la placa y los dos
+  // primeros trozos del dibujo de tres colores distintos y se comprueba que el
+  // 3MF los declara TODOS y que cada uno pinta triangulos suyos.
+  const conZonas = pieces.filter((pc) => (pc.overlayParts?.length ?? 0) > 1);
+  if (!conZonas.length) {
+    check('hay alguna pieza con zonas que pintar', false, 'ninguna pieza trae overlayParts');
+  } else {
+    const pz = conZonas[0];
+    const tintas = ['#FF0000', '#00FF00', '#0000FF'];
+    const xmlZ = strFromU8(
+      unzipSync(
+        new Uint8Array(
+          await to3mf([pz], {
+            bg: '#e4d5c1',
+            trace: '#8a5038',
+            zone: (_id, z) =>
+              z === 'base' ? tintas[0] : z === 'p0' ? tintas[1] : z === 'p1' ? tintas[2] : undefined,
+          }).arrayBuffer(),
+        ),
+      )['3D/3dmodel.model'],
+    );
+    const declarados = [...xmlZ.matchAll(/<m:color color="(#[0-9A-F]{6})FF"/g)].map((m) => m[1]);
+    const faltan = tintas.filter((t) => !declarados.includes(t));
+    check('las zonas pintadas llegan al 3MF', faltan.length === 0,
+      faltan.length ? `faltan ${faltan.join(', ')}` : `paleta: ${declarados.join(' ')}`);
+
+    // Un color declarado que no pinta nada hace que el laminador pida un
+    // filamento de mas, asi que cada tinta tiene que tener triangulos suyos.
+    const usa = new Set([...xmlZ.matchAll(/p1="(\d+)"/g)].map((m) => Number(m[1])));
+    const vacias = tintas.filter((t) => !usa.has(declarados.indexOf(t)));
+    check('cada tinta pintada tiene triangulos suyos', vacias.length === 0,
+      vacias.length ? `sin usar: ${vacias.join(', ')}` : `${usa.size} tintas en uso`);
+  }
+
   console.log(`\ntamaño del 3MF: ${(blob.size / 1024).toFixed(0)} KB`);
   console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');
   process.exitCode = failures ? 1 : 0;

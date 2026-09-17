@@ -72,6 +72,7 @@ export function buildLayered(s: Silhouette, p: Params, withRing: boolean): Piece
         tint: LAYER_TINTS[i % LAYER_TINTS.length],
         plate: { regions, zLo, zHi },
         overlay: parts.length > 1 ? merge(...parts.slice(1)) : undefined,
+        overlayParts: parts.length > 1 ? parts.slice(1) : undefined,
       });
     }
   }
@@ -110,6 +111,7 @@ export function buildColoringPlate(s: Silhouette, p: Params): Piece[] {
     mesh,
     plate: { regions: plate, zLo: 0, zHi: p.thickness },
     overlay,
+    overlayParts: lines,
   }];
 }
 
@@ -130,7 +132,8 @@ export function buildOpener(s: Silhouette, p: Params): Piece[] {
     [...s.loops.filter((l) => l.hole).map((l) => l.pts), rev(mouth)],
   );
 
-  const overlay = merge(...reliefSolids(s.detail, p, thick - 0.01, p.reliefHeight));
+  const extras = reliefSolids(s.detail, p, thick - 0.01, p.reliefHeight);
+  const overlay = merge(...extras);
   const mesh = merge(solid(body, 0, thick), overlay);
   return mesh.positions.length
     ? [{
@@ -140,6 +143,7 @@ export function buildOpener(s: Silhouette, p: Params): Piece[] {
         mesh,
         plate: { regions: body, zLo: 0, zHi: thick },
         overlay,
+        overlayParts: extras,
       }]
     : [];
 }
@@ -193,10 +197,10 @@ export function buildBox(s: Silhouette, p: Params): Piece[] {
   const floor = { regions: outerR, zLo: 0, zHi: floorT };
 
   if (bodyMesh.positions.length) {
-    pieces.push({ id: 'box-body', label: 'Caja', role: 'body', mesh: bodyMesh, plate: floor, overlay: bodyOverlay });
+    pieces.push({ id: 'box-body', label: 'Caja', role: 'body', mesh: bodyMesh, plate: floor, overlay: bodyOverlay, overlayParts: walls });
   }
   if (lidMesh.positions.length) {
-    pieces.push({ id: 'box-lid', label: 'Tapa', role: 'icing', mesh: lidMesh, plate: floor, overlay: lidOverlay });
+    pieces.push({ id: 'box-lid', label: 'Tapa', role: 'icing', mesh: lidMesh, plate: floor, overlay: lidOverlay, overlayParts: lidExtras });
   }
   return pieces;
 }
@@ -251,5 +255,6 @@ export function buildPlateTag(s: Silhouette, p: Params): Piece[] {
     mesh,
     plate: { regions: base, zLo: 0, zHi: p.thickness },
     overlay,
+    overlayParts: extras,
   }];
 }

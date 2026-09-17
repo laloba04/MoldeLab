@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Grid, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Piece } from '../types';
+
+/** Lo que cada malla del visor lleva colgado para saber qué zona es al tocarla. */
+interface Zona {
+  zona?: string;
+}
 
 /** Punto arrastrable sobre el plano de arriba (z constante). Avisa a App de las
  *  nuevas coordenadas en mm. Lo usan la anilla y el nombre. */
@@ -166,6 +171,8 @@ function PieceMesh({
   hideTrace,
   viewMode,
   oneColor,
+  colorOf,
+  onPaint,
 }: {
   piece: Piece;
   offset: number;
@@ -175,19 +182,30 @@ function PieceMesh({
   hideTrace: boolean;
   viewMode: ViewMode;
   oneColor: boolean;
+  /** Color pintado a mano para una zona, si lo tiene. */
+  colorOf?: (pieceId: string, zone: string) => string | undefined;
+  /** Tocar una zona para pintarla. Sin esto, la pieza no responde al ratón. */
+  onPaint?: (pieceId: string, zone: string) => void;
 }) {
   // El cortador conserva su cian (corta) para distinguirlo de un vistazo. Las
   // piezas con color propio (las capas de color) mandan sobre el color de
   // fondo; el resto usa el de fondo. Con «todo de un color» no hay excepciones:
   // se ve tal cual va a salir de la impresora, de una sola tinta.
-  const baseColor = oneColor
-    ? bgColor
-    : piece.role === 'blade'
-      ? '#1bc5d4'
-      : (piece.tint ?? bgColor);
+  const pintado = (zona: string): string | undefined =>
+    oneColor ? undefined : colorOf?.(piece.id, zona);
+  const baseColor =
+    pintado('base') ??
+    (oneColor ? bgColor : piece.role === 'blade' ? '#1bc5d4' : (piece.tint ?? bgColor));
   const overlayLen = piece.overlay?.positions.length ?? 0;
   // El nombre es la ÚLTIMA cola de la malla, detrás del relieve.
   const textLen = piece.textMesh?.positions.length ?? 0;
+
+  // El relieve, trozo a trozo. `overlayParts` son las zonas que se pueden pintar
+  // por separado; si la pieza no las trae, el relieve entero es una sola zona.
+  const parts = useMemo(
+    () => piece.overlayParts ?? (piece.overlay ? [piece.overlay] : []),
+    [piece.overlayParts, piece.overlay],
+  );
 
   // Con «ocultar trazo» se pinta solo la placa: las colas de posiciones (el
   // relieve y el nombre) se recortan, porque van fusionadas dentro de piece.mesh.
@@ -195,9 +213,9 @@ function PieceMesh({
     const p = piece.mesh.positions;
     return geomOf(hideTrace && overlayLen + textLen ? p.slice(0, p.length - overlayLen - textLen) : p);
   }, [piece.mesh, hideTrace, overlayLen, textLen]);
-  const overlayGeom = useMemo(
-    () => (!hideTrace && overlayLen ? geomOf(piece.overlay!.positions) : null),
-    [piece.overlay, hideTrace, overlayLen],
+  const partGeoms = useMemo(
+    () => (hideTrace ? [] : parts.map((m) => geomOf(m.positions))),
+    [parts, hideTrace],
   );
   const textGeom = useMemo(
     () => (!hideTrace && textLen ? geomOf(piece.textMesh!.positions) : null),
@@ -213,9 +231,40 @@ function PieceMesh({
 
   const extra = matProps(viewMode);
 
+  /**
+   * A quién se pinta al tocar la pieza.
+   *
+   * Dos cosas que no son obvias:
+   *
+   * 1. Pintar es un TOQUE, no un arrastre. `delta` es lo que se ha movido el
+   *    ratón entre pulsar y soltar; si se ha movido, se estaba girando la pieza.
+   *    Sin esto, cada giro pintaría la cara que quedara debajo del cursor.
+   *
+   * 2. El relieve manda sobre la placa. La malla de la placa lleva DENTRO el
+   *    dibujo (es la pieza entera), así que al tocar un moflete el rayo choca a
+   *    la vez con el moflete y con la placa, a la misma distancia exacta, y
+   *    ganaba la placa por ir primera. Resultado: tocabas el moflete y se te
+   *    pintaba la tapa entera. Entre los choques más cercanos se elige el que NO
+   *    es la placa.
+   */
+  const pintar = (e: ThreeEvent<MouseEvent>) => {
+    if (!onPaint || e.delta > 4) return;
+    e.stopPropagation();
+    const hits = e.intersections.filter((h) => (h.object.userData as Zona)?.zona);
+    if (!hits.length) return;
+    const cerca = hits.filter((h) => h.distance <= hits[0].distance + 0.05);
+    const elegido = cerca.find((h) => (h.object.userData as Zona).zona !== 'base') ?? cerca[0];
+    onPaint(piece.id, (elegido.object.userData as Zona).zona!);
+  };
+
   return (
-    <group ref={ref}>
-      <mesh geometry={baseGeom} castShadow receiveShadow>
+    <group ref={ref} onClick={onPaint ? pintar : undefined}>
+      <mesh
+        geometry={baseGeom}
+        castShadow
+        receiveShadow
+        userData={{ zona: 'base' }}
+      >
         <meshStandardMaterial
           color={baseColor}
           metalness={0.15}
@@ -224,12 +273,17 @@ function PieceMesh({
           {...extra}
         />
       </mesh>
-      {/* El relieve se repinta encima con el color del trazo. polygonOffset lo
-          adelanta un pelín para que gane al fondo sin parpadear (z-fighting). */}
-      {overlayGeom && (
-        <mesh geometry={overlayGeom} castShadow>
+      {/* El relieve se repinta encima, zona a zona. polygonOffset lo adelanta un
+          pelín para que gane al fondo sin parpadear (z-fighting). */}
+      {partGeoms.map((g, i) => (
+        <mesh
+          key={i}
+          geometry={g}
+          castShadow
+          userData={{ zona: `p${i}` }}
+        >
           <meshStandardMaterial
-            color={traceColor}
+            color={pintado(`p${i}`) ?? (oneColor ? bgColor : traceColor)}
             metalness={0.15}
             roughness={0.5}
             side={THREE.DoubleSide}
@@ -239,12 +293,16 @@ function PieceMesh({
             {...extra}
           />
         </mesh>
-      )}
+      ))}
       {/* Y el nombre encima de todo, con su propio color. */}
       {textGeom && (
-        <mesh geometry={textGeom} castShadow>
+        <mesh
+          geometry={textGeom}
+          castShadow
+          userData={{ zona: 'name' }}
+        >
           <meshStandardMaterial
-            color={oneColor ? bgColor : textColor}
+            color={pintado('name') ?? (oneColor ? bgColor : textColor)}
             metalness={0.15}
             roughness={0.5}
             side={THREE.DoubleSide}
@@ -276,6 +334,8 @@ export function Viewer({
   onTextMove,
   textRot = null,
   onTextRot,
+  colorOf,
+  onPaint,
 }: {
   pieces: Piece[];
   exploded: boolean;
@@ -297,6 +357,10 @@ export function Viewer({
   /** Tirador para GIRAR el nombre: orbita alrededor del anterior. */
   textRot?: { x: number; y: number; z: number } | null;
   onTextRot?: (x: number, y: number) => void;
+  /** Color pintado a mano de una zona concreta de una pieza, si lo tiene. */
+  colorOf?: (pieceId: string, zone: string) => string | undefined;
+  /** Con esto puesto, tocar una zona de la pieza la pinta. */
+  onPaint?: (pieceId: string, zone: string) => void;
 }) {
   const [dragging, setDragging] = useState(false);
   // Las piezas se separan en fila, no en montón.
@@ -366,6 +430,8 @@ export function Viewer({
           hideTrace={hideTrace}
           viewMode={viewMode}
           oneColor={oneColor}
+          colorOf={colorOf}
+          onPaint={onPaint}
         />
       ))}
 

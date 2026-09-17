@@ -473,9 +473,14 @@ function embossOnPiece(piece: Piece, text: PlacedText, depth: number): Piece {
   for (const r of regions) extrudeRegion(wm, r, zTop - 0.01, zTop + depth);
 
   // La marca se mete ANTES del nombre, no detrás: el nombre cierra la malla.
+  // Y entra como un trozo más del relieve, al final: así queda descrita dentro
+  // del bloque que el visor y el 3MF reparten por colores, y se puede pintar
+  // como cualquier otra zona.
   return {
     ...piece,
     mesh: merge(sinNombre(piece), wm, piece.textMesh ?? emptyMesh()),
+    overlay: merge(piece.overlay ?? emptyMesh(), wm),
+    overlayParts: [...(piece.overlayParts ?? (piece.overlay ? [piece.overlay] : [])), wm],
   };
 }
 

@@ -109,6 +109,7 @@ export function buildEjector(
       mesh: plunger,
       plate: { regions: faceR, zLo: 0, zHi: p.plungerThickness },
       overlay,
+      overlayParts: extras,
     });
   }
   return pieces;

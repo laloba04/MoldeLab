@@ -56,7 +56,7 @@ function piece(
   label: string,
   role: Piece['role'],
   mesh: Mesh,
-  extra?: Pick<Piece, 'plate' | 'overlay' | 'textMesh'>,
+  extra?: Pick<Piece, 'plate' | 'overlay' | 'overlayParts' | 'textMesh'>,
 ): Piece[] {
   return mesh.positions.length ? [{ id, label, role, mesh, ...extra }] : [];
 }
@@ -72,6 +72,12 @@ const STEPS = 3;
  * Si se pasa `clip` (el contorno de la placa), el relieve se recorta a él, para
  * que el dibujo no sobresalga cuando la forma del molde es más pequeña que la
  * imagen (p. ej. un corazón que no cubre todo el dibujo).
+ *
+ * Devuelve UNA malla por ZONA del dibujo —una isla de tinta con sus tripas—, no
+ * una por escalón. Los escalones de una misma isla van juntos en su malla. Es lo
+ * que permite pintar el dibujo a trozos: cada zona se dibuja aparte en el visor,
+ * se sabe cuál se ha tocado con el ratón y se le puede dar su propio filamento
+ * en el 3MF. Fundidas todas sale exactamente la misma pieza de antes.
  */
 export function reliefSolids(
   detail: Loop[],
@@ -91,17 +97,27 @@ export function reliefSolids(
   const base = p.strokeWidth || 0;
   const steps = p.reliefTaper > 0.01 ? STEPS : 1;
   const dz = height / steps;
-  const out: Mesh[] = [];
 
-  for (let s = 0; s < steps; s++) {
-    const delta = base - p.reliefTaper * s;
-    // Con delta 0 exacto, saltarse Clipper preserva los puntos originales.
-    let regions =
-      Math.abs(delta) < 1e-6 ? sanitize(dOuter, dHoles) : offsetRegions(dOuter, dHoles, delta);
-    if (clip) regions = intersect(regions, clip);
-    const zLo = z0 + dz * s - (s === 0 ? 0.01 : 0);
-    const zHi = z0 + dz * (s + 1);
-    for (const r of regions) out.push(solid([r], zLo, zHi));
+  // Las zonas se deciden UNA vez, en el escalón de abajo, que es el más gordo y
+  // el que manda: dos islas que a esa altura ya se tocan son una sola zona.
+  let zonas =
+    Math.abs(base) < 1e-6 ? sanitize(dOuter, dHoles) : offsetRegions(dOuter, dHoles, base);
+  if (clip) zonas = intersect(zonas, clip);
+
+  const out: Mesh[] = [];
+  for (const z of zonas) {
+    const m = emptyMesh();
+    for (let s = 0; s < steps; s++) {
+      // Los escalones de arriba se afinan sobre la propia zona, no sobre el
+      // dibujo entero: así cada torre se queda dentro de su zona y no se mezcla
+      // con la de al lado.
+      let capa = s === 0 ? [z] : offsetRegions([z.outer], z.holes, -p.reliefTaper * s);
+      if (clip && s > 0) capa = intersect(capa, clip);
+      const zLo = z0 + dz * s - (s === 0 ? 0.01 : 0);
+      const zHi = z0 + dz * (s + 1);
+      for (const r of capa) extrudeRegion(m, r, zLo, zHi);
+    }
+    if (m.positions.length) out.push(m);
   }
   return out;
 }
@@ -326,6 +342,7 @@ export function buildTopper(loops: Loop[], detail: Loop[], p: Params): Piece[] {
   return piece('topper', 'Topper de tarta', 'body', merge(solid(body, 0, p.thickness), overlay), {
     plate: { regions: body, zLo: 0, zHi: p.thickness },
     overlay,
+    overlayParts: extras,
   });
 }
 
@@ -365,11 +382,13 @@ export function buildPracticePlate(loops: Loop[], detail: Loop[], p: Params): Pi
   // La capa de abajo es maciza: ahí puede grabarse la marca de agua.
   const zCut = p.thickness - p.engraveDepth;
   const layers = engraved(plate, detail, p, 0, p.thickness);
-  const overlay = merge(...layers.slice(1));
+  const capas = layers.slice(1);
+  const overlay = merge(...capas);
 
   return piece('practice', 'Placa de entrenamiento', 'body', merge(layers[0], overlay), {
     plate: { regions: plate, zLo: 0, zHi: zCut > 0 ? zCut : p.thickness },
     overlay,
+    overlayParts: capas,
   });
 }
 
@@ -396,6 +415,7 @@ export function buildImprintMold(loops: Loop[], p: Params): Piece[] {
   return piece('mold', 'Molde de impronta', 'body', merge(solid(block, 0, zCut), overlay), {
     plate: { regions: block, zLo: 0, zHi: zCut },
     overlay,
+    overlayParts: carvedParts,
   });
 }
 
@@ -607,6 +627,7 @@ export function buildKeychain(
     {
       plate: { regions: base, zLo: 0, zHi: p.thickness },
       overlay,
+      overlayParts: extras,
       textMesh: nombre?.positions.length ? nombre : undefined,
     },
   );
@@ -627,14 +648,16 @@ export function buildTag(loops: Loop[], detail: Loop[], p: Params, round: boolea
     [[...circle(box.cx, hy + p.ringOuter * 0.4, p.ringInner, 32)].reverse() as Pt[]],
   );
 
-  const overlay = merge(
+  const extras: Mesh[] = [
     ...reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight),
     solid(ringSolid, 0, p.thickness),
-  );
+  ];
+  const overlay = merge(...extras);
 
   return piece('tag', round ? 'Etiqueta redonda' : 'Etiqueta', 'body', merge(solid(base, 0, p.thickness), overlay), {
     plate: { regions: base, zLo: 0, zHi: p.thickness },
     overlay,
+    overlayParts: extras,
   });
 }
 
@@ -738,11 +761,13 @@ export function buildWallSign(loops: Loop[], detail: Loop[], p: Params): Piece[]
   ];
 
   const base = sanitize([plate], holes);
-  const overlay = merge(...reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight));
+  const extras = reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight);
+  const overlay = merge(...extras);
 
   return piece('wall-sign', 'Letrero de pared', 'body', merge(solid(base, 0, p.thickness), overlay), {
     plate: { regions: base, zLo: 0, zHi: p.thickness },
     overlay,
+    overlayParts: extras,
   });
 }
 
@@ -759,14 +784,14 @@ export function buildExtrude(
   const base = regionsOf(loops, unite);
   // Igual que en el letrero de pie: si se han unido las letras, el dibujo se
   // levanta encima para que se lea.
-  const overlay =
-    unite > 0
-      ? merge(...reliefSolids(detail.length ? detail : loops, p, p.thickness - 0.01, p.reliefHeight))
-      : emptyMesh();
+  const extras =
+    unite > 0 ? reliefSolids(detail.length ? detail : loops, p, p.thickness - 0.01, p.reliefHeight) : [];
+  const overlay = merge(...extras);
 
   return piece('extrude', 'Extrusión', 'body', merge(solid(base, 0, p.thickness), overlay), {
     plate: { regions: base, zLo: 0, zHi: p.thickness },
     overlay: overlay.positions.length ? overlay : undefined,
+    overlayParts: extras.length ? extras : undefined,
   });
 }
 
@@ -856,11 +881,13 @@ export function buildReliefPlate(loops: Loop[], detail: Loop[], p: Params, round
   // para caber entero, centrado; el recorte queda solo como red de seguridad.
   const fitted = shape === 'image' ? detail : fitDetailToBase(detail, base);
   const clip = shape === 'image' ? undefined : base.map((r) => r.outer);
-  const overlay = merge(...reliefSolids(fitted, p, p.thickness - 0.01, p.reliefHeight, clip));
+  const extras = reliefSolids(fitted, p, p.thickness - 0.01, p.reliefHeight, clip);
+  const overlay = merge(...extras);
 
   return piece('plate', round ? 'Posavasos' : 'Placa', 'body', merge(solid(base, 0, p.thickness), overlay), {
     plate: { regions: base, zLo: 0, zHi: p.thickness },
     overlay,
+    overlayParts: extras,
   });
 }
 
@@ -877,11 +904,13 @@ export function buildBookmark(loops: Loop[], detail: Loop[], p: Params): Piece[]
   const hole = [...circle(box.cx, box.cy + h / 2 - p.border - p.ringInner, p.ringInner, 28)].reverse() as Pt[];
 
   const base = sanitize([plate], [hole]);
-  const overlay = merge(...reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight));
+  const extras = reliefSolids(detail, p, p.thickness - 0.01, p.reliefHeight);
+  const overlay = merge(...extras);
 
   return piece('bookmark', 'Marcapáginas', 'body', merge(solid(base, 0, p.thickness), overlay), {
     plate: { regions: base, zLo: 0, zHi: p.thickness },
     overlay,
+    overlayParts: extras,
   });
 }
 

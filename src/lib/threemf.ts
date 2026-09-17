@@ -13,7 +13,8 @@
  * Color: se usa el "Face Coloring" del 3MF estándar (extensión de color oficial
  * del 3MF Consortium), que es lo que Bambu Studio reconoce y ofrece emparejar
  * con sus filamentos al importar (ventana "Standard 3MF Color Parsing"):
- *   - Un `<m:colorgroup>` con dos colores: 0 = fondo, 1 = trazo.
+ *   - Un `<m:colorgroup>` con la paleta del archivo: 0 = fondo, 1 = trazo, y
+ *     detrás los colores que se hayan pintado a mano en cada zona.
  *   - Cada triángulo apunta a su color con `pid`/`p1`; el objeto lleva el fondo
  *     por defecto (`pindex="0"`) y los triángulos del relieve el trazo (`p1=1`).
  * OJO: hay que usar la extensión de COLOR (`m:colorgroup`), no `basematerials`,
@@ -29,21 +30,21 @@ import type { Piece } from '../types';
 
 interface Indexed {
   verts: string[]; // "x y z" ya formateados
-  tris: [number, number, number, number][]; // a, b, c, capa (0 cuerpo, 1 relieve, 2 nombre)
+  tris: [number, number, number, number][]; // a, b, c, índice de color en la paleta
 }
 
 /** 1 µm de cuantización: por debajo de cualquier impresora y del float32 del STL. */
 const q = (v: number) => Math.round(v * 1000) / 1000;
 
 /**
- * Suelda los vértices y dice a qué capa pertenece cada triángulo: 0 el cuerpo,
- * 1 el relieve, 2 el nombre.
+ * Suelda los vértices y le pone a cada triángulo su color de la paleta.
  *
- * Va por posición dentro de `positions` porque cada pieza se construye siempre
- * como `merge(cuerpo, relieve, nombre)`: el relieve y el nombre son las dos
- * colas, en ese orden.
+ * `colorAt` traduce la posición dentro de `positions` a índice de color. Se
+ * puede porque cada pieza se construye siempre como
+ * `merge(cuerpo, ...trozos del relieve, nombre)`: el reparto es por tramos, y
+ * cada tramo se sabe dónde empieza y dónde acaba.
  */
-function weld(positions: number[], overlayStart: number, textStart: number): Indexed {
+function weld(positions: number[], colorAt: (i: number) => number): Indexed {
   const index = new Map<string, number>();
   const verts: string[] = [];
   const tris: [number, number, number, number][] = [];
@@ -66,8 +67,7 @@ function weld(positions: number[], overlayStart: number, textStart: number): Ind
     const c = idOf(i + 6);
     // Un triángulo que la cuantización ha dejado con dos vértices iguales ya no
     // aporta superficie: fuera.
-    if (a !== b && b !== c && a !== c)
-      tris.push([a, b, c, i >= textStart ? 2 : i >= overlayStart ? 1 : 0]);
+    if (a !== b && b !== c && a !== c) tris.push([a, b, c, colorAt(i)]);
   }
   return { verts, tris };
 }
@@ -77,11 +77,25 @@ const xmlName = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').re
 /** Normaliza un color a '#RRGGBB' en mayúsculas. */
 const hex = (h: string) => `#${h.replace('#', '').toUpperCase().slice(0, 6).padEnd(6, '0')}`;
 
+export interface ColorOpts {
+  bg: string;
+  trace: string;
+  text?: string;
+  /**
+   * Color pintado a mano para una zona concreta de una pieza, si lo tiene.
+   * Las zonas son 'base' (la placa), 'name' (el nombre) y `p0`, `p1`… (cada
+   * trozo del relieve, en el orden de `overlayParts`). Es lo mismo que enseña
+   * el visor, así que el archivo sale pintado igual que se ve en pantalla.
+   */
+  zone?: (pieceId: string, zone: string) => string | undefined;
+}
+
 /**
  * Todas las piezas en UN archivo .3mf. `colors` activa el pintado de Bambu:
- * placa = filamento 1 (fondo), relieve = filamento 2 (trazo).
+ * placa = filamento 1 (fondo), relieve = filamento 2 (trazo), y cada zona
+ * pintada a mano su propio filamento.
  */
-export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string; text?: string }): Blob {
+export function to3mf(pieces: Piece[], colors?: ColorOpts): Blob {
   const objects: string[] = [];
   const items: string[] = [];
 
@@ -114,13 +128,38 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string; tex
 
   pieces.forEach((pc, idx) => {
     const id = idx + 1;
+    const baseIdx = idxOf(pc.tint);
+    const total = pc.mesh.positions.length;
     const textLen = pc.textMesh?.positions.length ?? 0;
-    const textStart = colors && textLen ? pc.mesh.positions.length - textLen : Infinity;
-    const overlayStart =
-      colors && pc.overlay
-        ? pc.mesh.positions.length - textLen - pc.overlay.positions.length
-        : Infinity;
-    const { verts, tris } = weld(pc.mesh.positions, overlayStart, textStart);
+    const overlayLen = pc.overlay?.positions.length ?? 0;
+
+    // El reparto de la malla en tramos, cada uno con su color. Se recorre de
+    // principio a fin: cuerpo, los trozos del relieve en su orden, y el nombre.
+    // Fuera de cualquier tramo manda el color del objeto.
+    const tramos: { from: number; to: number; color: number }[] = [];
+    if (colors) {
+      const zona = (z: string, porDefecto: number): number => {
+        const propio = colors.zone?.(pc.id, z);
+        return propio ? idxOf(propio) : porDefecto;
+      };
+      const baseZona = zona('base', baseIdx);
+      if (baseZona !== baseIdx) tramos.push({ from: 0, to: total - overlayLen - textLen, color: baseZona });
+
+      const partes = pc.overlayParts ?? (pc.overlay ? [pc.overlay] : []);
+      let cursor = total - overlayLen - textLen;
+      partes.forEach((m, i) => {
+        const fin = cursor + m.positions.length;
+        tramos.push({ from: cursor, to: fin, color: zona(`p${i}`, 1) });
+        cursor = fin;
+      });
+      if (textLen) tramos.push({ from: total - textLen, to: total, color: zona('name', textIdx) });
+    }
+
+    const colorAt = (i: number): number => {
+      for (const t of tramos) if (i >= t.from && i < t.to) return t.color;
+      return baseIdx;
+    };
+    const { verts, tris } = weld(pc.mesh.positions, colorAt);
 
     const vx = verts
       .map((v) => {
@@ -128,13 +167,12 @@ export function to3mf(pieces: Piece[], colors?: { bg: string; trace: string; tex
         return `<vertex x="${x}" y="${y}" z="${z}"/>`;
       })
       .join('');
-    // Color estándar del 3MF (extensión de color): la placa apunta al color 0
-    // (fondo) y el relieve al color 1 (trazo). Bambu lo lee como colores reales.
-    const baseIdx = idxOf(pc.tint);
+    // Color estándar del 3MF (extensión de color): cada triángulo apunta al
+    // índice que le toca en la paleta. Bambu lo lee como colores reales.
     const tr = tris
-      .map(([a, b, c, capa]) =>
+      .map(([a, b, c, color]) =>
         colors
-          ? `<triangle v1="${a}" v2="${b}" v3="${c}" pid="1" p1="${capa === 2 ? textIdx : capa === 1 ? 1 : baseIdx}"/>`
+          ? `<triangle v1="${a}" v2="${b}" v3="${c}" pid="1" p1="${color}"/>`
           : `<triangle v1="${a}" v2="${b}" v3="${c}"/>`,
       )
       .join('');

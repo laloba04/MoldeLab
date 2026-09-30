@@ -639,6 +639,37 @@ console.log('');
     conZonas.slice(0, 6).join(', '));
 }
 
+// --- La anilla obedece ------------------------------------------------------
+//
+// Un producto que enseña el control «Posición de la anilla» tiene que hacerle
+// caso. El llavero en capas lo enseñaba a medias y no lo usaba: la anilla iba
+// clavada en el centro y ni el deslizador ni el tirador la movían. Eso no lo
+// pillaba ningún test, porque la pieza salía perfectamente válida — solo que con
+// la anilla donde ella quería.
+//
+// Se construye dos veces, con la anilla en el centro y pegada a un lado, y se
+// exige que la geometría cambie. Es la comprobación más tonta posible y es
+// justo la que faltaba.
+
+console.log('');
+{
+  const sordos: string[] = [];
+  const obedientes: string[] = [];
+
+  for (const prod of PRODUCTS) {
+    if (!prod.fields.includes('ringPos')) continue;
+    const centro = buildProduct(sil, { ...DEFAULTS, product: prod.id, ringPos: 0 });
+    const lado = buildProduct(sil, { ...DEFAULTS, product: prod.id, ringPos: 0.9 });
+
+    const huella = (ps: typeof centro) => ps.map((p) => p.mesh.positions.join(',')).join('|');
+    if (huella(centro) === huella(lado)) sordos.push(prod.id);
+    else obedientes.push(prod.id);
+  }
+
+  check('los llaveros hacen caso a la posición de la anilla', sordos.length === 0,
+    sordos.length ? `no se mueve en: ${sordos.join(', ')}` : obedientes.join(', '));
+}
+
 console.log(`\n${totalTris.toLocaleString('es-ES')} triángulos en total`);
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');
 process.exitCode = failures ? 1 : 0;

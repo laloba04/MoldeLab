@@ -469,11 +469,15 @@ export default function App() {
     [brush],
   );
 
-  // Tirador de la anilla: solo en llaveros (los que exponen «ringPos») y con una
-  // sola pieza. Arrastrarlo mueve la anilla a mano, como en MakerLab.
+  // Tirador de la anilla: solo en llaveros (los que exponen «ringPos»).
+  // Arrastrarlo mueve la anilla a mano, como en MakerLab.
+  //
+  // No se exige que la pieza sea una sola. El llavero en capas son varias —una
+  // por tono— y esa condición lo dejaba sin tirador; la anilla va en la capa de
+  // abajo, y el visor pone el tirador donde esté esa capa.
   const ringDrag = useMemo(() => {
     const prod = byId(params.product);
-    if (!silhouette || !prod.fields.includes('ringPos') || marked.length !== 1) return null;
+    if (!silhouette || !prod.fields.includes('ringPos') || !marked.length) return null;
     const box = boxOf(silhouette.loops);
     const [hx, hy] = ringHandle(silhouette.loops, params);
     const holeDefault = box.maxY + Math.max(4, box.h * 0.06);

@@ -221,7 +221,7 @@ export const PRODUCTS: Entry[] = [
     label: 'Llavero en capas',
     hint: 'Una pieza por tono: cambia de filamento y sale a colores.',
     needsBands: true,
-    fields: [...SIZE, 'thickness', 'layers', 'layerHeight', 'ringOuter', 'ringInner'],
+    fields: [...SIZE, 'thickness', 'layers', 'layerHeight', 'ringOuter', 'ringInner', 'ringPos', 'ringNeck'],
     build: (s, p) => buildLayered(s, p, true),
   },
   {

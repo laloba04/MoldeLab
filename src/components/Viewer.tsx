@@ -18,6 +18,7 @@ function DragHandle({
   color = '#ffcf3f',
   radio = 2.7,
   girar = false,
+  dx = 0,
 }: {
   ring: { x: number; y: number; z: number };
   onMove: (x: number, y: number) => void;
@@ -26,6 +27,15 @@ function DragHandle({
   radio?: number;
   /** Dibuja la flecha curva de girar en vez del aro de mover. */
   girar?: boolean;
+  /**
+   * Desplazamiento en X de la pieza a la que pertenece el tirador.
+   *
+   * Con «separar», las piezas se abren en fila y la que lleva la anilla ya no
+   * está en el origen. El tirador se dibuja corrido lo mismo, y lo que informa
+   * se descuenta otra vez: así el ratón cae sobre la pieza y las coordenadas que
+   * llegan siguen siendo las del dibujo, que es en las que piensa el generador.
+   */
+  dx?: number;
 }) {
   const { camera, gl } = useThree();
   const dragging = useRef(false);
@@ -34,6 +44,11 @@ function DragHandle({
   const hit = useRef(new THREE.Vector3());
   const cb = useRef(onMove);
   cb.current = onMove;
+  // En una ref, no en la dependencia del efecto: el efecto engancha los eventos
+  // del ratón una vez, y al separar las piezas a mitad de arrastre no hace falta
+  // volver a engancharlos, solo leer el desplazamiento nuevo.
+  const despl = useRef(dx);
+  despl.current = dx;
 
   useEffect(() => {
     const toWorld = (e: PointerEvent) => {
@@ -49,7 +64,7 @@ function DragHandle({
     const move = (e: PointerEvent) => {
       if (!dragging.current) return;
       const w = toWorld(e);
-      if (w) cb.current(w.x, w.y);
+      if (w) cb.current(w.x - despl.current, w.y);
     };
     const up = () => {
       if (dragging.current) {
@@ -71,7 +86,7 @@ function DragHandle({
 
   return (
     <group
-      position={[ring.x, ring.y, ring.z + 1.5]}
+      position={[ring.x + dx, ring.y, ring.z + 1.5]}
       onPointerDown={(e) => {
         e.stopPropagation();
         dragging.current = true;
@@ -397,6 +412,12 @@ export function Viewer({
     return max * 2 + 15;
   }, [pieces]);
 
+  // Dónde cae cada pieza cuando están separadas. Los tiradores lo necesitan
+  // igual que las piezas: la anilla y el nombre viven en la PRIMERA, y sin esto
+  // se quedaban plantados en el medio de la fila, lejos de lo que mueven.
+  const corrimiento = (i: number): number =>
+    exploded && pieces.length > 1 ? (i - (pieces.length - 1) / 2) * span : 0;
+
   return (
     <div className={`viewer-wrap${onPaint ? ' pintando' : ''}`}>
     <Canvas
@@ -447,7 +468,7 @@ export function Viewer({
         <PieceMesh
           key={p.id}
           piece={p}
-          offset={exploded && pieces.length > 1 ? (i - (pieces.length - 1) / 2) * span : 0}
+          offset={corrimiento(i)}
           bgColor={bgColor}
           traceColor={traceColor}
           textColor={textColor}
@@ -460,10 +481,16 @@ export function Viewer({
       ))}
 
       {ring && onRingMove && (
-        <DragHandle ring={ring} onMove={onRingMove} onDragChange={setDragging} />
+        <DragHandle ring={ring} onMove={onRingMove} onDragChange={setDragging} dx={corrimiento(0)} />
       )}
       {text && onTextMove && (
-        <DragHandle ring={text} onMove={onTextMove} onDragChange={setDragging} color="#1bc5d4" />
+        <DragHandle
+          ring={text}
+          onMove={onTextMove}
+          onDragChange={setDragging}
+          color="#1bc5d4"
+          dx={corrimiento(0)}
+        />
       )}
       {/* El de girar es más pequeño y de otro color: orbita alrededor del de
           mover, y con los dos iguales no se sabría cuál es cuál. */}
@@ -472,6 +499,7 @@ export function Viewer({
           ring={textRot}
           onMove={onTextRot}
           onDragChange={setDragging}
+          dx={corrimiento(0)}
           color="#a78bfa"
           radio={2.2}
           girar

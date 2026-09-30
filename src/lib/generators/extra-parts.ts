@@ -9,9 +9,9 @@
 
 import type { Mesh, Params, Piece, Pt, Silhouette } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
-import { intersect, offsetRegions, sanitize, subtract, type Region } from '../clipper';
+import { intersect, offsetRegions, overlaps, sanitize, subtract, type Region } from '../clipper';
 import { boxOf, circle, roundedRect, stadium } from '../shapes';
-import { regionsOf, reliefSolids } from './catalog-parts';
+import { regionsOf, reliefSolids, ringAt, weldBars } from './catalog-parts';
 
 function solid(regions: Region[], zLo: number, zHi: number): Mesh {
   const m = emptyMesh();
@@ -50,16 +50,21 @@ export function buildLayered(s: Silhouette, p: Params, withRing: boolean): Piece
     const parts: Mesh[] = [solid(regions, zLo, zHi)];
 
     // La anilla vive en la capa base, que es la que aguanta el tirón.
+    //
+    // Es la MISMA que la de los demás llaveros (`ringAt`), no un aro suelto: una
+    // pestaña con su rabito, que obedece a dónde se la arrastre y al largo que se
+    // le ponga. Antes iba clavada encima del dibujo, centrada, y no había forma
+    // de moverla: era el único llavero del catálogo sin tirador.
     if (withRing && i === 0) {
-      const box = boxOf(bands[0]);
-      const cy = box.maxY + p.ringOuter * 0.55;
-      parts.push(
-        solid(
-          sanitize([circle(box.cx, cy, p.ringOuter, 40)], [rev(circle(box.cx, cy, p.ringInner, 32))]),
-          zLo,
-          zHi,
-        ),
-      );
+      const ring = ringAt(bands[0], p);
+      parts.push(solid(sanitize([ring.tab], [ring.hole]), zLo, zHi));
+
+      // Y si al moverla deja de tocar el dibujo, se le tira un enlace. De aquí
+      // cuelga toda la pieza: una anilla suelta se queda en la cama.
+      const tabReg = sanitize([ring.tab], []);
+      if (!overlaps(regions, tabReg)) {
+        parts.push(solid(weldBars([...regions, ...tabReg], p.ringOuter * 2), zLo, zHi));
+      }
     }
 
     const mesh = merge(...parts);

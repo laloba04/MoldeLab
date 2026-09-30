@@ -473,7 +473,7 @@ export function ringHandle(loops: Loop[], p: Params): Pt {
   return [rx, holeCy];
 }
 
-function ringAt(loops: Loop[], p: Params): { tab: Pt[]; hole: Pt[] } {
+export function ringAt(loops: Loop[], p: Params): { tab: Pt[]; hole: Pt[] } {
   const [rx, holeCy] = ringHandle(loops, p);
 
   // Argolla de tamaño FIJO: una píldora con el agujero arriba y un rabito debajo

@@ -312,35 +312,38 @@ export function buildThermoform(
 
   // --- El cuello ---------------------------------------------------------------
   //
-  // Nace del borde DE VERDAD, no de lo alto de la caja. En un corazón lo alto de
-  // la caja son las puntas de los lóbulos, y entre ellos, en el centro, no hay
-  // plancha: es el hueco de la muesca. Se busca dónde corta el contorno la
-  // vertical del centro, y el cuello nace del corte más alto: el fondo de la
-  // muesca.
+  // Nace de lo ALTO de la forma —en un corazón, a la altura de las puntas de
+  // los lóbulos— y sale hacia fuera. Todo él queda por fuera: es donde se
+  // enrosca la tuerca, y si se metía en la forma quedaba tumbado encima de la
+  // plancha abombada, en una zanja.
   //
-  // Y ASOMA por encima de todo: lo que mide «Largo del cuello» queda por fuera
-  // de la forma. Si se quedaba dentro de la muesca, entre los lóbulos, la tuerca
-  // no tenía sitio para entrar y enroscarse.
+  // Lo que hay entre el fondo de la muesca y el cuello se rellena de plancha
+  // plana (`relleno`, más abajo): es el cuello quien se apoya en ella, no al
+  // revés.
   const rCuello = Math.max(2, p.neckRadius);
-  const yCuello = bordeArriba(outer, cx) ?? caja.maxY;
-  const yNace = yCuello - 1.6; // se mete un poco en la plancha, para soldar
+  const yCuello = bordeArriba(outer, cx) ?? caja.maxY; // el fondo de la muesca
+  const yNace = caja.maxY - 1.6; // se mete un poco en el relleno, para soldar
   const largoCuello = caja.maxY - yNace + Math.max(3, p.neckLength);
+
+  // La muesca, rellena: de un poco por debajo de su fondo hasta lo alto de la
+  // forma, del ancho del cuello. Así el cuello sale de material firme.
+  const relleno = roundedRect(
+    cx,
+    (yCuello - 1 + caja.maxY) / 2,
+    (rCuello + 0.5) * 2,
+    Math.max(1, caja.maxY - yCuello + 1),
+    0,
+  );
 
   // El borde PLANO de la plancha: no se abomba, se apoya en el escalón del
   // cuenco y es lo que la deja quieta al prensar. La cúpula va por dentro de él.
   //
-  // Y alrededor del cuello tampoco se abomba. Si no, la cúpula subía por los
-  // lados del cuello y lo dejaba enterrado entre los lóbulos.
+  // Y donde está el relleno de la muesca tampoco. Solo ahí, con un margen: un
+  // corte más largo dejaba una zanja plana por la cúpula.
   const reborde = Math.max(2.5, p.holeWall * 3);
-  const sitioCuello = roundedRect(
-    cx,
-    yCuello + 50 - 3,
-    (rCuello + FONDO_ROSCA + 1.5) * 2,
-    100,
-    0,
-  );
+  const sitioCuello = offsetRegions([relleno], [], 1.5);
   const cupulaOuter =
-    subtract(offsetRegions([outer], [], -reborde), sanitize([sitioCuello], [])).reduce<Pt[] | null>(
+    subtract(offsetRegions([outer], [], -reborde), sitioCuello).reduce<Pt[] | null>(
       (a, r) => (!a || Math.abs(areaDe(r.outer)) > Math.abs(areaDe(a)) ? r.outer : a),
       null,
     ) ?? encoger(outer, cx, cy, 0.85);
@@ -358,17 +361,8 @@ export function buildThermoform(
   // Y se encajan en la CÚPULA, no en la plancha entera, con el margen de
   // «Marco» alrededor: en el borde plano no lucen, y al prensar es la zona que
   // se aplasta contra el escalón.
-  // La plancha es la forma MÁS un relleno macizo en la base del cuello: tapa la
-  // muesca entre los lóbulos justo donde nace, para que el cuello salga de
-  // material firme y no de un pellizco de plancha. Es plano —no se abomba— y
-  // forma parte del reborde.
-  const relleno = roundedRect(
-    cx,
-    (yCuello - 3 + caja.maxY) / 2,
-    (rCuello + 0.5) * 2,
-    Math.max(1, caja.maxY - yCuello + 3),
-    0,
-  );
+  // La plancha es la forma MÁS el relleno de la muesca. Es plano —no se
+  // abomba— y forma parte del reborde.
   const plano = union(sanitize([outer], []), sanitize([relleno], []));
   const dondeVa = offsetRegions([cupulaOuter], [], -Math.max(0, p.border));
   const juntos = fitDetailToBase(
@@ -405,7 +399,7 @@ export function buildThermoform(
   //
   // Rosca SOLO en lo que asoma, que es donde se enrosca la tuerca. El tramo que
   // cruza la muesca va liso: roscado entero salía un tornillo larguísimo.
-  const liso = caja.maxY - yNace;
+  const liso = caja.maxY - yNace; // lo que va metido en el relleno
   const cuello = medioCuelloRoscado(cx, yNace, rCuello, largoCuello, 0, liso);
   const cuelloTrasera = medioCuelloRoscado(cx, yNace, rCuello, largoCuello, 0.5, liso);
 
@@ -542,9 +536,13 @@ export function buildThermoform(
   // ella, el cuello tropieza con el borde del cuenco y la plancha no asienta.
   const rCrestas = rCuello + FONDO_ROSCA + 0.3;
   // Desde el fondo de la muesca hasta fuera de la pared, que es por donde sale.
-  const ranuraLargo = caja.maxY - yCuello + pared * 2 + 4;
-  const ranura = roundedRect(cx, yCuello + ranuraLargo / 2 - 1, rCrestas * 2, ranuraLargo, 0);
-  const escalon = sanitize([mayor(offsetRegions([outer], [], 0.25), outer), ranura], []);
+  const ranuraLargo = pared * 2 + 4;
+  const ranura = roundedRect(cx, yNace + ranuraLargo / 2, rCrestas * 2, ranuraLargo, 0);
+  // La plancha se apoya entera en el escalón, relleno de la muesca incluido.
+  const escalon = union(
+    offsetRegions([outer], [], 0.25),
+    union(offsetRegions([relleno], [], 0.25), sanitize([ranura], [])),
+  );
 
   // El hueco es la cúpula agrandada lo que mide la plancha más la holgura, y
   // más honda por lo mismo: la cúpula de la boca tiene su propia distancia al

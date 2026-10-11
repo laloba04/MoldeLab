@@ -183,3 +183,65 @@ export function stadium(cx: number, cy: number, w: number, h: number, seg = 16):
   }
   return orient(pts, true);
 }
+
+/**
+ * Polígono regular de `n` lados inscrito en la caja `w × h`.
+ *
+ * `flat` pone un lado abajo en vez de un vértice, que es como se espera ver un
+ * hexágono o un triángulo. Se reescala a la caja pedida, así que un hexágono en
+ * una caja ancha sale ancho: es lo que quiere quien elige la forma del molde.
+ */
+export function polygon(cx: number, cy: number, w: number, h: number, n: number, flat = true): Pt[] {
+  const giro = flat ? Math.PI / 2 + (n % 2 ? 0 : Math.PI / n) : 0;
+  const raw: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = giro + (i / n) * Math.PI * 2;
+    raw.push([Math.cos(a), Math.sin(a)]);
+  }
+  return orient(encajar(raw, cx, cy, w, h), true);
+}
+
+/**
+ * Estrella de `puntas` puntas. `hueco` es lo metido que va el valle entre dos
+ * puntas: 0,5 es la estrella clásica de cinco puntas.
+ */
+export function star(cx: number, cy: number, w: number, h: number, puntas = 5, hueco = 0.5): Pt[] {
+  const raw: Pt[] = [];
+  for (let i = 0; i < puntas * 2; i++) {
+    const a = Math.PI / 2 + (i / (puntas * 2)) * Math.PI * 2;
+    const r = i % 2 ? hueco : 1;
+    raw.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  return orient(encajar(raw, cx, cy, w, h), true);
+}
+
+/**
+ * Huevo: un círculo con la mitad de arriba estirada y la de abajo ensanchada.
+ * Es la forma de colgante de toda la vida y no la da ninguna de las otras.
+ */
+export function egg(cx: number, cy: number, w: number, h: number, seg = 72): Pt[] {
+  const raw: Pt[] = [];
+  for (let i = 0; i < seg; i++) {
+    const a = (i / seg) * Math.PI * 2;
+    const y = Math.sin(a);
+    // El ancho se encoge arriba y se abre abajo: 1 + 0,2·y invertido.
+    raw.push([Math.cos(a) * (1 - 0.22 * y), y]);
+  }
+  return orient(encajar(raw, cx, cy, w, h), true);
+}
+
+/** Lleva unos puntos cualesquiera a la caja `w × h` centrada en (cx,cy). */
+function encajar(raw: Pt[], cx: number, cy: number, w: number, h: number): Pt[] {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of raw) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const sx = maxX > minX ? w / (maxX - minX) : 1;
+  const sy = maxY > minY ? h / (maxY - minY) : 1;
+  const mx = (minX + maxX) / 2;
+  const my = (minY + maxY) / 2;
+  return raw.map(([x, y]) => [cx + (x - mx) * sx, cy + (y - my) * sy] as Pt);
+}

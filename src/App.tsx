@@ -112,6 +112,9 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'solid' | 'xray' | 'wire'>('solid');
   // Mirar la pieza desde abajo: la marca del taller se graba en esa cara.
   const [flipped, setFlipped] = useState(false);
+  // Termoformado: enseñar las planchas ya abombadas. Empieza encendido porque es
+  // lo que se quiere ver; plana es como se imprime, y eso ya lo dice el botón.
+  const [showFormed, setShowFormed] = useState(true);
   // ¿Se ha publicado una versión nueva mientras esta pestaña estaba abierta?
   const [stale, setStale] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -281,11 +284,12 @@ export default function App() {
     const compose = async (): Promise<ImageData | null> => {
       if (product.needsText) {
         const t = params.textContent;
-        // Solo «Llavero imagen + texto» combina las dos cosas. En el resto de
-        // productos de texto (letrero de letra grande, curvo, llavero de texto)
-        // manda el texto: mezclar la imagen dejaba las letras diminutas al lado
-        // del dibujo, y el filtro de islas pequeñas se las comía.
-        if (product.id === 'keychain-image-text') {
+        // Solo los productos de imagen + texto combinan las dos cosas. En el
+        // resto de productos de texto (letrero de letra grande, curvo, llavero
+        // de texto) manda el texto: mezclar la imagen dejaba las letras
+        // diminutas al lado del dibujo, y el filtro de islas pequeñas se las
+        // comía.
+        if (product.imageAndText) {
           if (img && t.trim())
             // Los deslizadores van en %, la función en fracción.
             return imageWithText(img, t, params.textScale, params.textX / 100, params.textY / 100, params.textRot);
@@ -310,7 +314,7 @@ export default function App() {
         // Y aparte, el nombre solo: el generador lo necesita para levantarlo por
         // encima del dibujo en vez de dejarlo fundido con él.
         setTextSource(
-          product.id === 'keychain-image-text' && img && params.textContent.trim()
+          product.imageAndText && img && params.textContent.trim()
             ? textOnlyImage(img, params.textContent, params.textScale, params.textX / 100, params.textY / 100, params.textRot)
             : null,
         );
@@ -1032,6 +1036,7 @@ export default function App() {
             <Viewer
               pieces={marked}
               exploded={exploded}
+              formed={showFormed}
               mark={markOn ? mark : null}
               bgColor={bgColor}
               traceColor={traceColor}
@@ -1087,6 +1092,17 @@ export default function App() {
               >
                 <FlipVertical size={14} /> {flipped ? 'Ver por delante' : 'Ver por detrás'}
               </button>
+              {marked.some((pc) => pc.dome) && (
+                // Solo en lo que se termoforma: la plancha se imprime plana, y
+                // así se ve también cómo queda una vez prensada.
+                <button
+                  className={showFormed ? 'chip on' : 'chip'}
+                  onClick={() => setShowFormed((v) => !v)}
+                  title="Las planchas se imprimen planas. Esto enseña cómo quedan una vez abombadas."
+                >
+                  {showFormed ? 'Ver plana' : 'Ver abombada'}
+                </button>
+              )}
               <span className="chip readout">{product.label}</span>
               {dims && (
                 <span className="chip readout" title="Ancho × Largo × Alto">

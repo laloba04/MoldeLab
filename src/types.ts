@@ -19,6 +19,7 @@ export interface Loop {
 }
 
 import { FONT_STYLES, type FontStyle } from './lib/font';
+import type { Dome } from './lib/dome';
 
 export interface Silhouette {
   /** Silueta maciza: perímetro exterior + agujeros pasantes. */
@@ -93,6 +94,12 @@ export interface Piece {
   /** Color propio de la pieza, por encima del color de fondo elegido. Lo usan
    *  los productos por capas, donde cada capa va de un color distinto. */
   tint?: string;
+  /**
+   * La pieza se imprime plana pero se abomba después (termoformado). Con esto
+   * el visor puede enseñarla ya abombada, que es como se va a ver; el archivo
+   * sigue saliendo plano, que es como se imprime.
+   */
+  dome?: Dome;
 }
 
 // -----------------------------------------------------------------------------
@@ -157,11 +164,25 @@ export type ProductId =
   | 'coloring-plate'
   | 'qr-plate'
   | 'opener-stamp'
+  | 'thermoform'
   | 'figure-box'
   | 'puzzle';
 
+/** Dibujo del calado de la plancha de termoformado. */
+export type HolePattern = 'none' | 'hexagon' | 'circle' | 'square' | 'diamond' | 'triangle';
+
 /** Formas de contorno para las placas. 'image' sigue la silueta del dibujo. */
-export type MoldShape = 'image' | 'rounded' | 'square' | 'circle' | 'heart';
+export type MoldShape =
+  | 'image'
+  | 'rounded'
+  | 'square'
+  | 'circle'
+  | 'heart'
+  | 'hexagon'
+  | 'triangle'
+  | 'diamond'
+  | 'star'
+  | 'egg';
 
 /** Qué controles enseña cada producto. La UI se dibuja sola desde aquí. */
 export type Field = keyof Params;
@@ -177,6 +198,12 @@ export interface Product {
   badge?: 'nuevo' | 'popular';
   /** La imagen se compone con texto antes de vectorizar. */
   needsText?: boolean;
+  /**
+   * El texto va ENCIMA de la imagen, no en su lugar: se puede subir un dibujo,
+   * escribir un nombre, o las dos cosas. El nombre se levanta aparte del dibujo
+   * (`Silhouette.textLoops`) para que se lea.
+   */
+  imageAndText?: boolean;
   /** El pipeline calcula bandas por umbral además de la silueta. */
   needsBands?: boolean;
 }
@@ -239,6 +266,35 @@ export interface Params {
   cornerRadius: number;
   /** Contorno del molde en las placas: seguir la imagen o una forma estándar. */
   moldShape: MoldShape;
+
+  // Termoformado
+  /** Alto del abombado del molde, en milímetros. */
+  formHeight: number;
+  /** Grosor de la plancha que se calienta y se abomba. Fina a propósito. */
+  sheetThickness: number;
+  /** Dibujo del calado de la plancha. 'none' deja la plancha maciza. */
+  holePattern: HolePattern;
+  /** Distancia de centro a centro entre dos agujeros del calado. */
+  holeSpacing: number;
+  /** Pared de material que queda entre dos agujeros. */
+  holeWall: number;
+  /** Calar también por debajo del dibujo, en vez de dejarlo macizo. */
+  holesOnDesign: boolean;
+  /** Holgura entre las dos mitades del molde, además del grosor de la plancha. */
+  formClearance: number;
+  /** Sacar también la plancha trasera, para cerrar el adorno por detrás. */
+  formBack: boolean;
+  /**
+   * Con molde: las planchas salen PLANAS y se prensan entre los moldes.
+   * Sin molde: salen ya abombadas, para imprimirlas tal cual.
+   */
+  formMold: boolean;
+  /** Radio del cuello por donde se unen las dos planchas. */
+  neckRadius: number;
+  /** Largo del cuello. */
+  neckLength: number;
+  /** Holgura del tapón sobre el cuello. Más, entra más suelto. */
+  capClearance: number;
 
   /**
    * Largo del marcapáginas, en milímetros.
@@ -355,6 +411,20 @@ export const DEFAULTS: Params = {
   // Por defecto el molde sigue la silueta de la imagen subida: es lo que la
   // usuaria espera («que se adapte a la imagen»), no un rectángulo fijo.
   moldShape: 'image',
+
+  formHeight: 12,
+  sheetThickness: 0.6,
+  holePattern: 'hexagon',
+  holeSpacing: 4,
+  holeWall: 0.8,
+  // Como en un adorno de verdad: el panal sigue por debajo del dibujo.
+  holesOnDesign: true,
+  formClearance: 0.3,
+  formBack: true,
+  formMold: true,
+  neckRadius: 3.5,
+  neckLength: 6,
+  capClearance: 0.1,
   cutoutMode: 'lines',
   cutLineWidth: 2,
   cutBridges: 6,
@@ -462,6 +532,35 @@ export const FIELD_META: Record<Field, FieldMeta> = {
       { value: 'square', label: 'Cuadrado' },
       { value: 'circle', label: 'Círculo' },
       { value: 'heart', label: 'Corazón' },
+      { value: 'hexagon', label: 'Hexágono' },
+      { value: 'triangle', label: 'Triángulo' },
+      { value: 'diamond', label: 'Rombo' },
+      { value: 'star', label: 'Estrella' },
+      { value: 'egg', label: 'Huevo' },
+    ],
+  },
+
+  formHeight: { label: 'Alto del abombado', unit: 'mm', min: 3, max: 40, step: 1 },
+  sheetThickness: { label: 'Grosor de la plancha', unit: 'mm', min: 0.4, max: 2, step: 0.1 },
+  holeSpacing: { label: 'Separación del calado', unit: 'mm', min: 2, max: 12, step: 0.5 },
+  holeWall: { label: 'Pared entre agujeros', unit: 'mm', min: 0.4, max: 3, step: 0.1 },
+  holesOnDesign: { toggle: true, label: 'Calar también el dibujo' },
+  formClearance: { label: 'Holgura del molde', unit: 'mm', min: 0, max: 1.5, step: 0.05 },
+  formBack: { toggle: true, label: 'Plancha trasera y tapón (cierra el adorno)' },
+  formMold: { toggle: true, label: 'Con molde (planchas planas para prensar)' },
+  neckRadius: { label: 'Grosor del cuello', unit: 'mm', min: 2, max: 8, step: 0.5 },
+  neckLength: { label: 'Largo del cuello', unit: 'mm', min: 3, max: 15, step: 0.5 },
+  capClearance: { label: 'Holgura del tapón', unit: 'mm', min: -0.2, max: 0.6, step: 0.05 },
+  holePattern: {
+    select: true,
+    label: 'Calado de la plancha',
+    options: [
+      { value: 'hexagon', label: 'Panal (hexágonos)' },
+      { value: 'circle', label: 'Círculos' },
+      { value: 'square', label: 'Cuadrados' },
+      { value: 'diamond', label: 'Rombos' },
+      { value: 'triangle', label: 'Triángulos' },
+      { value: 'none', label: 'Sin calar (maciza)' },
     ],
   },
 

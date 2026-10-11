@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Grid, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Piece } from '../types';
+import { abombar } from '../lib/dome';
 
 /** Lo que cada malla del visor lleva colgado para saber qué zona es al tocarla. */
 interface Zona {
@@ -19,6 +20,7 @@ function DragHandle({
   radio = 2.7,
   girar = false,
   dx = 0,
+  dy = 0,
 }: {
   ring: { x: number; y: number; z: number };
   onMove: (x: number, y: number) => void;
@@ -36,6 +38,8 @@ function DragHandle({
    * llegan siguen siendo las del dibujo, que es en las que piensa el generador.
    */
   dx?: number;
+  /** Lo mismo en Y: con las piezas en cuadrícula, también se corren en vertical. */
+  dy?: number;
 }) {
   const { camera, gl } = useThree();
   const dragging = useRef(false);
@@ -49,6 +53,8 @@ function DragHandle({
   // volver a engancharlos, solo leer el desplazamiento nuevo.
   const despl = useRef(dx);
   despl.current = dx;
+  const desplY = useRef(dy);
+  desplY.current = dy;
 
   useEffect(() => {
     const toWorld = (e: PointerEvent) => {
@@ -64,7 +70,7 @@ function DragHandle({
     const move = (e: PointerEvent) => {
       if (!dragging.current) return;
       const w = toWorld(e);
-      if (w) cb.current(w.x - despl.current, w.y);
+      if (w) cb.current(w.x - despl.current, w.y - desplY.current);
     };
     const up = () => {
       if (dragging.current) {
@@ -86,7 +92,7 @@ function DragHandle({
 
   return (
     <group
-      position={[ring.x + dx, ring.y, ring.z + 1.5]}
+      position={[ring.x + dx, ring.y + dy, ring.z + 1.5]}
       onPointerDown={(e) => {
         e.stopPropagation();
         dragging.current = true;
@@ -188,9 +194,10 @@ function PieceMesh({
   oneColor,
   colorOf,
   onPaint,
+  formed = false,
 }: {
   piece: Piece;
-  offset: number;
+  offset: [number, number];
   bgColor: string;
   traceColor: string;
   textColor: string;
@@ -201,6 +208,8 @@ function PieceMesh({
   colorOf?: (pieceId: string, zone: string) => string | undefined;
   /** Tocar una zona para pintarla. Sin esto, la pieza no responde al ratón. */
   onPaint?: (pieceId: string, zone: string) => void;
+  /** Enseñar ya abombadas las piezas que se abomban (termoformado). */
+  formed?: boolean;
 }) {
   // El cortador conserva su cian (corta) para distinguirlo de un vistazo. Las
   // piezas con color propio (las capas de color) mandan sobre el color de
@@ -224,17 +233,30 @@ function PieceMesh({
 
   // Con «ocultar trazo» se pinta solo la placa: las colas de posiciones (el
   // relieve y el nombre) se recortan, porque van fusionadas dentro de piece.mesh.
+  // Abombar para enseñar (termoformado): la pieza se imprime plana, pero se
+  // ve como va a quedar. Se aplica a cada trozo por separado y DESPUÉS de
+  // recortar las colas: el abombado parte triángulos y cambia cuántos hay, así
+  // que contar colas sobre la malla ya abombada daría trozos que no son.
+  const domo = formed ? piece.dome : undefined;
+  const bombear = (pos: number[]): number[] =>
+    domo ? abombar({ positions: pos }, domo).positions : pos;
+
   const baseGeom = useMemo(() => {
     const p = piece.mesh.positions;
-    return geomOf(hideTrace && overlayLen + textLen ? p.slice(0, p.length - overlayLen - textLen) : p);
-  }, [piece.mesh, hideTrace, overlayLen, textLen]);
+    return geomOf(
+      bombear(hideTrace && overlayLen + textLen ? p.slice(0, p.length - overlayLen - textLen) : p),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [piece.mesh, hideTrace, overlayLen, textLen, domo]);
   const partGeoms = useMemo(
-    () => (hideTrace ? [] : parts.map((m) => geomOf(m.positions))),
-    [parts, hideTrace],
+    () => (hideTrace ? [] : parts.map((m) => geomOf(bombear(m.positions)))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [parts, hideTrace, domo],
   );
   const textGeom = useMemo(
-    () => (!hideTrace && textLen ? geomOf(piece.textMesh!.positions) : null),
-    [piece.textMesh, hideTrace, textLen],
+    () => (!hideTrace && textLen ? geomOf(bombear(piece.textMesh!.positions)) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [piece.textMesh, hideTrace, textLen, domo],
   );
 
   const ref = useRef<THREE.Group>(null);
@@ -242,7 +264,9 @@ function PieceMesh({
 
   useFrame((_, dt) => {
     if (!ref.current) return;
-    ref.current.position.x += (offset - ref.current.position.x) * Math.min(1, dt * 6);
+    const k = Math.min(1, dt * 6);
+    ref.current.position.x += (offset[0] - ref.current.position.x) * k;
+    ref.current.position.y += (offset[1] - ref.current.position.y) * k;
   });
 
   const extra = matProps(viewMode);
@@ -375,6 +399,7 @@ export function Viewer({
   onTextRot,
   colorOf,
   onPaint,
+  formed = false,
 }: {
   pieces: Piece[];
   exploded: boolean;
@@ -400,23 +425,56 @@ export function Viewer({
   colorOf?: (pieceId: string, zone: string) => string | undefined;
   /** Con esto puesto, tocar una zona de la pieza la pinta. */
   onPaint?: (pieceId: string, zone: string) => void;
+  /** Enseñar ya abombadas las piezas que se abomban (termoformado). */
+  formed?: boolean;
 }) {
   const [dragging, setDragging] = useState(false);
   // Las piezas se separan en fila, no en montón.
-  const span = useMemo(() => {
-    let max = 0;
-    for (const p of pieces) {
-      const xs = p.mesh.positions;
-      for (let i = 0; i < xs.length; i += 3) max = Math.max(max, Math.abs(xs[i]));
-    }
-    return max * 2 + 15;
-  }, [pieces]);
+  // Lo que mide cada pieza en planta, para repartirlas sin que se pisen.
+  const cajas = useMemo(
+    () =>
+      pieces.map((p) => {
+        const xs = p.mesh.positions;
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (let i = 0; i < xs.length; i += 3) {
+          if (xs[i] < x0) x0 = xs[i];
+          if (xs[i] > x1) x1 = xs[i];
+          if (xs[i + 1] < y0) y0 = xs[i + 1];
+          if (xs[i + 1] > y1) y1 = xs[i + 1];
+        }
+        return Number.isFinite(x0)
+          ? { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0 }
+          : { cx: 0, cy: 0, w: 0, h: 0 };
+      }),
+    [pieces],
+  );
 
-  // Dónde cae cada pieza cuando están separadas. Los tiradores lo necesitan
-  // igual que las piezas: la anilla y el nombre viven en la PRIMERA, y sin esto
-  // se quedaban plantados en el medio de la fila, lejos de lo que mueven.
-  const corrimiento = (i: number): number =>
-    exploded && pieces.length > 1 ? (i - (pieces.length - 1) / 2) * span : 0;
+  /**
+   * Dónde cae cada pieza cuando están separadas.
+   *
+   * Hasta tres, en fila. A partir de ahí, en cuadrícula de dos columnas: con seis
+   * piezas en fila —el termoformado, con sus dos moldes grandes— la fila medía
+   * medio metro y la cámara no las veía todas. Cada pieza se centra en su celda
+   * por su propia caja, porque no todas nacen centradas en el origen.
+   *
+   * Los tiradores lo necesitan igual que las piezas: la anilla y el nombre
+   * viven en la PRIMERA, y sin esto se quedaban lejos de lo que mueven.
+   */
+  const corrimiento = (i: number): [number, number] => {
+    if (!exploded || pieces.length < 2) return [0, 0];
+    const celda = Math.max(...cajas.map((c) => Math.max(c.w, c.h))) + 14;
+    // De dos en dos: las planchas arriba, las piezas pequeñas en medio y los
+    // moldes abajo, que es el orden en que salen del generador.
+    const cols = pieces.length <= 3 ? pieces.length : 2;
+    const filas = Math.ceil(pieces.length / cols);
+    const col = i % cols;
+    const fila = Math.floor(i / cols);
+    const c = cajas[i] ?? { cx: 0, cy: 0 };
+    return [
+      (col - (cols - 1) / 2) * celda - c.cx,
+      ((filas - 1) / 2 - fila) * celda - c.cy,
+    ];
+  };
 
   return (
     <div className={`viewer-wrap${onPaint ? ' pintando' : ''}`}>
@@ -477,11 +535,13 @@ export function Viewer({
           oneColor={oneColor}
           colorOf={colorOf}
           onPaint={onPaint}
+          formed={formed}
         />
       ))}
 
       {ring && onRingMove && (
-        <DragHandle ring={ring} onMove={onRingMove} onDragChange={setDragging} dx={corrimiento(0)} />
+        <DragHandle ring={ring} onMove={onRingMove} onDragChange={setDragging} dx={corrimiento(0)[0]}
+          dy={corrimiento(0)[1]} />
       )}
       {text && onTextMove && (
         <DragHandle
@@ -489,7 +549,8 @@ export function Viewer({
           onMove={onTextMove}
           onDragChange={setDragging}
           color="#1bc5d4"
-          dx={corrimiento(0)}
+          dx={corrimiento(0)[0]}
+          dy={corrimiento(0)[1]}
         />
       )}
       {/* El de girar es más pequeño y de otro color: orbita alrededor del de
@@ -499,7 +560,8 @@ export function Viewer({
           ring={textRot}
           onMove={onTextRot}
           onDragChange={setDragging}
-          dx={corrimiento(0)}
+          dx={corrimiento(0)[0]}
+          dy={corrimiento(0)[1]}
           color="#a78bfa"
           radio={2.2}
           girar

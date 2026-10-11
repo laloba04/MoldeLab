@@ -11,7 +11,7 @@ import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
 import { intersect, offsetRegions, overlaps, sanitize, subtract, union, type Region } from '../clipper';
 import { dedupe, pointInPolygon, resample, signedArea, simplify, smooth } from '../polygon';
-import { boxOf, circle, heart, roundedRect, shiftLoops, spikes } from '../shapes';
+import { boxOf, circle, egg, heart, polygon, roundedRect, shiftLoops, spikes, star } from '../shapes';
 
 const outerOf = (loops: Loop[]) => loops.filter((l) => !l.hole).map((l) => l.pts);
 const holesOf = (loops: Loop[]) => loops.filter((l) => l.hole).map((l) => l.pts);
@@ -845,6 +845,19 @@ export function moldBase(loops: Loop[], p: Params, shape: MoldShape): Region[] {
     }
     case 'square':
       return sanitize([roundedRect(box.cx, box.cy, w, h, 0)], []);
+    // Las formas de pico (triángulo, rombo, estrella) dejan el dibujo pegado al
+    // vértice si se ajustan justas, así que se agrandan: lo que importa es que
+    // la figura quepa en el CUERPO de la forma, no en su caja.
+    case 'hexagon':
+      return sanitize([polygon(box.cx, box.cy, w * 1.18, h * 1.18, 6)], []);
+    case 'triangle':
+      return sanitize([polygon(box.cx, box.cy, w * 2, h * 1.9, 3)], []);
+    case 'diamond':
+      return sanitize([polygon(box.cx, box.cy, w * 1.8, h * 1.8, 4, false)], []);
+    case 'star':
+      return sanitize([star(box.cx, box.cy, w * 2.4, h * 2.4)], []);
+    case 'egg':
+      return sanitize([egg(box.cx, box.cy, w * 1.25, h * 1.2)], []);
     case 'rounded':
     default:
       return sanitize([roundedRect(box.cx, box.cy, w, h, p.cornerRadius)], []);

@@ -182,6 +182,8 @@ function Control({
 export function Controls({ p, set, reset, view = 'all', novedades = false, hayImagen = false }: Props) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({ reposteria: true });
+  // Apartados de ajustes abiertos o cerrados, por producto y título.
+  const [abiertos, setAbiertos] = useState<Record<string, boolean>>({});
 
   const current = byId(p.product);
   const matches = useMemo(() => searchProducts(query, novedades), [query, novedades]);
@@ -311,9 +313,38 @@ export function Controls({ p, set, reset, view = 'all', novedades = false, hayIm
           </button>
         </h3>
         <p className="hint">{current.hint}</p>
-        {current.fields.filter((f) => sirve(f, p, current.fields, hayImagen)).map((f) => (
-          <Control key={f} field={f} p={p} set={set} novedades={novedades} />
-        ))}
+        {current.groups
+          ? current.groups.map((g) => {
+              const campos = g.fields.filter((f) => sirve(f, p, current.fields, hayImagen));
+              // Un apartado sin nada que tocar ahora mismo no se enseña.
+              if (!campos.length) return null;
+              const clave = `${current.id}:${g.label}`;
+              const abierto = abiertos[clave] ?? !!g.open;
+              return (
+                <div key={g.label} className="cat grupo">
+                  <button
+                    className="cat-head"
+                    aria-expanded={abierto}
+                    onClick={() => setAbiertos((o) => ({ ...o, [clave]: !abierto }))}
+                  >
+                    <span className="cat-label">{g.label}</span>
+                    <span className="count">{campos.length}</span>
+                    <ChevronDown size={14} className={abierto ? 'chev open' : 'chev'} />
+                  </button>
+                  {abierto && (
+                    <div className="grupo-body">
+                      {g.hint && <p className="hint">{g.hint}</p>}
+                      {campos.map((f) => (
+                        <Control key={f} field={f} p={p} set={set} novedades={novedades} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          : current.fields.filter((f) => sirve(f, p, current.fields, hayImagen)).map((f) => (
+              <Control key={f} field={f} p={p} set={set} novedades={novedades} />
+            ))}
       </section>
 
       <section>

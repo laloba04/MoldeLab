@@ -6,7 +6,7 @@
  * y el pipeline llama a `build`. Añadir un producto es añadir una entrada aquí.
  */
 
-import type { Loop, Params, Piece, Product, ProductId, Pt, Silhouette } from '../types';
+import type { FieldGroup, Loop, Params, Piece, Product, ProductId, Pt, Silhouette } from '../types';
 import { merge } from './mesh';
 import { pointInPolygon, signedArea } from './polygon';
 import { sanitize } from './clipper';
@@ -70,6 +70,52 @@ const EJECTOR_FIELDS = [
   'rodDiameter',
   ...RELIEF_FIELDS,
 ] as const;
+
+/**
+ * Los ajustes del termoformado, por apartados, en el orden en que se piensa la
+ * pieza: qué forma tiene, cómo es la plancha, el calado, cómo se cierra y los
+ * moldes para prensarla. Lo fino (holguras, conicidad) queda plegado.
+ */
+const THERMOFORM_GROUPS: FieldGroup[] = [
+  {
+    label: 'Forma',
+    hint: 'Silueta, tamaño y el borde liso alrededor.',
+    fields: [...SIZE, 'moldShape', 'cornerRadius', 'border'],
+    open: true,
+  },
+  {
+    label: 'Texto',
+    hint: 'Letra y colocación del nombre.',
+    fields: ['textFont', 'textScale', 'textRot', 'textX', 'textY'],
+    open: true,
+  },
+  {
+    label: 'Plancha',
+    hint: 'Lo que se abomba y el grosor de la lámina.',
+    fields: ['formHeight', 'sheetThickness', 'formBack'],
+    open: true,
+  },
+  {
+    label: 'Agujeros',
+    hint: 'El calado de panal que deja pasar la luz.',
+    fields: ['holePattern', 'holeSpacing', 'holeWall', 'holesOnDesign'],
+  },
+  {
+    label: 'Cuello y tuerca',
+    hint: 'La rosca que cierra la bola y la anilla para colgarla.',
+    fields: ['neckRadius', 'neckLength', 'capClearance', 'ringOuter', 'ringInner'],
+  },
+  {
+    label: 'Moldes',
+    hint: 'Las dos mitades para prensar la plancha.',
+    fields: ['formMold', 'formClearance'],
+  },
+  {
+    label: 'Relieve del dibujo',
+    hint: 'Cuánto sobresale el dibujo y su grosor de línea.',
+    fields: ['reliefHeight', 'reliefTaper', 'strokeWidth'],
+  },
+];
 
 interface Entry extends Product {
   build: Build;
@@ -356,34 +402,8 @@ export const PRODUCTS: Entry[] = [
     hint: 'Dos medias planchas que se abomban y se unen con un tapón: una bola para colgar. Con imagen, nombre o las dos.',
     needsText: true,
     imageAndText: true,
-    fields: [
-      'textFont',
-      'textScale',
-      'textRot',
-      'textX',
-      'textY',
-      ...SIZE,
-      'moldShape',
-      'cornerRadius',
-      'border',
-      'formHeight',
-      'sheetThickness',
-      'formClearance',
-      'holePattern',
-      'holeSpacing',
-      'holeWall',
-      'holesOnDesign',
-      'formBack',
-      'formMold',
-      'neckRadius',
-      'neckLength',
-      'capClearance',
-      'ringOuter',
-      'ringInner',
-      'reliefHeight',
-      'reliefTaper',
-      'strokeWidth',
-    ],
+    groups: THERMOFORM_GROUPS,
+    fields: THERMOFORM_GROUPS.flatMap((g) => g.fields),
     build: (s, p) => buildThermoform(s.loops, s.detail, p, s.textLoops),
   },
   {

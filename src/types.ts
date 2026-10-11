@@ -221,6 +221,22 @@ export interface Product {
    * pasa a la de siempre.
    */
   novedad?: boolean;
+  /**
+   * Los ajustes repartidos en apartados plegables. Para los productos con
+   * muchos mandos: una lista de veinte seguidos abruma, y lo importante (la
+   * forma, el tamaño) queda enterrado entre medidas finas que casi nunca se
+   * tocan. Si no hay apartados, se enseña `fields` tal cual.
+   */
+  groups?: FieldGroup[];
+}
+
+/** Un apartado de ajustes: título, una línea de ayuda y sus mandos. */
+export interface FieldGroup {
+  label: string;
+  hint?: string;
+  fields: Field[];
+  /** Abierto al entrar. Los de medidas finas empiezan cerrados. */
+  open?: boolean;
 }
 
 // -----------------------------------------------------------------------------

@@ -575,6 +575,22 @@ button.ghost:hover {
   transform: rotate(180deg);
 }
 
+/* Apartados de ajustes plegables (termoformado). */
+.grupo .cat-head {
+  font-weight: 600;
+  text-transform: none;
+}
+.grupo-body {
+  /* El mismo respiro entre mandos que en el resto del panel. */
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 0 0 12px;
+}
+.grupo-body > .hint {
+  margin-top: 0;
+}
+
 .products {
   list-style: none;
   padding: 0 0 8px;

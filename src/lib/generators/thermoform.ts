@@ -27,11 +27,27 @@ import { offsetRegions, sanitize, subtract, type Region } from '../clipper';
 import { boxOf, circle, egg, heart, polygon, roundedRect, star } from '../shapes';
 import { orient, pointInPolygon } from '../polygon';
 import { fitDetailToBase, regionsOf, reliefSolids } from './catalog-parts';
-import { abombar, domeOf, entradaA, type Dome } from '../dome';
+import { abombar, domeOf } from '../dome';
 
-/** Alto de cada losa de los moldes. Por debajo de la capa de impresión no se
- *  nota el escalón: queda como una capa más. */
-const LOSA = 0.3;
+/** Lo que el reborde de la plancha sobresale por encima de ella. */
+const REBORDE_ALTO = 0.6;
+
+/**
+ * El punto más alto del contorno en la vertical `x`: dónde corta el contorno esa
+ * vertical, y de los cortes, el de arriba. En un círculo es lo alto del círculo;
+ * en un corazón, el fondo de la muesca entre los dos lóbulos.
+ */
+function bordeArriba(outer: Pt[], x: number): number | null {
+  let mejor: number | null = null;
+  for (let i = 0, j = outer.length - 1; i < outer.length; j = i++) {
+    const [x1, y1] = outer[j];
+    const [x2, y2] = outer[i];
+    if ((x1 - x) * (x2 - x) > 0 || x1 === x2) continue;
+    const y = y1 + ((x - x1) / (x2 - x1)) * (y2 - y1);
+    if (mejor === null || y > mejor) mejor = y;
+  }
+  return mejor;
+}
 
 const rev = (pts: Pt[]) => [...pts].reverse() as Pt[];
 
@@ -44,84 +60,6 @@ function solid(regions: Region[], zLo: number, zHi: number): Mesh {
 /** Un contorno encogido hacia su centro. Conserva el número de puntos. */
 function encoger(pts: Pt[], cx: number, cy: number, f: number): Pt[] {
   return pts.map(([x, y]) => [cx + (x - cx) * f, cy + (y - cy) * f] as Pt);
-}
-
-/**
- * El corte de la cúpula a una fracción `f` de su alto: el contorno metido hacia
- * dentro lo que diga el perfil. Es la misma cúpula que abomba la plancha
- * (`dome.ts`), así que la plancha prensada casa con los moldes.
- */
-function corteA(outer: Pt[], domo: Dome, f: number): Region[] {
-  const d = entradaA(f, domo.dmax);
-  return d < 1e-6 ? sanitize([outer], []) : offsetRegions([outer], [], -d);
-}
-
-/**
- * La cúpula del molde: losas apiladas, cada una el contorno encogido lo que toca
- * a su altura. Con un corazón sale un corazón inflado, con su cresta suave en
- * medio de cada lóbulo; con un círculo, una cúpula redonda.
- *
- * Cada losa se corta a la altura de su TAPA, la más alta del tramo, que es la
- * más estrecha: así la cúpula escalonada queda por dentro de la curva de verdad
- * y nunca aprieta la plancha de más.
- */
-function cupula(outer: Pt[], domo: Dome, zBase: number): Mesh {
-  const partes: Mesh[] = [];
-  const n = Math.max(4, Math.ceil(domo.alto / LOSA));
-  for (let k = 0; k < n; k++) {
-    const corte = corteA(outer, domo, (k + 1) / n);
-    if (!corte.length) break; // se ha cerrado en la cresta
-    const z0 = zBase + (domo.alto * k) / n - (k === 0 ? 0.01 : 0.005);
-    const z1 = zBase + (domo.alto * (k + 1)) / n;
-    partes.push(solid(corte, z0, z1));
-  }
-  return merge(...partes);
-}
-
-/**
- * Cuenco: un bloque con el hueco de la cúpula hundido, abierto por ARRIBA, y un
- * escalón en el borde donde se apoya la plancha.
- *
- * De abajo arriba:
- *
- *   suelo    — macizo.
- *   hueco    — la cúpula al revés: estrecho en el fondo, ancho en la boca. Cada
- *              losa es el bloque MENOS el corte del hueco a esa altura, un
- *              prisma con agujero que cierra solo.
- *   escalón  — una losa del grosor de la plancha, con el agujero del CONTORNO
- *              entero de la plancha. Ahí se apoya su borde plano, que es lo que
- *              la deja quieta mientras se prensa. Lleva además la ranura por
- *              donde sale el cuello.
- *
- * La primera versión tenía el hueco del revés —ancho en el fondo y cerrándose
- * hacia arriba—: salía un bloque macizo con un agujerito encima, no un cuenco.
- */
-function cuenco(
-  bloque: Region[],
-  boca: Pt[],
-  domoBoca: Dome,
-  escalon: Region[],
-  suelo: number,
-  grosorEscalon: number,
-): Mesh {
-  const hondo = domoBoca.alto;
-  const borde = suelo + hondo;
-  const partes: Mesh[] = [solid(bloque, 0, suelo + 0.01)];
-  const n = Math.max(4, Math.ceil(hondo / LOSA));
-
-  for (let k = 0; k < n; k++) {
-    // Losa k: de la profundidad k+1 (más honda) a la k (más cerca de la boca).
-    // Su agujero es el corte de la k, el de ARRIBA, el más ancho del tramo: así
-    // el material nunca invade el hueco y la plancha no queda pellizcada.
-    const zArriba = borde - (hondo * k) / n;
-    const zAbajo = borde - (hondo * (k + 1)) / n;
-    const hueco = corteA(boca, domoBoca, k / n);
-    const losa = hueco.length ? subtract(bloque, hueco) : bloque;
-    partes.push(solid(losa, zAbajo - 0.005, zArriba + 0.005));
-  }
-
-  partes.push(solid(subtract(bloque, escalon), borde - 0.005, borde + grosorEscalon));
-  return merge(...partes);
 }
 
 /** Una celda del calado, centrada en el origen y de `lado` de ancho. */
@@ -458,9 +396,16 @@ export function buildThermoform(
 
   // El medio cuello nace del borde de arriba, centrado. Va FUERA de la cúpula:
   // lo de dentro se abomba, y un cuello torcido no se puede tapar.
+  //
+  // Del borde DE VERDAD, no de lo alto de la caja. En un corazón lo alto de la
+  // caja son las puntas de los lóbulos, y entre ellos, en el centro, no hay
+  // plancha: es el hueco de la muesca. El cuello se quedaba ahí flotando, suelto
+  // a un lado. Se busca dónde corta el contorno la vertical del centro, y el
+  // cuello nace del punto más alto de esos cortes: el fondo de la muesca.
   const rCuello = Math.max(2, p.neckRadius);
   const largoCuello = Math.max(3, p.neckLength);
-  const cuello = medioCuello(cx, caja.maxY - 0.6, rCuello, largoCuello);
+  const yCuello = bordeArriba(outer, cx) ?? caja.maxY;
+  const cuello = medioCuello(cx, yCuello - 0.6, rCuello, largoCuello);
 
   const relieve = reliefSolids(dibujo, p, grosor - 0.01, p.reliefHeight, [outer]);
   const relieveNombre = nombre.length
@@ -471,8 +416,15 @@ export function buildThermoform(
   // se ve en pantalla es lo que sale en el archivo.
   const prensar = (m: Mesh): Mesh => (p.formMold ? m : abombar(m, domo));
 
+  // El reborde: el borde plano de la plancha, un poco más alto que ella. Perfila
+  // la forma —sin él, el borde de un panal se ve deshilachado— y la hace más
+  // fuerte justo donde se agarra al prensar. Es una zona aparte, así que se
+  // puede pintar de otro color, como en la de Formify.
+  const anillo = subtract(plano, offsetRegions([outer], [], -reborde));
+  const rebordeMalla = anillo.length ? solid(anillo, grosor - 0.01, grosor + REBORDE_ALTO) : emptyMesh();
+
   const cuerpo = prensar(merge(solid(planchaReg, 0, grosor), cuello));
-  const partes = relieve.map(prensar);
+  const partes = [rebordeMalla, ...relieve].filter((m) => m.positions.length).map(prensar);
   const capaNombre = relieveNombre ? prensar(relieveNombre) : undefined;
   const overlay = merge(...partes);
   const delantera = merge(cuerpo, overlay, capaNombre ?? emptyMesh());
@@ -481,7 +433,8 @@ export function buildThermoform(
   // molde y se juntan por la cara plana: las dos mitades del cuello forman un
   // cuello entero, el tapón entra por él y las deja sujetas. Así el adorno sale
   // cerrado y hueco, que es lo que deja que la luz pase por el calado.
-  const trasera = prensar(merge(solid(planchaReg, 0, grosor), cuello));
+  const rebordeTrasera = prensar(rebordeMalla);
+  const trasera = merge(prensar(merge(solid(planchaReg, 0, grosor), cuello)), rebordeTrasera);
 
   // Con molde, las planchas se imprimen planas pero el visor sabe abombarlas
   // para enseñar cómo quedan. Sin molde ya vienen abombadas de fábrica.
@@ -509,6 +462,8 @@ export function buildThermoform(
       role: 'icing',
       mesh: trasera,
       plate: placa,
+      overlay: rebordeTrasera.positions.length ? rebordeTrasera : undefined,
+      overlayParts: rebordeTrasera.positions.length ? [rebordeTrasera] : undefined,
       dome: domoVisor,
     });
   }
@@ -539,7 +494,12 @@ export function buildThermoform(
   // La cúpula va JUSTA; el hueco del cuenco se abre lo que mide la plancha más
   // la holgura. Al revés la plancha no entraría, y sin holgura quedaría
   // aprisionada y se rasgaría.
-  const hueco = grosor + Math.max(0, p.formClearance);
+  //
+  // Y el hueco deja sitio TAMBIÉN al relieve: la plancha entra con la cara del
+  // dibujo hacia el cuenco, y si el hueco solo midiera la plancha, el nombre
+  // —que va levantado— se aplastaría contra la pared al prensar.
+  const hueco =
+    grosor + Math.max(REBORDE_ALTO, p.reliefHeight * 2.2) + Math.max(0, p.formClearance);
   const pared = 4;
   const suelo = 3;
 
@@ -554,35 +514,48 @@ export function buildThermoform(
   // Sobre una pestaña que llega hasta el borde de la plancha pero NO lo pasa:
   // así, al apretar, aplasta el borde plano contra el escalón y lo sujeta, y no
   // choca con el cuello, que sale justo por fuera de ese borde.
+  //
+  // Lisa: es un bloque plano al que se le deforma solo la cara de arriba, con
+  // la misma cúpula que abomba la plancha. Apilando losas salía a escalones.
   const pestanaOuter = mayor(offsetRegions([outer], [], -0.4), outer);
   const pestana = 2.5;
-  const macho = merge(
-    solid(sanitize([pestanaOuter], []), 0, pestana),
-    cupula(cupulaOuter, domo, pestana - 0.01),
-  );
+  const macho = abombar(solid(sanitize([pestanaOuter], []), 0, pestana), domo, 3, {
+    desde: pestana,
+  });
 
   // --- El cuenco (la hembra) -------------------------------------------------
   const bloque = sanitize([mayor(offsetRegions([outer], [], pared), outer)], []);
-  const boca = mayor(offsetRegions([cupulaOuter], [], hueco), cupulaOuter);
+  // A lo ANCHO, la boca solo se abre lo que mide la plancha más la holgura: el
+  // sitio para el relieve va en hondo, no en ancho. Junto al borde la plancha
+  // casi no se curva, así que el relieve no necesita sitio de lado; y si la boca
+  // se abriera también eso, se comería el escalón y el borde plano de la
+  // plancha no tendría dónde apoyarse.
+  const boca = mayor(
+    offsetRegions([cupulaOuter], [], grosor + Math.max(0, p.formClearance)),
+    cupulaOuter,
+  );
 
   // El escalón es el contorno entero de la plancha, con un pelo de holgura para
   // que entre sin forzar. Y la ranura del cuello, que atraviesa la pared: sin
   // ella, el cuello tropieza con el borde del cuenco y la plancha no asienta.
   const rCrestas = rCuello + 1.2 * 0.4 + 0.3;
-  const ranura = roundedRect(
-    cx,
-    caja.maxY + pared,
-    rCrestas * 2,
-    pared * 2 + 4,
-    0,
-  );
+  // Desde el fondo de la muesca hasta fuera de la pared, que es por donde sale.
+  const ranuraLargo = caja.maxY - yCuello + pared * 2 + 4;
+  const ranura = roundedRect(cx, yCuello + ranuraLargo / 2 - 1, rCrestas * 2, ranuraLargo, 0);
   const escalon = sanitize([mayor(offsetRegions([outer], [], 0.25), outer), ranura], []);
 
   // El hueco es la cúpula agrandada lo que mide la plancha más la holgura, y
   // más honda por lo mismo: la cúpula de la boca tiene su propia distancia al
   // borde, así que se calcula aparte en vez de reutilizar la de la plancha.
+  //
+  // Liso también: un bloque macizo hasta el borde con la cara de arriba HUNDIDA
+  // —la misma deformación, hacia abajo—, y encima el anillo del escalón.
   const domoBoca = domeOf(boca, alto + hueco);
-  const hembra = cuenco(bloque, boca, domoBoca, escalon, suelo, grosor);
+  const borde = suelo + alto + hueco;
+  const hembra = merge(
+    abombar(solid(bloque, 0, borde), domoBoca, 3, { desde: borde, signo: -1 }),
+    solid(subtract(bloque, escalon), borde - 0.01, borde + grosor),
+  );
 
   if (hembra.positions.length) {
     piezas.push({ id: 'mold-down', label: 'Molde de abajo (cuenco)', role: 'body', mesh: hembra, noMark: true });

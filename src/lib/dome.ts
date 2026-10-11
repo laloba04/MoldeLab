@@ -2,14 +2,11 @@
  * Abombar una pieza plana: lo que le pasa a la plancha del termoformado al
  * prensarla en su molde.
  *
- * La cúpula sube según la DISTANCIA AL BORDE, como un cojín que se infla: cero
- * en el contorno y lo más alto en el punto más alejado de él. Vale igual para
- * un círculo —sale una cúpula redonda— que para un corazón o una estrella, que
- * salen con su cresta suave por el medio de cada lóbulo y cada pico.
- *
- * La primera versión estiraba desde el centro (cada ángulo con su radio), y en
- * las formas con pico eso hacía un pliegue afilado a lo largo de cada punta: un
- * paso de un milímetro de lado a lado de la punta cambiaba la altura de golpe.
+ * La cúpula es la de una membrana hinchada (ver `Dome`): cero en el contorno y
+ * redonda por dentro, en cualquier forma. Hubo dos versiones antes, y las dos
+ * fallaban en las formas con pico: estirar desde el centro plegaba cada punta,
+ * y subir según la distancia al borde dejaba una arista por el medio de cada
+ * lóbulo.
  *
  * Abombar no es una booleana ni una malla nueva: es mover los vértices que ya
  * hay. Cada punto sube lo que mida la cúpula justo debajo, y nada más. Como solo
@@ -22,67 +19,51 @@ import type { Mesh, Pt } from '../types';
 import { pointInPolygon } from './polygon';
 
 /**
- * El perfil: cuánto sube, de 0 a 1, un punto que está a la fracción `r` del
- * borde (0 en lo más alto, 1 en el borde).
+ * Cómo se reparte la subida, de 0 (borde) a 1 (cima). Arranca PLANO desde el
+ * borde y llega plano a la cima: t²·(3 − 2t).
  *
- * (1 − r²)²: arranca PLANO desde el borde y sube suave. Un perfil que sale del
- * borde en vertical —el cuarto de circunferencia de la primera versión— hacía
- * que los triángulos que cruzaban el borde subieran de golpe varios milímetros,
- * y al prensar de verdad una pared vertical es justo donde el plástico caliente
- * no estira y se rasga. Así la plancha se curva sin pliegue.
- *
- * Lo comparten la plancha y los dos moldes: si cada uno usara el suyo, la
- * plancha abombada no casaría con su molde.
+ * Que arranque plano importa. Un perfil que sale del borde en vertical —el de la
+ * primera versión— hacía que los triángulos que cruzaban el borde subieran de
+ * golpe varios milímetros y la plancha salía con hebras; y al prensar de verdad
+ * una pared vertical es justo donde el plástico caliente no estira y se rasga.
  */
-export function perfil(r: number): number {
-  const c = Math.min(1, Math.max(0, r));
-  const u = 1 - c * c;
-  return u * u;
+export function perfil(t: number): number {
+  const c = Math.min(1, Math.max(0, t));
+  return c * c * (3 - 2 * c);
 }
 
 /**
- * Lo que hay que meter hacia dentro del borde para cortar la cúpula a una
- * fracción `f` de su alto (0 en la base, 1 en la cima). Es el perfil al revés:
- * con eso, el corte de la cúpula a cualquier altura es el contorno encogido esa
- * distancia, y los moldes se apilan losa a losa con offsets de Clipper.
+ * Lo que hace falta saber para abombar sobre una forma.
+ *
+ * La cúpula es la de una MEMBRANA hinchada: lo que hace una plancha fina y
+ * caliente cuando se empuja, o una pompa de jabón sobre un aro con forma. Se
+ * resuelve la ecuación de esa membrana (∇²u = −1, cero en el borde) en una
+ * rejilla fina. Sale suave en cualquier forma —un círculo da una cúpula
+ * redonda, un corazón un corazón inflado— sin aristas.
+ *
+ * Antes se subía según la distancia al borde, y eso deja una arista viva a lo
+ * largo del centro de cada lóbulo y de cada punta: la plancha salía como un
+ * tejado, con «montañitas», en vez de redonda.
  */
-export function entradaA(f: number, dmax: number): number {
-  const ff = Math.min(1, Math.max(0, f));
-  const r = Math.sqrt(Math.max(0, 1 - Math.sqrt(ff)));
-  return dmax * (1 - r);
-}
-
-/** Lo que hace falta saber para abombar sobre una forma. */
 export interface Dome {
   /** Alto de la cúpula en su punto más alto. */
   alto: number;
-  /** Distancia del punto más alejado del borde: ahí está la cima. */
-  dmax: number;
-  /** Rejilla de distancias al borde, para no recorrer el contorno por vértice. */
+  /** El valor más alto de la membrana: ahí está la cima. */
+  umax: number;
   x0: number;
   y0: number;
   paso: number;
   nx: number;
   ny: number;
-  dist: Float32Array;
-}
-
-/** Distancia de un punto a un segmento. */
-function aSegmento(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const l2 = dx * dx + dy * dy;
-  let t = l2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
-  t = Math.max(0, Math.min(1, t));
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  /** La membrana en cada punto de la rejilla. Cero fuera de la forma. */
+  u: Float32Array;
 }
 
 /**
- * Prepara la cúpula de un contorno: la distancia al borde de cada punto de una
- * rejilla fina. Fuera del contorno vale cero, así que lo de fuera —el borde
- * plano, el cuello— no sube.
+ * Prepara la cúpula de un contorno. Lo de fuera —el borde plano, el cuello— se
+ * queda en cero, así que no sube.
  */
-export function domeOf(outer: Pt[], alto: number, celdas = 180): Dome {
+export function domeOf(outer: Pt[], alto: number, celdas = 140): Dome {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const [x, y] of outer) {
     if (x < minX) minX = x;
@@ -91,56 +72,71 @@ export function domeOf(outer: Pt[], alto: number, celdas = 180): Dome {
     if (y > maxY) maxY = y;
   }
   const paso = Math.max(maxX - minX, maxY - minY) / celdas || 1;
-  // Una celda de margen por cada lado: la interpolación de los vértices del
-  // borde tiene que tener vecinos a los dos lados.
-  const x0 = minX - paso;
-  const y0 = minY - paso;
-  const nx = Math.ceil((maxX - minX) / paso) + 3;
-  const ny = Math.ceil((maxY - minY) / paso) + 3;
-  const dist = new Float32Array(nx * ny);
-  let dmax = 0;
+  // Dos celdas de margen: la interpolación de los vértices del borde tiene que
+  // tener vecinos a los dos lados, y fuera todo vale cero.
+  const x0 = minX - 2 * paso;
+  const y0 = minY - 2 * paso;
+  const nx = Math.ceil((maxX - minX) / paso) + 5;
+  const ny = Math.ceil((maxY - minY) / paso) + 5;
 
+  const dentro = new Uint8Array(nx * ny);
   for (let j = 0; j < ny; j++) {
-    const y = y0 + j * paso;
     for (let i = 0; i < nx; i++) {
-      const x = x0 + i * paso;
-      if (!pointInPolygon([x, y], outer)) continue;
-      let d = Infinity;
-      for (let a = 0, b = outer.length - 1; a < outer.length; b = a++) {
-        const s = aSegmento(x, y, outer[b][0], outer[b][1], outer[a][0], outer[a][1]);
-        if (s < d) d = s;
-      }
-      dist[j * nx + i] = d;
-      if (d > dmax) dmax = d;
+      if (pointInPolygon([x0 + i * paso, y0 + j * paso], outer)) dentro[j * nx + i] = 1;
     }
   }
-  return { alto, dmax, x0, y0, paso, nx, ny, dist };
+
+  // Sobrerrelajación sucesiva: Gauss-Seidel acelerado. Con ω cerca de 2 converge
+  // en unos pocos cientos de pasadas en vez de miles. Las unidades dan igual
+  // —al final se normaliza por el máximo—, así que se resuelve con h² = 1.
+  const u = new Float32Array(nx * ny);
+  const w = 2 / (1 + Math.sin(Math.PI / Math.max(nx, ny)));
+  for (let it = 0; it < 900; it++) {
+    let cambio = 0;
+    let mayor = 0;
+    for (let j = 1; j < ny - 1; j++) {
+      for (let i = 1; i < nx - 1; i++) {
+        const k = j * nx + i;
+        if (!dentro[k]) continue;
+        const nuevo = (u[k - 1] + u[k + 1] + u[k - nx] + u[k + nx] + 1) / 4;
+        const d = w * (nuevo - u[k]);
+        u[k] += d;
+        if (Math.abs(d) > cambio) cambio = Math.abs(d);
+        if (u[k] > mayor) mayor = u[k];
+      }
+    }
+    if (mayor > 0 && cambio < mayor * 1e-5) break;
+  }
+
+  let umax = 0;
+  for (let k = 0; k < u.length; k++) if (u[k] > umax) umax = u[k];
+  return { alto, umax, x0, y0, paso, nx, ny, u };
 }
 
-/** Distancia al borde en un punto cualquiera, interpolada en la rejilla. */
-function distanciaEn(d: Dome, x: number, y: number): number {
+/** La membrana en un punto cualquiera, interpolada en la rejilla. */
+function membranaEn(d: Dome, x: number, y: number): number {
   const fx = (x - d.x0) / d.paso;
   const fy = (y - d.y0) / d.paso;
   const i = Math.floor(fx);
   const j = Math.floor(fy);
   if (i < 0 || j < 0 || i >= d.nx - 1 || j >= d.ny - 1) return 0;
-  const u = fx - i;
-  const v = fy - j;
-  const g = (a: number, b: number) => d.dist[b * d.nx + a];
+  const a = fx - i;
+  const b = fy - j;
+  const g = (p: number, q: number) => d.u[q * d.nx + p];
   return (
-    g(i, j) * (1 - u) * (1 - v) +
-    g(i + 1, j) * u * (1 - v) +
-    g(i, j + 1) * (1 - u) * v +
-    g(i + 1, j + 1) * u * v
+    g(i, j) * (1 - a) * (1 - b) +
+    g(i + 1, j) * a * (1 - b) +
+    g(i, j + 1) * (1 - a) * b +
+    g(i + 1, j + 1) * a * b
   );
 }
 
 /** Cuánto sube un punto de la plancha al abombarla. */
 export function subida(d: Dome, x: number, y: number): number {
-  if (d.dmax <= 0) return 0;
-  const dist = distanciaEn(d, x, y);
-  if (dist <= 0) return 0; // fuera de la cúpula: el borde plano y el cuello no suben
-  return d.alto * perfil(1 - dist / d.dmax);
+  if (d.umax <= 0) return 0;
+  const v = membranaEn(d, x, y);
+  if (v <= 0) return 0; // fuera de la cúpula: el borde plano y el cuello no suben
+  return d.alto * perfil(v / d.umax);
 }
 
 /**
@@ -160,7 +156,7 @@ export function subdividir(
   largo: number,
   rondas = 8,
   /** Altura extra de cada punto, para medir las aristas YA abombadas. */
-  sube?: (x: number, y: number) => number,
+  sube?: (x: number, y: number, z: number) => number,
 ): Mesh {
   let p = m.positions;
   const l2 = largo * largo;
@@ -177,9 +173,9 @@ export function subdividir(
       // Longitud de cada arista tal como va a quedar, con la subida de cada
       // punta. Depende solo de sus dos puntas, así que los dos triángulos que la
       // comparten la miden igual y la parten igual: no aparecen grietas.
-      const ha = sube ? sube(ax, ay) : 0;
-      const hb = sube ? sube(bx, by) : 0;
-      const hc = sube ? sube(cx, cy) : 0;
+      const ha = sube ? sube(ax, ay, az) : 0;
+      const hb = sube ? sube(bx, by, bz) : 0;
+      const hc = sube ? sube(cx, cy, cz) : 0;
       const largaAB = (ax - bx) ** 2 + (ay - by) ** 2 + (az + ha - bz - hb) ** 2 > l2;
       const largaBC = (bx - cx) ** 2 + (by - cy) ** 2 + (bz + hb - cz - hc) ** 2 > l2;
       const largaCA = (cx - ax) ** 2 + (cy - ay) ** 2 + (cz + hc - az - ha) ** 2 > l2;
@@ -237,14 +233,36 @@ export function subdividir(
  * los triángulos grandes no se notan. Así la curva sale lisa sin llenar de
  * triángulos las zonas planas.
  */
-export function abombar(m: Mesh, d: Dome, largo = 3.5): Mesh {
-  const fina = subdividir(m, largo, 9, (x, y) => subida(d, x, y));
+export function abombar(
+  m: Mesh,
+  d: Dome,
+  largo = 3.5,
+  opciones: {
+    /**
+     * Mover solo lo que esté a esta altura o más arriba. Es para los MOLDES: un
+     * bloque plano al que se le deforma solo la cara de arriba —hacia arriba,
+     * la cúpula; hacia abajo, el hueco del cuenco— mientras la base sigue
+     * plana sobre la cama. Sin esto se movería el bloque entero.
+     */
+    desde?: number;
+    /** +1 abomba hacia arriba; −1 hunde hacia abajo (el hueco del cuenco). */
+    signo?: number;
+  } = {},
+): Mesh {
+  const desde = opciones.desde ?? -Infinity;
+  const signo = opciones.signo ?? 1;
+  // Depende solo de la posición del punto: dos triángulos que comparten un
+  // vértice lo mueven igual, y la malla sigue cerrada.
+  const mover = (x: number, y: number, z: number) =>
+    z >= desde - 1e-6 ? signo * subida(d, x, y) : 0;
+
+  const fina = subdividir(m, largo, 9, mover);
   const p = fina.positions;
   const out = new Array<number>(p.length);
   for (let i = 0; i < p.length; i += 3) {
     out[i] = p[i];
     out[i + 1] = p[i + 1];
-    out[i + 2] = p[i + 2] + subida(d, p[i], p[i + 1]);
+    out[i + 2] = p[i + 2] + mover(p[i], p[i + 1], p[i + 2]);
   }
   return { positions: out };
 }

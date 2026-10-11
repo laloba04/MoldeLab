@@ -247,7 +247,9 @@ check('la plancha trasera cierra', aristasAbiertas(traseraPlana.mesh) === 0,
 
 // --- Las dos planchas son iguales y se pueden juntar --------------------------
 {
-  check('la trasera es lisa (sin relieve)', altoSinCuello(traseraPlana.mesh) <= DEFAULTS.sheetThickness + 0.02,
+  // Lisa = sin dibujo. Lleva el reborde, que sobresale 0,6 mm, y nada más.
+  check('la trasera es lisa (sin dibujo, solo el reborde)',
+    altoSinCuello(traseraPlana.mesh) <= DEFAULTS.sheetThickness + 0.6 + 0.02,
     `${altoSinCuello(traseraPlana.mesh).toFixed(2)} mm`);
 
   const caja = (m: Mesh) => {
@@ -374,6 +376,67 @@ check('la plancha trasera cierra', aristasAbiertas(traseraPlana.mesh) === 0,
     if (!pz || volumen(pz.mesh) <= 0) vacios.push(pat);
   }
   check('los cinco calados dan plancha', vacios.length === 0, vacios.join(', ') || 'panal, círculos, cuadrados, rombos, triángulos');
+}
+
+// --- El cuello nace de la plancha, también en el corazón ---------------------
+//
+// En el corazón, lo alto de la caja son las puntas de los lóbulos y en el centro
+// no hay plancha: es el hueco de la muesca. El cuello se quedaba ahí flotando,
+// suelto a un lado. Se exige que el cuello se meta en la plancha.
+{
+  const sueltos: string[] = [];
+  for (const forma of ['circle', 'heart', 'star', 'egg'] as const) {
+    const pz = hacer({ moldShape: forma }).find((x) => x.id === 'sheet-back')!;
+    const q = pz.mesh.positions;
+    // El cuello es lo único que sube más que la plancha y su reborde.
+    const tope = DEFAULTS.sheetThickness + 0.6 + 0.1;
+    let cuelloMinY = Infinity;
+    let cuelloX = 0;
+    let nC = 0;
+    for (let i = 0; i < q.length; i += 3) {
+      if (q[i + 2] > tope) {
+        cuelloMinY = Math.min(cuelloMinY, q[i + 1]);
+        cuelloX += q[i];
+        nC++;
+      }
+    }
+    cuelloX /= nC || 1;
+    // Lo más alto de la plancha justo debajo del cuello.
+    let planchaMaxY = -Infinity;
+    for (let i = 0; i < q.length; i += 3) {
+      const enPlancha = q[i + 2] <= DEFAULTS.sheetThickness + 0.01;
+      if (enPlancha && Math.abs(q[i] - cuelloX) < 1.5 && q[i + 1] < cuelloMinY + 3) {
+        planchaMaxY = Math.max(planchaMaxY, q[i + 1]);
+      }
+    }
+    if (!(cuelloMinY < planchaMaxY)) {
+      sueltos.push(`${forma} (cuello desde ${cuelloMinY.toFixed(1)}, plancha hasta ${planchaMaxY.toFixed(1)})`);
+    }
+  }
+  check('el cuello se mete en la plancha en todas las formas', sueltos.length === 0,
+    sueltos.join('; ') || 'círculo, corazón, estrella, huevo');
+}
+
+// --- Los moldes son lisos ----------------------------------------------------
+//
+// Apilando losas salían a terrazas: decenas de escalones horizontales. Ahora la
+// cara de arriba se deforma entera. Se cuentan las alturas a las que hay caras
+// planas mirando arriba por encima de la pestaña: liso, casi ninguna.
+{
+  const terrazas = (m: Mesh, desde: number) => {
+    const niveles = new Set<number>();
+    const p = m.positions;
+    for (let i = 0; i < p.length; i += 9) {
+      const z = [p[i + 2], p[i + 5], p[i + 8]];
+      if (Math.max(...z) - Math.min(...z) > 1e-4) continue;
+      if (z[0] <= desde) continue;
+      const nz = (p[i + 3] - p[i]) * (p[i + 7] - p[i + 1]) - (p[i + 4] - p[i + 1]) * (p[i + 6] - p[i]);
+      if (nz > 0) niveles.add(Math.round(z[0] * 100));
+    }
+    return niveles.size;
+  };
+  const tMacho = terrazas(macho.mesh, 2.6);
+  check('la cúpula es lisa, sin terrazas', tMacho <= 2, `${tMacho} alturas con caras planas`);
 }
 
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');

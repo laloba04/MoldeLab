@@ -537,7 +537,7 @@ function engraveOnPlate(piece: Piece, text: PlacedText, depth: number): Piece | 
 }
 
 function markPiece(piece: Piece, opts: WatermarkOpts): Piece {
-  if (opts.mode === 'engrave' && piece.plate) {
+  if (opts.mode === 'engrave' && piece.plate && !piece.soloRelieve) {
     // En la cara de abajo el texto va espejado.
     const mirrored = placeText(piece, opts, true);
     if (!mirrored) return piece;

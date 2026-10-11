@@ -214,7 +214,14 @@ function pinza(grosor: number, reborde: number): Mesh {
  * es la forma primero: el corazón es un corazón, mide lo que diga «Tamaño», y el
  * dibujo o el nombre se encajan dentro.
  */
-function formaDelAdorno(forma: MoldShape, cx: number, cy: number, ancho: number, radio: number): Pt[] {
+function formaDelAdorno(
+  forma: MoldShape,
+  cx: number,
+  cy: number,
+  ancho: number,
+  radio: number,
+  silueta: Loop[],
+): Pt[] {
   const a = Math.max(10, ancho);
   switch (forma) {
     case 'heart':
@@ -233,14 +240,56 @@ function formaDelAdorno(forma: MoldShape, cx: number, cy: number, ancho: number,
       return roundedRect(cx, cy, a, a, Math.min(radio, a / 4));
     case 'rounded':
       return roundedRect(cx, cy, a, a * 0.72, Math.min(radio, a / 4));
+    case 'image': {
+      // La forma del dibujo, ENVUELTA: como si se le pasara una goma elástica
+      // por fuera, con las esquinas redondeadas. Tal cual no vale para abombar
+      // —un contorno con entrantes y salientes se arruga al prensarlo—, pero
+      // envuelto sí, y sigue pareciéndose al dibujo. Antes esta opción hacía
+      // exactamente lo mismo que «Círculo», que era engañoso.
+      const envuelta = envolver(silueta.filter((l) => !l.hole).flatMap((l) => l.pts));
+      if (envuelta.length < 3) return circle(cx, cy, a / 2, 96);
+      const b = boxOf([{ pts: envuelta, hole: false }]);
+      const k = a / Math.max(b.w, b.h, 1e-6);
+      const escalada = envuelta.map(([x, y]) => [cx + (x - b.cx) * k, cy + (y - b.cy) * k] as Pt);
+      const r = a * 0.08;
+      const redondeada = offsetRegions(
+        offsetRegions([escalada], [], -r).map((reg) => reg.outer),
+        [],
+        r,
+        'round',
+      );
+      const mayor = redondeada.reduce<Pt[] | null>(
+        (m, reg) => (!m || Math.abs(areaDe(reg.outer)) > Math.abs(areaDe(m)) ? reg.outer : m),
+        null,
+      );
+      return mayor ?? escalada;
+    }
     case 'circle':
-    case 'image':
     default:
-      // La silueta de la imagen no vale para abombar: un contorno con entrantes
-      // y salientes se arruga al prensarlo. Se usa el círculo, que es el adorno
-      // de toda la vida.
       return circle(cx, cy, a / 2, 96);
   }
+}
+
+/**
+ * La envolvente convexa de unos puntos: la goma elástica que los rodea.
+ * Cadena monótona de Andrew, en sentido antihorario.
+ */
+function envolver(puntos: Pt[]): Pt[] {
+  const pts = [...puntos].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  if (pts.length < 3) return pts;
+  const cruz = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const abajo: Pt[] = [];
+  for (const p of pts) {
+    while (abajo.length >= 2 && cruz(abajo[abajo.length - 2], abajo[abajo.length - 1], p) <= 0) abajo.pop();
+    abajo.push(p);
+  }
+  const arriba: Pt[] = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (arriba.length >= 2 && cruz(arriba[arriba.length - 2], arriba[arriba.length - 1], p) <= 0) arriba.pop();
+    arriba.push(p);
+  }
+  return [...abajo.slice(0, -1), ...arriba.slice(0, -1)];
 }
 
 /**
@@ -294,7 +343,10 @@ export function buildThermoform(
   const fuente = loops.length ? loops : detail;
   if (!fuente.length) return [];
   const centro = boxOf(fuente);
-  const base = sanitize([formaDelAdorno(p.moldShape, centro.cx, centro.cy, p.targetWidthMm, p.cornerRadius)], []);
+  const base = sanitize(
+    [formaDelAdorno(p.moldShape, centro.cx, centro.cy, p.targetWidthMm, p.cornerRadius, fuente)],
+    [],
+  );
   if (!base.length) return [];
 
   // Un molde tiene que ser UNA pieza: si la forma elegida saliera en trozos, la
@@ -368,6 +420,7 @@ export function buildThermoform(
   const juntos = fitDetailToBase(
     [...detail, ...(textLoops ?? [])],
     dondeVa.length ? dondeVa : sanitize([cupulaOuter], []),
+    true,
   );
   const dibujo = juntos.slice(0, detail.length);
   const nombre = juntos.slice(detail.length);
@@ -449,6 +502,8 @@ export function buildThermoform(
       overlayParts: partes.length ? partes : undefined,
       textMesh: capaNombre?.positions.length ? capaNombre : undefined,
       dome: domoVisor,
+      // La marca del taller va en la trasera: aquí estorbaría al dibujo.
+      noMark: true,
     });
   }
   if (p.formBack && trasera.positions.length) {
@@ -457,10 +512,19 @@ export function buildThermoform(
       label: 'Plancha trasera',
       role: 'icing',
       mesh: trasera,
-      plate: placa,
       overlay: rebordeTrasera.positions.length ? rebordeTrasera : undefined,
       overlayParts: rebordeTrasera.positions.length ? [rebordeTrasera] : undefined,
       dome: domoVisor,
+      // La marca del taller va aquí, en RELIEVE por la cara de fuera, como el
+      // nombre en la delantera: por encima del panal. Para buscarle sitio se le
+      // da la zona de la cúpula MACIZA; con la plancha calada no encontraba un
+      // hueco donde cupiera entera y no salía en ninguna parte.
+      //
+      // Sin molde la plancha ya viene abombada, y una marca plana encima no
+      // seguiría la curva: en ese caso no se pone.
+      plate: p.formMold ? { regions: sanitize([cupulaOuter], []), zLo: 0, zHi: grosor } : undefined,
+      soloRelieve: true,
+      noMark: !p.formMold,
     });
   }
 

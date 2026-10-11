@@ -19,6 +19,8 @@ interface Props {
   view?: 'product' | 'tune' | 'all';
   /** En la página de novedades: solo se ven sus productos y sus opciones. */
   novedades?: boolean;
+  /** Si hay imagen subida: algunos ajustes de texto solo valen con ella. */
+  hayImagen?: boolean;
 }
 
 /** El distintivo del producto en el menú, si lo tiene. */
@@ -50,6 +52,26 @@ function limitOf(field: Field, p: Params, max: number): number {
     default:
       return max;
   }
+}
+
+/**
+ * ¿Sirve este ajuste ahora mismo? Un mando que se mueve y no cambia nada parece
+ * una avería, así que los que no aplican no se enseñan.
+ *
+ * - El radio de esquina, solo con formas que tienen esquinas. Con la forma del
+ *   molde en corazón o círculo no hay nada que redondear.
+ * - Tamaño y posición del texto, solo si hay imagen: sirven para colocar el
+ *   nombre RESPECTO al dibujo. Sin dibujo, el nombre solo se encaja en la pieza
+ *   y moverlo o agrandarlo no cambia nada.
+ */
+function sirve(f: Field, p: Params, campos: Field[], hayImagen: boolean): boolean {
+  if (f === 'cornerRadius' && campos.includes('moldShape')) {
+    return p.moldShape === 'rounded' || p.moldShape === 'square';
+  }
+  if ((f === 'textScale' || f === 'textX' || f === 'textY') && campos.includes('textX')) {
+    return hayImagen;
+  }
+  return true;
 }
 
 /** Un control se dibuja solo a partir de su metadato. Sin JSX a mano por campo. */
@@ -157,7 +179,7 @@ function Control({
   );
 }
 
-export function Controls({ p, set, reset, view = 'all', novedades = false }: Props) {
+export function Controls({ p, set, reset, view = 'all', novedades = false, hayImagen = false }: Props) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({ reposteria: true });
 
@@ -289,7 +311,7 @@ export function Controls({ p, set, reset, view = 'all', novedades = false }: Pro
           </button>
         </h3>
         <p className="hint">{current.hint}</p>
-        {current.fields.map((f) => (
+        {current.fields.filter((f) => sirve(f, p, current.fields, hayImagen)).map((f) => (
           <Control key={f} field={f} p={p} set={set} novedades={novedades} />
         ))}
       </section>

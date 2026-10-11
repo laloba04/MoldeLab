@@ -15,6 +15,7 @@
 
 import { buildProduct } from '../src/lib/catalog';
 import { FONDO_ROSCA, PASO_ROSCA, filete, radioCuello } from '../src/lib/generators/rosca';
+import { applyWatermark } from '../src/lib/watermark';
 import { DEFAULTS, type Loop, type Mesh, type Params, type Piece, type Pt } from '../src/types';
 
 let failures = 0;
@@ -139,8 +140,11 @@ const loops: Loop[] = [
 const detalle: Loop[] = [{ pts: [[-12, -4], [12, -4], [12, 4], [-12, 4]] as Pt[], hole: false }];
 const sil = { loops, detail: detalle, widthMm: 40, heightMm: 40 };
 
+// Las medidas se comprueban con el círculo, que es el caso de referencia. La
+// opción por defecto («Silueta») sigue la forma del dibujo, y con la silueta de
+// prueba —un cuadrado— saldría un cuadrado redondeado: se mira aparte.
 const hacer = (extra: Partial<Params> = {}): Piece[] =>
-  buildProduct(sil, { ...DEFAULTS, product: 'thermoform', ...extra });
+  buildProduct(sil, { ...DEFAULTS, product: 'thermoform', moldShape: 'circle', ...extra });
 
 console.log('MoldeLab — auditoría del termoformado\n');
 
@@ -364,8 +368,12 @@ check('la plancha trasera cierra', aristasAbiertas(traseraPlana.mesh) === 0,
   // El nombre NO quita agujeros: las letras van encima del panal. Se compara la
   // plancha con y sin nombre, aun con el dibujo protegido: el calado tiene que
   // ser el mismo, agujero por agujero.
-  const sinN = buildProduct(sil, { ...DEFAULTS, product: 'thermoform', holesOnDesign: false }).find((x) => x.id === 'sheet')!;
-  const conN = buildProduct({ ...sil, textLoops: letras }, { ...DEFAULTS, product: 'thermoform', holesOnDesign: false }).find((x) => x.id === 'sheet')!;
+  // Sin dibujo, para medir solo el nombre: con dibujo, añadir el nombre
+  // reescala el conjunto (el dibujo llena la forma) y cambia el calado por eso.
+  const soloNombre = { ...sil, detail: [] as Loop[] };
+  const opts = { ...DEFAULTS, product: 'thermoform' as const, moldShape: 'circle' as const, holesOnDesign: false };
+  const sinN = buildProduct(soloNombre, opts).find((x) => x.id === 'sheet')!;
+  const conN = buildProduct({ ...soloNombre, textLoops: letras }, opts).find((x) => x.id === 'sheet')!;
   const huecos = (pz: Piece) => pz.plate!.regions.reduce((n, r) => n + r.holes.length, 0);
   check('el nombre no quita agujeros del panal', huecos(sinN) === huecos(conN),
     `${huecos(sinN)} agujeros sin nombre, ${huecos(conN)} con nombre`);
@@ -467,6 +475,19 @@ check('la plancha trasera cierra', aristasAbiertas(traseraPlana.mesh) === 0,
   };
   const tMacho = terrazas(macho.mesh, 2.6);
   check('la cúpula es lisa, sin terrazas', tMacho <= 2, `${tMacho} alturas con caras planas`);
+}
+
+// --- el grabado de marca llega a alguna pieza ---------------------------------
+// Se quejó de que «el grabado de marca no funciona» en el termoformado: las
+// planchas son una lámina fina y no admitían marca. Ahora va en la plancha de
+// atrás (por fuera, donde no estorba al adorno).
+{
+  const piezas = hacer();
+  for (const mode of ['emboss', 'engrave'] as const) {
+    const marcadas = applyWatermark(piezas, { text: 'MANITAS', mode, depth: 0.6, heightMm: 4 });
+    const cambia = marcadas.filter((x, i) => x.mesh.positions.length !== piezas[i].mesh.positions.length);
+    check(`la marca (${mode}) aparece en alguna pieza`, cambia.length > 0, cambia.map((x) => x.id).join(', ') || 'ninguna');
+  }
 }
 
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');

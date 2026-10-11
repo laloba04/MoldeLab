@@ -1315,7 +1315,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       <main className="stage">{stageInner}</main>
 
       <aside className="col col-right">
-        <Controls p={params} set={set} reset={reset} view="tune" novedades={novedades} />
+        <Controls p={params} set={set} reset={reset} view="tune" novedades={novedades} hayImagen={!!img} />
         {finishBlock}
         {downloadFooter}
       </aside>

@@ -870,7 +870,17 @@ export function moldBase(loops: Loop[], p: Params, shape: MoldShape): Region[] {
  * todo el contorno del dibujo cae dentro de la forma del molde. Si ya cabía a
  * tamaño natural, no lo toca.
  */
-export function fitDetailToBase(detail: Loop[], base: Region[]): Loop[] {
+export function fitDetailToBase(
+  detail: Loop[],
+  base: Region[],
+  /**
+   * Agrandar también, no solo encoger: el dibujo LLENA la forma. Es lo que
+   * quiere un adorno —el dibujo ocupa la pieza y el margen lo pone «Marco»—;
+   * en una placa, en cambio, el dibujo manda en el tamaño y solo se encoge si
+   * no cabe.
+   */
+  llenar = false,
+): Loop[] {
   const outerPts = detail.filter((l) => !l.hole).flatMap((l) => l.pts);
   if (!outerPts.length || !base.length) return detail;
 
@@ -891,7 +901,7 @@ export function fitDetailToBase(detail: Loop[], base: Region[]): Loop[] {
   };
 
   let lo = 0;
-  let hi = 1.5;
+  let hi = llenar ? 50 : 1.5;
   for (let it = 0; it < 20; it++) {
     const s = (lo + hi) / 2;
     const fits = outerPts.every(([x, y]) =>
@@ -901,7 +911,7 @@ export function fitDetailToBase(detail: Loop[], base: Region[]): Loop[] {
     else hi = s;
   }
 
-  if (lo >= 1) return detail; // ya cabía entero a su tamaño
+  if (lo >= 1 && !llenar) return detail; // ya cabía entero a su tamaño
   const s = lo * 0.95; // un pelín de margen para no rozar el borde
   return detail.map((l) => ({
     hole: l.hole,

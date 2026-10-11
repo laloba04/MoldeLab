@@ -1,48 +1,54 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, FlipVertical, Image as ImageIcon, Layers, Redo2, Send, Undo2, Wand2 } from 'lucide-react';
-import { DEFAULTS, type Params, type Piece, type Silhouette } from './types';
+import { Download, Image as ImageIcon, Wand2 } from 'lucide-react';
+import { DEFAULTS, type Piece, type Silhouette } from './types';
 import { autoLevels, loadImageData } from './lib/image';
 import { buildPieces, vectorize } from './lib/pipeline';
 import { byId, productosDe } from './lib/catalog';
-import { boxOf } from './lib/shapes';
-import { ringHandle } from './lib/generators/catalog-parts';
-import { arcTextImage, imageWithText, textImage, textLayout, textOnlyImage, useFont } from './lib/sources';
-import { toStl } from './lib/stl';
-import { toObj, toSvg, zipFiles } from './lib/formats';
+import { arcTextImage, imageWithText, textImage, textOnlyImage, useFont } from './lib/sources';
 import { isEmbedded, saveBlob } from './lib/save';
-import { to3mf } from './lib/threemf';
 import { applyWatermark, canWatermark, rasterizeText } from './lib/watermark';
 import { FONT_STYLES, fontCss, type FontStyle } from './lib/font';
 import { triangleCount } from './lib/mesh';
-import { dropToBed, spreadPieces } from './lib/layout';
 import { TEMPLATES, templatePreview, templateToBlob, type Template } from './lib/templates';
-import { CLOUD, openInSlicer, SLICERS, uploadForSlicer, type Slicer } from './lib/cloud';
-
-type Fmt = '3mf' | 'stl' | 'obj' | 'svg';
-const FORMATS: { id: Fmt; label: string; hint: string }[] = [
-  { id: '3mf', label: '3MF (color)', hint: 'Todas las piezas y los colores, para Bambu/Orca.' },
-  { id: 'stl', label: 'STL', hint: 'El clásico. Varias piezas van en un ZIP.' },
-  { id: 'obj', label: 'OBJ', hint: 'Malla 3D genérica (Blender, Meshmixer…).' },
-  { id: 'svg', label: 'SVG (corte láser)', hint: 'El contorno 2D en milímetros.' },
-];
+import { openInSlicer, SLICERS, uploadForSlicer, type Slicer } from './lib/cloud';
+import { armarArchivo, medidas, type Fmt } from './lib/exportar';
+import { tiradorAnilla, tiradorTexto } from './lib/tiradores';
+import { loadSession, saveSession } from './lib/session';
+import { watchForUpdates } from './lib/version';
+import { useHistorial } from './hooks/useHistorial';
 
 import { Viewer } from './components/Viewer';
 import { Controls } from './components/Controls';
-import { deletePreset, loadPresets, upsertPreset, type Preset } from './lib/presets';
-import { loadSession, saveSession } from './lib/session';
-import { watchForUpdates } from './lib/version';
+import { Presets } from './components/Presets';
+import { Colores } from './components/Colores';
+import { Marca } from './components/Marca';
+import { Descarga } from './components/Descarga';
+import { Portada } from './components/Portada';
+import { Barra, type ViewMode } from './components/Barra';
 
 // Lo último que se dejó la vez anterior: producto, ajustes y marca del taller.
 const SAVED = loadSession();
 
 /**
+ * La aplicación entera: la columna de la izquierda (imagen y producto), la
+ * vista 3D en el centro y la de la derecha (ajustes, colores, marca y
+ * descargar).
+ *
+ * Aquí vive el ESTADO y el camino de la imagen a las piezas:
+ *
+ *   imagen (+ nombre) → fuente → silueta (vectorizar) → piezas (mallar)
+ *                     → marca y colores → visor y archivo
+ *
+ * Lo que se dibuja está repartido en `components/` y las cuentas en `lib/`.
+ *
  * `novedades`: esta es la página de NOVEDADES (/novedades/), donde se prueba lo
  * nuevo sin estorbar en el día a día del taller. Es otra página de verdad —su
  * dirección, su pestaña, sus ajustes guardados—, pero la misma aplicación por
  * dentro: lo que se arregla en una queda arreglado en la otra.
  */
 export default function App({ novedades = false }: { novedades?: boolean }) {
-  const [params, setParams] = useState<Params>(SAVED.params ?? DEFAULTS);
+  const { params, setParams, set, deshacer, rehacer, reset, puedeDeshacer, puedeRehacer } =
+    useHistorial(SAVED.params ?? DEFAULTS);
 
   // El producto tiene que ser de la página en la que se está. Si no —se llega a
   // la de siempre con el termoformado puesto de la última vez, o al revés—, se
@@ -51,27 +57,32 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     if (!!byId(params.product).novedad === novedades) return;
     const primero = productosDe(novedades)[0];
     if (primero) setParams((prev) => ({ ...prev, product: primero.id }));
-  }, [novedades, params.product]);
-  const [presets, setPresets] = useState<Preset[]>(() => loadPresets());
-  const [presetName, setPresetName] = useState('');
+  }, [novedades, params.product, setParams]);
+
+  // --- La imagen y lo que sale de ella -----------------------------------------
   const [img, setImg] = useState<ImageData | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [silhouette, setSilhouette] = useState<Silhouette | null>(null);
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // «Generando…»: el vectorizado bloquea un instante con imágenes grandes, y sin
   // avisar parece que la web se ha colgado. Se enciende antes de calcular.
   const [computing, setComputing] = useState(false);
-  const [exploded, setExploded] = useState(true);
-  // Diálogo de descarga: qué formatos, nombre, y si separar las piezas.
+  // ¿Se ha publicado una versión nueva mientras esta pestaña estaba abierta?
+  const [stale, setStale] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // --- Descargar y mandar al laminador -----------------------------------------
   const [dlOpen, setDlOpen] = useState(false);
   const [dlFmts, setDlFmts] = useState<Set<Fmt>>(new Set<Fmt>(['3mf']));
   const [dlName, setDlName] = useState('');
   const [separate, setSeparate] = useState(true);
-  // Envío directo al laminador: cuál, y si hay un envío en marcha.
   const [slicer, setSlicer] = useState<Slicer>('bambu');
   const [sending, setSending] = useState(false);
+
+  // --- Marca del taller --------------------------------------------------------
   const [mark, setMark] = useState(SAVED.mark ?? 'Barakaldesa Manitas 3D');
   const [markOn, setMarkOn] = useState(false);
   const [markStyle, setMarkStyle] = useState<FontStyle>(SAVED.markStyle ?? 'redonda');
@@ -89,20 +100,16 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       .then(() => { if (vivo) setFontsReady(true); });
     return () => { vivo = false; };
   }, []);
-  // Colores del visor y del 3MF: fondo = placa, trazo = relieve.
-  const [bgColor, setBgColor] = useState('#e4d5c1');
-  const [traceColor, setTraceColor] = useState('#8a5038');
-  // Rosa glaseado y no cian: el cian es el del tirador de la vista, y un nombre
-  // del mismo color que el tirador hace que la bola parezca fondo de las letras.
-  const [textColor, setTextColor] = useState('#ff5fa2');
-  // La CUARTA tinta. Fondo, trazo y nombre son los tres colores que la pieza
-  // reparte sola; este no lo usa nada por su cuenta, está para pintar zonas a
-  // mano. Así siempre hay cuatro colores a mano, salga la imagen que salga.
-  const [extraColor, setExtraColor] = useState('#4e8cff');
-  const palette = useMemo(
-    () => [bgColor, traceColor, textColor, extraColor],
-    [bgColor, traceColor, textColor, extraColor],
-  );
+
+  // --- Colores -----------------------------------------------------------------
+  // Fondo (la placa), trazo (el relieve), nombre y una CUARTA tinta. Las tres
+  // primeras las reparte la pieza sola; la cuarta no la usa nada por su cuenta,
+  // está para pintar zonas a mano. Así siempre hay cuatro colores a mano, salga
+  // la imagen que salga. El nombre va en rosa glaseado y no en cian: el cian es
+  // el del tirador de la vista, y un nombre del mismo color que el tirador hace
+  // que la bola parezca fondo de las letras.
+  const [palette, setPalette] = useState(['#e4d5c1', '#8a5038', '#ff5fa2', '#4e8cff']);
+  const [bgColor, traceColor, textColor] = palette;
   // Zonas pintadas a mano: 'idPieza#zona' -> número de color de la paleta. La
   // zona es 'base' (la placa), 'name' (el nombre) o 'pN' (cada trozo suelto del
   // dibujo). Lo que no esté aquí se queda con el color que le toca por defecto.
@@ -111,111 +118,21 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   // ratón sigue sirviendo solo para girar el modelo.
   const [brush, setBrush] = useState<number | null>(null);
   // Colores de las capas (productos «en capas de color»), elegibles uno a uno.
-  const [layerColors, setLayerColors] = useState<string[]>([
-    '#e4d5c1',
-    '#c98f5a',
-    '#8a5038',
-    '#4e2b1f',
-    '#2b1712',
-  ]);
+  const [layerColors, setLayerColors] = useState(['#e4d5c1', '#c98f5a', '#8a5038', '#4e2b1f', '#2b1712']);
   // Ocultar el relieve para ver la placa lisa.
   const [hideTrace, setHideTrace] = useState(false);
   // Una sola tinta: ni relieve aparte ni filo turquesa ni capas. Se imprime del
   // tirón, sin cambios de filamento, que es como se hace la mayoría de las veces.
   const [oneColor, setOneColor] = useState(false);
-  // Modo de vista del modelo: sólido, rayos X (transparente) o alámbrico.
-  const [viewMode, setViewMode] = useState<'solid' | 'xray' | 'wire'>('solid');
+
+  // --- Cómo se ve --------------------------------------------------------------
+  const [exploded, setExploded] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('solid');
   // Mirar la pieza desde abajo: la marca del taller se graba en esa cara.
   const [flipped, setFlipped] = useState(false);
   // Termoformado: enseñar las planchas ya abombadas. Empieza encendido porque es
   // lo que se quiere ver; plana es como se imprime, y eso ya lo dice el botón.
   const [showFormed, setShowFormed] = useState(true);
-  // ¿Se ha publicado una versión nueva mientras esta pestaña estaba abierta?
-  const [stale, setStale] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  // --- Deshacer y rehacer -----------------------------------------------------
-  //
-  // Se guardan los ajustes ENTEROS en cada cambio, no la lista de cosas que se
-  // han tocado. Con un puñado de números por paso cuesta nada, y evita el enredo
-  // de tener que saber deshacer cada tipo de cambio por separado.
-  //
-  // Los tirones de deslizador se agrupan: mientras se arrastra llegan decenas de
-  // valores, y si cada uno fuera un paso, deshacer una vez movería el deslizador
-  // un pelo. Se guarda uno cada 400 ms de quietud, que es lo que dura un gesto.
-  const pasado = useRef<Params[]>([]);
-  const futuro = useRef<Params[]>([]);
-  const ultimo = useRef(0);
-  const [puedeDeshacer, setPuedeDeshacer] = useState(false);
-  const [puedeRehacer, setPuedeRehacer] = useState(false);
-
-  const anotar = useCallback((prev: Params) => {
-    const ahora = Date.now();
-    if (ahora - ultimo.current > 400) {
-      pasado.current.push(prev);
-      if (pasado.current.length > 60) pasado.current.shift();
-      futuro.current = [];
-      setPuedeDeshacer(true);
-      setPuedeRehacer(false);
-    }
-    ultimo.current = ahora;
-  }, []);
-
-  const set = useCallback(<K extends keyof Params>(k: K, v: Params[K]) => {
-    setParams((prev) => {
-      if (prev[k] === v) return prev;
-      anotar(prev);
-      return { ...prev, [k]: v };
-    });
-  }, [anotar]);
-
-  const deshacer = useCallback(() => {
-    setParams((prev) => {
-      const ant = pasado.current.pop();
-      if (!ant) return prev;
-      futuro.current.push(prev);
-      setPuedeDeshacer(pasado.current.length > 0);
-      setPuedeRehacer(true);
-      ultimo.current = 0; // el próximo cambio vuelve a ser un paso propio
-      return ant;
-    });
-  }, []);
-
-  const rehacer = useCallback(() => {
-    setParams((prev) => {
-      const sig = futuro.current.pop();
-      if (!sig) return prev;
-      pasado.current.push(prev);
-      setPuedeDeshacer(true);
-      setPuedeRehacer(futuro.current.length > 0);
-      ultimo.current = 0;
-      return sig;
-    });
-  }, []);
-
-  // Restaurar mantiene el producto elegido: solo se limpian los ajustes.
-  const reset = useCallback(() => {
-    setParams((prev) => {
-      anotar(prev);
-      ultimo.current = 0;
-      return { ...DEFAULTS, product: prev.product };
-    });
-  }, [anotar]);
-
-  // Ctrl+Z y Ctrl+Y / Ctrl+Shift+Z, como en cualquier programa.
-  useEffect(() => {
-    const tecla = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const t = e.target as HTMLElement | null;
-      // Dentro de un campo de texto manda el deshacer del propio campo.
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') && (t as HTMLInputElement).type === 'text') return;
-      const k = e.key.toLowerCase();
-      if (k === 'z' && !e.shiftKey) { e.preventDefault(); deshacer(); }
-      else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); rehacer(); }
-    };
-    window.addEventListener('keydown', tecla);
-    return () => window.removeEventListener('keydown', tecla);
-  }, [deshacer, rehacer]);
 
   const open = useCallback(async (file: File | Blob) => {
     setError(null);
@@ -277,15 +194,15 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   // Pegar del portapapeles: en un editor así se usa más que el botón.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
-        i.type.startsWith('image/'),
-      );
+      const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith('image/'));
       const file = item?.getAsFile();
       if (file) open(file);
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
   }, [open]);
+
+  // --- De la imagen a las piezas -----------------------------------------------
 
   // La fuente real del pipeline: la imagen subida, texto rasterizado, la
   // mezcla de ambos, o un QR. Se recalcula solo cuando cambian sus entradas.
@@ -431,13 +348,13 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     // relieve marcado aparte. Sin `overlay` no hay segundo color que repartir,
     // ni en el visor ni en el 3MF, así que el laminador no pide cambios de
     // filamento. La geometría no se toca: sigue siendo la misma pieza.
-    if (oneColor)
-      return stamped.map((p): Piece => ({ ...p, tint: undefined, overlay: undefined }));
+    if (oneColor) return stamped.map((p): Piece => ({ ...p, tint: undefined, overlay: undefined }));
 
     // Las piezas que traen color propio (las capas) reciben el que haya elegido
     // el usuario, en orden. Si no ha tocado nada, se quedan con el suyo.
     let i = 0;
     return stamped.map((p) => (p.tint ? { ...p, tint: layerColors[i++] ?? p.tint } : p));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pieces, markOn, mark, markStyle, markArc, markSize, fontsReady, layerColors, oneColor]);
 
   const stats = useMemo(
@@ -449,25 +366,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     }),
     [marked, silhouette],
   );
-
-  // Medidas reales de la pieza (caja envolvente en mm): ancho × largo × alto.
-  const dims = useMemo(() => {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    for (const p of marked) {
-      const q = p.mesh.positions;
-      for (let i = 0; i < q.length; i += 3) {
-        if (q[i] < minX) minX = q[i];
-        if (q[i] > maxX) maxX = q[i];
-        if (q[i + 1] < minY) minY = q[i + 1];
-        if (q[i + 1] > maxY) maxY = q[i + 1];
-        if (q[i + 2] < minZ) minZ = q[i + 2];
-        if (q[i + 2] > maxZ) maxZ = q[i + 2];
-      }
-    }
-    if (!Number.isFinite(minX)) return null;
-    return { w: maxX - minX, l: maxY - minY, h: maxZ - minZ };
-  }, [marked]);
-
+  const dims = useMemo(() => medidas(marked), [marked]);
   const markable = pieces.some(canWatermark);
   const hasTrace = marked.some((p) => (p.overlay?.positions.length ?? 0) > 0);
 
@@ -488,170 +387,33 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     [brush],
   );
 
-  // Tirador de la anilla: solo en llaveros (los que exponen «ringPos»).
-  // Arrastrarlo mueve la anilla a mano, como en MakerLab.
-  //
-  // No se exige que la pieza sea una sola. El llavero en capas son varias —una
-  // por tono— y esa condición lo dejaba sin tirador; la anilla va en la capa de
-  // abajo, y el visor pone el tirador donde esté esa capa.
-  const ringDrag = useMemo(() => {
-    const prod = byId(params.product);
-    if (!silhouette || !prod.fields.includes('ringPos') || !marked.length) return null;
-    const box = boxOf(silhouette.loops);
-    const [hx, hy] = ringHandle(silhouette.loops, params);
-    const holeDefault = box.maxY + Math.max(4, box.h * 0.06);
-    return {
-      pos: { x: hx, y: hy, z: params.thickness },
-      move: (x: number, y: number) => {
-        const nx = box.w ? (x - box.cx) / (box.w / 2) : 0;
-        const ny = box.h ? (y - holeDefault) / (box.h / 2) : 0;
-        setParams((prev) => ({
-          ...prev,
-          ringPos: Math.max(-1, Math.min(1, Math.round(nx * 1000) / 1000)),
-          ringPosY: Math.max(-1.5, Math.min(1.5, Math.round(ny * 1000) / 1000)),
-        }));
-      },
-    };
-  }, [silhouette, params, marked.length]);
+  // Tiradores de la vista: la anilla del llavero y el nombre.
+  const ringDrag = useMemo(
+    () => tiradorAnilla(silhouette, params, marked.length > 0, setParams),
+    [silhouette, params, marked.length, setParams],
+  );
+  const textDrag = useMemo(
+    () => tiradorTexto(silhouette, source, img, params, marked.length, setParams),
+    [silhouette, source, img, params, marked.length, setParams],
+  );
 
-  // Tirador del nombre: el mismo gesto que la anilla, pero para el texto.
-  //
-  // Va donde está el nombre DE VERDAD, no donde diga una aproximación. Antes lo
-  // colocaba a ojo desde la caja de la pieza y aparecía muy por debajo, flotando
-  // fuera del llavero, porque esa caja ya incluye el propio nombre.
-  //
-  // La cuenta buena: el nombre se compone en un lienzo, `textLayout` dice en qué
-  // píxel de ese lienzo cae, y el pipeline lo pasa a milímetros con una regla de
-  // tres —el ancho pedido entre el ancho del lienzo— centrando luego en la caja
-  // de tinta. Se rehace ese mismo camino, así que el tirador cae sobre la
-  // palabra.
-  const textDrag = useMemo(() => {
-    const prod = byId(params.product);
-    if (!silhouette || !source || !img || !prod.fields.includes('textX') || marked.length !== 1)
-      return null;
-    if (!params.textContent.trim()) return null;
+  // --- Archivos ----------------------------------------------------------------
 
-    const L = textLayout(img, params.textContent, params.textScale, params.textX / 100, params.textY / 100, params.textRot);
-    const mmPerPx = params.targetWidthMm / source.width;
+  const porDefecto = `moldelab-${params.product}`;
+  const buildFile = () =>
+    armarArchivo(marked, silhouette, {
+      formatos: dlFmts,
+      nombre: dlName,
+      porDefecto,
+      separar: separate,
+      colores: { bg: bgColor, trace: traceColor, text: textColor },
+      // Sin «todo de un color», las zonas pintadas a mano viajan al archivo.
+      zona: oneColor ? undefined : colorOf,
+    });
 
-    // Centro de la caja de tinta del lienzo: es el punto que el pipeline lleva
-    // al origen al centrar la pieza.
-    const d = source.data;
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (let y = 0; y < source.height; y++) {
-      for (let x = 0; x < source.width; x++) {
-        const i = (y * source.width + x) * 4;
-        if (d[i + 3] > 40 && (d[i] + d[i + 1] + d[i + 2]) / 3 < 150) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-        }
-      }
-    }
-    if (!Number.isFinite(minX)) return null;
-    const inkCx = (minX + maxX) / 2;
-    const inkCy = (minY + maxY) / 2;
-
-    const ax = L.textCx + L.shiftX;
-    const ay = L.textCy + L.shift;
-
-    const cx = (ax - inkCx) * mmPerPx;
-    const cy = -(ay - inkCy) * mmPerPx;
-
-    // El tirador de girar orbita alrededor del de mover, a la altura de la
-    // coronilla de las letras y un poco más allá. Con el nombre en recto queda
-    // justo encima; al girarlo, lo acompaña.
-    //
-    // El giro se cuenta como en el lienzo (a favor del reloj visto desde
-    // arriba), así que la «vertical» del nombre apunta a 90° menos el giro.
-    const radio = Math.max(9, (L.textH / 2) * mmPerPx + 6);
-    const aUp = ((90 - params.textRot) * Math.PI) / 180;
-
-    return {
-      pos: { x: cx, y: cy, z: params.thickness },
-      rot: {
-        x: cx + Math.cos(aUp) * radio,
-        y: cy + Math.sin(aUp) * radio,
-        z: params.thickness,
-      },
-      girar: (wx: number, wy: number) => {
-        const a = (Math.atan2(wy - cy, wx - cx) * 180) / Math.PI;
-        // El inverso: del ángulo del tirador al giro del nombre.
-        let g = Math.round((90 - a) / 5) * 5;
-        while (g > 180) g -= 360;
-        while (g < -180) g += 360;
-        setParams((prev) => ({ ...prev, textRot: g }));
-      },
-      move: (wx: number, wy: number) => {
-        // Del mundo al lienzo, y de ahí a los porcentajes que guardan los
-        // deslizadores. Se usa el desplazamiento actual del lienzo: como el
-        // arrastre va paso a paso, se recalcula en cada movimiento y converge.
-        const nax = wx / mmPerPx + inkCx;
-        const nay = -wy / mmPerPx + inkCy;
-        // textCx = 900/2 + tx * (900/2)  ->  se despeja tx.
-        const ntx = ((nax - L.shiftX - 450) / 450) * 100;
-        // El inverso de `cae`: hacia arriba se mide contra el dibujo, hacia
-        // abajo en alturas de letra.
-        const base = L.imgH + 20 + L.textH / 2;
-        const d = nay - L.shift - base;
-        const nty = (d < 0 ? d / L.imgH : d / (L.textH * 1.5)) * 100;
-        const clamp = (v: number) => Math.max(-100, Math.min(100, Math.round(v / 5) * 5));
-        setParams((prev) => ({ ...prev, textX: clamp(ntx), textY: clamp(nty) }));
-      },
-    };
-  }, [silhouette, source, img, params, marked.length]);
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const f = e.dataTransfer.files[0];
-    if (f) open(f);
-  };
-
-  const [notice, setNotice] = useState<string | null>(null);
-
-  /** Arma el archivo que toca según los formatos elegidos. Lo comparten el
-   *  botón de descargar y el de mandar al laminador. */
-  const buildFile = async (): Promise<{ blob: Blob; outName: string } | null> => {
-    if (!marked.length || !dlFmts.size) return null;
-    const name =
-      (dlName.trim() || `moldelab-${params.product}`).replace(/[^\w-]+/g, '_').slice(0, 40) ||
-      'moldelab';
-    const forExport = separate ? spreadPieces(marked) : dropToBed(marked);
-
-    // Cada formato añade uno o varios archivos; si al final hay más de uno, se
-    // empaquetan en un ZIP.
-    const files: Record<string, Uint8Array> = {};
-    const add = async (fn: string, blob: Blob) => {
-      files[fn] = new Uint8Array(await blob.arrayBuffer());
-    };
-
-    if (dlFmts.has('3mf'))
-      await add(
-        `${name}.3mf`,
-        to3mf(forExport, {
-          bg: bgColor,
-          trace: traceColor,
-          text: textColor,
-          // Sin «todo de un color», las zonas pintadas a mano viajan al archivo.
-          zone: oneColor ? undefined : colorOf,
-        }),
-      );
-    if (dlFmts.has('obj')) await add(`${name}.obj`, toObj(forExport.map((p) => ({ name: p.label, mesh: p.mesh }))));
-    if (dlFmts.has('svg') && silhouette) await add(`${name}.svg`, toSvg(silhouette.loops));
-    if (dlFmts.has('stl')) {
-      if (forExport.length === 1)
-        await add(`${name}.stl`, toStl(forExport[0].mesh, `MoldeLab ${forExport[0].label}`));
-      else for (const pc of forExport) await add(`${name}-${pc.id}.stl`, toStl(pc.mesh, pc.label));
-    }
-
-    const names = Object.keys(files);
-    if (!names.length) return null;
-    const single = names.length === 1;
-    return {
-      blob: single ? new Blob([files[names[0]].buffer as ArrayBuffer]) : zipFiles(files),
-      outName: single ? names[0] : `${name}.zip`,
-    };
+  const avisar = (texto: string, ms: number) => {
+    setNotice(texto);
+    setTimeout(() => setNotice(null), ms);
   };
 
   /**
@@ -675,10 +437,10 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       }
       openInSlicer(up.url, slicer);
       setDlOpen(false);
-      setNotice(
+      avisar(
         `Enviado a ${SLICERS.find((x) => x.id === slicer)?.label}. Si te pide confirmar el enlace, dile que sí; y si no se abre, cierra el laminador y vuelve a darle.`,
+        12000,
       );
-      setTimeout(() => setNotice(null), 12000);
     } finally {
       setSending(false);
     }
@@ -692,8 +454,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     const result = await saveBlob(blob, outName);
     if (result.ok) {
       setDlOpen(false);
-      setNotice(`Guardado: ${outName} (${(blob.size / 1024).toFixed(0)} KB)`);
-      setTimeout(() => setNotice(null), 4000);
+      avisar(`Guardado: ${outName} (${(blob.size / 1024).toFixed(0)} KB)`, 4000);
     } else if (result.reason === 'sandboxed') {
       setError(
         'Este preview embebido bloquea las descargas. Abre la app en una pestaña propia del navegador (botón "abrir en nueva pestaña" del preview) y vuelve a darle.',
@@ -703,30 +464,45 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     }
   };
 
-  const brand = (
-    <header className={novedades ? 'brand novedades' : 'brand'}>
-      <span className="mark" aria-hidden />
-      <div>
-        <h1>MoldeLab{novedades && <em> Novedades</em>}</h1>
-        <p>{novedades ? 'Lo nuevo, en pruebas.' : 'Una imagen entra. Un STL sale.'}</p>
-      </div>
-      <a
-        className="to-page"
-        href={novedades ? '../' : './novedades/'}
-        title={
-          novedades
-            ? 'Volver a la página de siempre'
-            : 'Ir a la página de novedades: lo nuevo, todavía en pruebas'
-        }
-      >
-        {novedades ? '← Volver' : 'Novedades →'}
-      </a>
-    </header>
-  );
+  // --- Lo que se ve ------------------------------------------------------------
 
-  const imageBlock = (
-    <>
-        <button className="upload" onClick={() => fileRef.current?.click()}>
+  const elegirImagen = () => fileRef.current?.click();
+
+  return (
+    <div
+      className={novedades ? 'app work novedades' : 'app work'}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        const f = e.dataTransfer.files[0];
+        if (f) open(f);
+      }}
+    >
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => e.target.files?.[0] && open(e.target.files[0])}
+      />
+
+      <aside className="col col-left">
+        <header className={novedades ? 'brand novedades' : 'brand'}>
+          <span className="mark" aria-hidden />
+          <div>
+            <h1>MoldeLab{novedades && <em> Novedades</em>}</h1>
+            <p>{novedades ? 'Lo nuevo, en pruebas.' : 'Una imagen entra. Un STL sale.'}</p>
+          </div>
+          <a
+            className="to-page"
+            href={novedades ? '../' : './novedades/'}
+            title={novedades ? 'Volver a la página de siempre' : 'Ir a la página de novedades: lo nuevo, todavía en pruebas'}
+          >
+            {novedades ? '← Volver' : 'Novedades →'}
+          </a>
+        </header>
+
+        <button className="upload" onClick={elegirImagen}>
           <ImageIcon size={16} />
           {img ? 'Cambiar imagen' : 'Subir imagen'}
           <kbd>o pega con Ctrl+V</kbd>
@@ -768,289 +544,11 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
             </div>
           </details>
         )}
-    </>
-  );
 
-  const finishBlock = (
-    <>
-        <div className="presets">
-          <h3>Ajustes guardados</h3>
-          <div className="preset-save">
-            <input
-              type="text"
-              value={presetName}
-              maxLength={30}
-              placeholder="Nombre del ajuste…"
-              onChange={(e) => setPresetName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && presetName.trim()) {
-                  setPresets(upsertPreset(presetName, params));
-                  setPresetName('');
-                }
-              }}
-            />
-            <button
-              className="mini"
-              disabled={!presetName.trim()}
-              onClick={() => {
-                setPresets(upsertPreset(presetName, params));
-                setPresetName('');
-              }}
-            >
-              Guardar
-            </button>
-          </div>
-          {presets.length > 0 ? (
-            <ul className="preset-list">
-              {presets.map((pr) => (
-                <li key={pr.name}>
-                  <button
-                    className="preset-load"
-                    title="Cargar este ajuste"
-                    onClick={() => setParams({ ...DEFAULTS, ...pr.params })}
-                  >
-                    {pr.name}
-                  </button>
-                  <button
-                    className="preset-del"
-                    title="Borrar"
-                    onClick={() => setPresets(deletePreset(pr.name))}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="hint">Guarda la configuración actual con un nombre para reutilizarla.</p>
-          )}
-        </div>
-        {pieces.length > 0 && (
-          <div className="colors">
-            <h3>Colores</h3>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={oneColor}
-                onChange={(e) => setOneColor(e.target.checked)}
-              />
-              <span />
-              Todo de un color
-            </label>
-            {oneColor ? (
-              <label className="color-row">
-                <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} />
-                <span>El color de toda la pieza</span>
-              </label>
-            ) : marked.filter((p) => p.tint).length > 0 ? (
-              // Producto por capas: un color por capa, en el mismo orden en que
-              // se apilan. Es lo que se lleva el 3MF a los filamentos.
-              marked
-                .filter((p) => p.tint)
-                .map((p, i) => (
-                  <label className="color-row" key={p.id}>
-                    <input
-                      type="color"
-                      value={layerColors[i] ?? p.tint}
-                      onChange={(e) =>
-                        setLayerColors((prev) => {
-                          const next = [...prev];
-                          next[i] = e.target.value;
-                          return next;
-                        })
-                      }
-                    />
-                    <span>{p.label}</span>
-                  </label>
-                ))
-            ) : (
-              <>
-                <label className="color-row">
-                  <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} />
-                  <span>Fondo (la placa)</span>
-                </label>
-                <label className="color-row">
-                  <input
-                    type="color"
-                    value={traceColor}
-                    onChange={(e) => setTraceColor(e.target.value)}
-                  />
-                  <span>Trazo (el dibujo)</span>
-                </label>
-                <label className="color-row">
-                  <input
-                    type="color"
-                    value={textColor}
-                    onChange={(e) => setTextColor(e.target.value)}
-                  />
-                  <span>
-                    {marked.some((pc) => pc.textMesh?.positions.length)
-                      ? 'El nombre'
-                      : 'Tercer color'}
-                  </span>
-                </label>
-                <label className="color-row">
-                  <input
-                    type="color"
-                    value={extraColor}
-                    onChange={(e) => setExtraColor(e.target.value)}
-                  />
-                  <span>Cuarto color</span>
-                </label>
-              </>
-            )}
-            {oneColor && (
-              <p className="hint">
-                Una sola tinta: sale del laminador sin cambios de filamento.
-              </p>
-            )}
-            {!oneColor && (
-              <div className="paint">
-                <p className="hint">
-                  Para pintar una parte suelta —un moflete, un ojo, el contorno—, elige un color
-                  aquí y tócala en la pieza.
-                </p>
-                <div className="paint-swatches">
-                  {palette.map((c, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className={`swatch${brush === i ? ' on' : ''}`}
-                      style={{ background: c }}
-                      title={`Pintar con el color ${i + 1}`}
-                      aria-pressed={brush === i}
-                      onClick={() => setBrush((b) => (b === i ? null : i))}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="mini"
-                    disabled={!Object.keys(zoneInk).length}
-                    onClick={() => {
-                      setZoneInk({});
-                      setBrush(null);
-                    }}
-                  >
-                    Quitar
-                  </button>
-                </div>
-                {brush !== null && (
-                  <p className="hint warn">
-                    Pincel encendido: toca las partes que quieras pintar. Vuelve a pulsar el color
-                    para apagarlo y poder girar la pieza a gusto.
-                  </p>
-                )}
-              </div>
-            )}
-            {hasTrace && !oneColor && (
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={hideTrace}
-                  onChange={(e) => setHideTrace(e.target.checked)}
-                />
-                <span />
-                Ocultar trazo (ver la placa lisa)
-              </label>
-            )}
-          </div>
-        )}
+        <Controls p={params} set={set} reset={reset} view="product" novedades={novedades} />
+      </aside>
 
-        {pieces.length > 0 && markable && (
-          <div className="mark-box">
-            <label className="toggle">
-              <input type="checkbox" checked={markOn} onChange={(e) => setMarkOn(e.target.checked)} />
-              <span />
-              Grabar mi marca en la pieza
-            </label>
-            {markOn && (
-              <>
-                <input
-                  className="mark-input"
-                  type="text"
-                  value={mark}
-                  maxLength={32}
-                  placeholder="Tu marca…"
-                  onChange={(e) => setMark(e.target.value)}
-                />
-                <div className="mark-fonts">
-                  {FONT_STYLES.map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      className={`mark-font${markStyle === f.id ? ' on' : ''}`}
-                      style={{ fontFamily: `"${f.family}", var(--body)`, fontWeight: f.weight }}
-                      onClick={() => setMarkStyle(f.id)}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className={`mark-font${markArc ? ' on' : ''}`}
-                    onClick={() => setMarkArc((v) => !v)}
-                  >
-                    En arco
-                  </button>
-                </div>
-                <div className="field">
-                  <div className="field-head">
-                    <label htmlFor="marca-tam">Tamaño de la letra</label>
-                    <output>
-                      {markSize.toFixed(1)}
-                      <em>mm</em>
-                    </output>
-                  </div>
-                  <input
-                    id="marca-tam"
-                    type="range"
-                    min={3}
-                    max={16}
-                    step={0.5}
-                    value={markSize}
-                    onChange={(e) => setMarkSize(Number(e.target.value))}
-                  />
-                </div>
-                {!markFits && (
-                  <p className="hint warn">
-                    A ese tamaño no cabe entera en la pieza, así que no se graba: no vale poner
-                    media marca. Bájala o escribe menos.
-                  </p>
-                )}
-                <p className="hint">
-                  Se graba en la cara de <strong>atrás</strong> (la que toca la cama). Dale la vuelta
-                  a la pieza, o usa <strong>Rayos X</strong>, para verla.
-                </p>
-              </>
-            )}
-          </div>
-        )}
-
-        {pieces.length > 0 && !markable && (
-          <div className="mark-box">
-            <p className="hint">
-              Esta pieza no admite marca: es de <strong>corte</strong> o hueca (cortador, contorno,
-              peana). La marca se graba en piezas con una cara plana (placas, llaveros, sellos…).
-            </p>
-          </div>
-        )}
-    </>
-  );
-
-  const downloadFooter =
-    pieces.length > 0 ? (
-      <footer className="actions">
-        <button className="primary" onClick={() => setDlOpen(true)} disabled={!pieces.length}>
-          <Download size={15} />
-          Descargar…
-        </button>
-      </footer>
-    ) : null;
-
-  const stageInner = (
-    <>
+      <main className="stage">
         {isEmbedded() && (
           <div className="banner">
             Estás en un preview embebido: las descargas pueden estar bloqueadas. Si falla, abre la
@@ -1080,100 +578,28 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
               textRot={textDrag?.rot ?? null}
               onTextRot={textDrag?.girar}
             />
-            <div className="hud">
-              <button
-                className="chip"
-                onClick={deshacer}
-                disabled={!puedeDeshacer}
-                title="Deshacer el último cambio (Ctrl+Z)"
-              >
-                <Undo2 size={14} /> Deshacer
-              </button>
-              <button
-                className="chip"
-                onClick={rehacer}
-                disabled={!puedeRehacer}
-                title="Rehacer (Ctrl+Y)"
-              >
-                <Redo2 size={14} />
-              </button>
-              {pieces.length > 1 && (
-                <button className="chip" onClick={() => setExploded((v) => !v)}>
-                  <Layers size={14} /> {exploded ? 'Juntar' : 'Separar'}
-                </button>
-              )}
-              <button
-                className="chip"
-                onClick={() =>
-                  setViewMode((m) => (m === 'solid' ? 'xray' : m === 'xray' ? 'wire' : 'solid'))
-                }
-                title="Cambiar cómo se ve el modelo"
-              >
-                {viewMode === 'solid' ? 'Sólido' : viewMode === 'xray' ? 'Rayos X' : 'Alámbrico'}
-              </button>
-              <button
-                className={flipped ? 'chip on' : 'chip'}
-                onClick={() => setFlipped((v) => !v)}
-                title="Mira la pieza desde abajo: ahí va grabada la marca"
-              >
-                <FlipVertical size={14} /> {flipped ? 'Ver por delante' : 'Ver por detrás'}
-              </button>
-              {marked.some((pc) => pc.dome) && (
-                // Solo en lo que se termoforma: la plancha se imprime plana, y
-                // así se ve también cómo queda una vez prensada.
-                <button
-                  className={showFormed ? 'chip on' : 'chip'}
-                  onClick={() => setShowFormed((v) => !v)}
-                  title="Las planchas se imprimen planas. Esto enseña cómo quedan una vez abombadas."
-                >
-                  {showFormed ? 'Ver plana' : 'Ver abombada'}
-                </button>
-              )}
-              <span className="chip readout">{product.label}</span>
-              {dims && (
-                <span className="chip readout" title="Ancho × Largo × Alto">
-                  {dims.w.toFixed(1)} × {dims.l.toFixed(1)} × {dims.h.toFixed(1)} mm
-                </span>
-              )}
-              <span className="chip readout">
-                {stats.tris.toLocaleString('es-ES')} triángulos
-              </span>
-            </div>
+            <Barra
+              deshacer={deshacer}
+              rehacer={rehacer}
+              puedeDeshacer={puedeDeshacer}
+              puedeRehacer={puedeRehacer}
+              variasPiezas={pieces.length > 1}
+              exploded={exploded}
+              toggleExploded={() => setExploded((v) => !v)}
+              viewMode={viewMode}
+              siguienteVista={() => setViewMode((m) => (m === 'solid' ? 'xray' : m === 'xray' ? 'wire' : 'solid'))}
+              flipped={flipped}
+              toggleFlipped={() => setFlipped((v) => !v)}
+              abombable={marked.some((pc) => pc.dome)}
+              showFormed={showFormed}
+              toggleFormed={() => setShowFormed((v) => !v)}
+              producto={product.label}
+              dims={dims}
+              triangulos={stats.tris}
+            />
           </>
         ) : (
-          <div className="empty">
-            <div className="empty-inner">
-              <span className="empty-eyebrow">Taller de moldes 3D</span>
-              <h2>
-                Suelta un dibujo.
-                <br />
-                Sale un molde.
-              </h2>
-              <p>
-                Trazo negro sobre fondo blanco, o un PNG con transparencia. Cuanto más limpio el
-                dibujo, más limpio el filo.
-              </p>
-              <button className="primary" onClick={() => fileRef.current?.click()}>
-                <ImageIcon size={16} /> Elegir imagen
-              </button>
-
-              <div className="tpl-intro">o empieza con una forma</div>
-              <div className="tpl-grid">
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className="tpl"
-                    onClick={() => loadTemplate(t)}
-                    title={t.label}
-                  >
-                    <img src={templatePreview(t)} alt="" aria-hidden />
-                    <span>{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <Portada elegir={elegirImagen} plantilla={loadTemplate} />
         )}
 
         {computing && (
@@ -1193,134 +619,80 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
         {busy && <div className="toast">Leyendo la imagen…</div>}
         {error && <div className="toast error">{error}</div>}
         {notice && <div className="toast good">{notice}</div>}
-    </>
-  );
-
-  const modal = dlOpen ? (
-    <div
-      className="modal-back"
-      role="presentation"
-          onClick={() => setDlOpen(false)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setDlOpen(false);
-          }}
-        >
-          {/* El diálogo para el clic fuera y las teclas: sin esto, cerrar la
-              ventana sería solo cosa del ratón. */}
-          <dialog
-            className="modal"
-            open
-            aria-label="Descargar archivos"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <h3>Descargar archivos</h3>
-
-            <label className="modal-field">
-              Nombre del archivo
-              <input
-                type="text"
-                value={dlName}
-                maxLength={40}
-                placeholder={`moldelab-${params.product}`}
-                onChange={(e) => setDlName(e.target.value)}
-              />
-            </label>
-
-            <div className="fmt-list">
-              {FORMATS.map((f) => (
-                <label key={f.id} className="fmt-row">
-                  <input
-                    type="checkbox"
-                    checked={dlFmts.has(f.id)}
-                    onChange={(e) =>
-                      setDlFmts((prev) => {
-                        const next = new Set(prev);
-                        if (e.target.checked) next.add(f.id);
-                        else next.delete(f.id);
-                        return next;
-                      })
-                    }
-                  />
-                  <span className="fmt-name">{f.label}</span>
-                  <small>{f.hint}</small>
-                </label>
-              ))}
-            </div>
-
-            {pieces.length > 1 && (
-              <label className="toggle">
-                <input type="checkbox" checked={separate} onChange={(e) => setSeparate(e.target.checked)} />
-                <span />
-                Separar las piezas en la cama
-              </label>
-            )}
-
-            {CLOUD && (
-              <label className="color-row slicer-pick">
-                <select value={slicer} onChange={(e) => setSlicer(e.target.value as Slicer)}>
-                  {SLICERS.map((sl) => (
-                    <option key={sl.id} value={sl.id}>
-                      {sl.label}
-                    </option>
-                  ))}
-                </select>
-                <span>Laminador al que enviar</span>
-              </label>
-            )}
-
-            <div className="modal-actions">
-              <button type="button" className="ghost" onClick={() => setDlOpen(false)}>
-                Cancelar
-              </button>
-              {CLOUD && (
-                <button
-                  type="button"
-                  className="ghost send"
-                  onClick={sendToSlicer}
-                  disabled={!dlFmts.size || sending}
-                  title="Sube el modelo y se lo pasa al laminador para que lo abra"
-                >
-                  <Send size={15} /> {sending ? 'Enviando…' : 'Descargar y abrir'}
-                </button>
-              )}
-              <button type="button" className="primary" onClick={download} disabled={!dlFmts.size}>
-                <Download size={15} /> Descargar{dlFmts.size > 1 ? ' (ZIP)' : ''}
-              </button>
-            </div>
-          </dialog>
-        </div>
-  ) : null;
-
-  return (
-    <div
-      className={novedades ? 'app work novedades' : 'app work'}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
-    >
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => e.target.files?.[0] && open(e.target.files[0])}
-      />
-
-      <aside className="col col-left">
-        {brand}
-        {imageBlock}
-        <Controls p={params} set={set} reset={reset} view="product" novedades={novedades} />
-      </aside>
-
-      <main className="stage">{stageInner}</main>
+      </main>
 
       <aside className="col col-right">
         <Controls p={params} set={set} reset={reset} view="tune" novedades={novedades} hayImagen={!!img} />
-        {finishBlock}
-        {downloadFooter}
+        <Presets params={params} cargar={setParams} />
+        {pieces.length > 0 && (
+          <>
+            <Colores
+              piezas={marked}
+              oneColor={oneColor}
+              setOneColor={setOneColor}
+              palette={palette}
+              setColor={(i, c) => setPalette((prev) => prev.map((x, j) => (j === i ? c : x)))}
+              layerColors={layerColors}
+              setLayerColor={(i, c) =>
+                setLayerColors((prev) => {
+                  const next = [...prev];
+                  next[i] = c;
+                  return next;
+                })
+              }
+              brush={brush}
+              setBrush={setBrush}
+              hayPintadas={Object.keys(zoneInk).length > 0}
+              quitarPintadas={() => {
+                setZoneInk({});
+                setBrush(null);
+              }}
+              hasTrace={hasTrace}
+              hideTrace={hideTrace}
+              setHideTrace={setHideTrace}
+            />
+            <Marca
+              admite={markable}
+              on={markOn}
+              setOn={setMarkOn}
+              texto={mark}
+              setTexto={setMark}
+              estilo={markStyle}
+              setEstilo={setMarkStyle}
+              arco={markArc}
+              setArco={setMarkArc}
+              tam={markSize}
+              setTam={setMarkSize}
+              cabe={markFits}
+            />
+            <footer className="actions">
+              <button className="primary" onClick={() => setDlOpen(true)}>
+                <Download size={15} />
+                Descargar…
+              </button>
+            </footer>
+          </>
+        )}
       </aside>
 
-      {modal}
+      {dlOpen && (
+        <Descarga
+          cerrar={() => setDlOpen(false)}
+          nombre={dlName}
+          setNombre={setDlName}
+          porDefecto={porDefecto}
+          formatos={dlFmts}
+          setFormatos={setDlFmts}
+          variasPiezas={pieces.length > 1}
+          separar={separate}
+          setSeparar={setSeparate}
+          slicer={slicer}
+          setSlicer={setSlicer}
+          enviando={sending}
+          enviar={sendToSlicer}
+          descargar={download}
+        />
+      )}
     </div>
   );
 }

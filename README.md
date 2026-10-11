@@ -103,35 +103,50 @@ El sello y el émbolo son uniones de sólidos que se solapan (placa + relieve + 
 
 ## Estructura
 
+Dos páginas, la misma aplicación: `index.html` (la de siempre) y
+`novedades/index.html` (lo nuevo, en pruebas). Cada una arranca `App` con su
+bandera (`main.tsx` / `novedades.tsx` → `arranque.tsx`).
+
 ```
 src/
-  types.ts               parámetros y tipos del dominio
-  lib/
+  App.tsx                el estado y el camino imagen → silueta → piezas → archivo
+  types.ts               parámetros, productos y tipos del dominio
+  hooks/
+    useHistorial.ts      los ajustes con deshacer/rehacer (Ctrl+Z / Ctrl+Y)
+  components/            lo que se ve
+    Controls.tsx         catálogo, buscador y ajustes (con apartados plegables)
+    Viewer.tsx           la vista 3D: cama, despiece, pincel, tiradores
+    Barra.tsx            los botones sobre la vista y las medidas
+    Portada.tsx          «Suelta un dibujo»: subir imagen o empezar con una forma
+    Presets.tsx          ajustes guardados con nombre
+    Colores.tsx          colores, una sola tinta, capas y pincel
+    Marca.tsx            la marca del taller grabada detrás
+    Descarga.tsx         la ventana de descargar / mandar al laminador
+  lib/                   las cuentas (sin pantalla: se prueban en Node)
     image.ts             binarizado, morfología, flood fill
     contours.ts          marching squares
     polygon.ts           área, orientación, RDP, Chaikin, offset por normales
-    clipper.ts           offsets robustos y saneado
+    clipper.ts           offsets y booleanas 2D robustas
     mesh.ts              loft, cap, extrusión, cilindro
-    stl.ts               exportador STL binario + ZIP
-    threemf.ts           exportador 3MF (soldadura de vértices + OPC)
-    pipeline.ts          orquestador
-    shapes.ts            círculo, rectángulo redondeado, estadio, anilla, púas
+    dome.ts              el abombado del termoformado (membrana)
+    pipeline.ts          orquestador: vectorizar y construir piezas
+    shapes.ts            círculo, corazón, estrella, huevo, anilla, púas…
     sources.ts           texto, texto en arco, imagen+texto y QR → ImageData
-    catalog.ts           el registro de los 26 productos
+    catalog.ts           el registro de productos (y sus apartados de ajustes)
+    exportar.ts          de las piezas al 3MF/STL/OBJ/SVG o ZIP
+    tiradores.ts         dónde van los tiradores de anilla y nombre
+    watermark.ts         la marca del taller
+    stl.ts, threemf.ts, formats.ts   exportadores
+    session.ts, presets.ts, save.ts, cloud.ts, version.ts
     generators/
       cutter.ts          perfil vertical + tubos
       stamp.ts           placa + relieve escalonado
-      ejector.ts         cuerpo + émbolo, en silueta / redondo / cuadrado
+      ejector.ts         cuerpo + émbolo
+      thermoform.ts      planchas, tuerca, pinza y moldes del termoformado
+      rosca.ts           la rosca de verdad del cuello y la tuerca
       catalog-parts.ts   estarcido, topper, llaveros, letreros, placas, rejilla
-      extra-parts.ts     capas, articulado, guía alambre, colorear, abridor, caja, puzzle, matrícula
-  components/
-    Viewer.tsx           R3F, cama de impresión, vista despiezada
-    Controls.tsx         catálogo, buscador y controles dinámicos
-  App.tsx
-test/
-  geometry.test.ts       auditoría de mallas
-  catalog.test.ts        los 40 productos
-  threemf.test.ts        el 3MF descomprimido y verificado por dentro
+      extra-parts.ts     capas, articulado, colorear, abridor, caja, puzzle…
+test/                    se pasan antes de cada publicación (CI)
 ```
 
 ## Marca de agua

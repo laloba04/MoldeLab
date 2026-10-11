@@ -14,6 +14,7 @@
  */
 
 import { buildProduct } from '../src/lib/catalog';
+import { FONDO_ROSCA, PASO_ROSCA, filete, radioCuello } from '../src/lib/generators/rosca';
 import { DEFAULTS, type Loop, type Mesh, type Params, type Piece, type Pt } from '../src/types';
 
 let failures = 0;
@@ -271,25 +272,54 @@ check('la plancha trasera cierra', aristasAbiertas(traseraPlana.mesh) === 0,
     sola.map((x) => x.label).join(', '));
 }
 
-// --- El tapón y el cuello ----------------------------------------------------
+// --- La tuerca y la rosca ----------------------------------------------------
 //
-// El tapón tiene que entrar por el cuello —agujero más ancho que el cuello liso—
-// y tiene que agarrar —más estrecho que las crestas de las estrías—. Si no entra
-// no se cierra el adorno; si no agarra se cae al colgarlo.
+// Rosca de verdad: espiral en el cuello y la misma espiral por dentro de la
+// tuerca, separada la holgura. Tiene que ENTRAR —la cresta de la tuerca pasa
+// por fuera del núcleo del cuello— y tiene que AGARRAR —esa cresta queda por
+// dentro de la del cuello, o sea que los filetes se enganchan—.
 {
-  check('el tapón es un sólido cerrado', volumen(tapon.mesh) > 0 && aristasAbiertas(tapon.mesh) === 0,
+  check('la tuerca es un sólido cerrado', volumen(tapon.mesh) > 0 && aristasAbiertas(tapon.mesh) === 0,
     `${volumen(tapon.mesh).toFixed(0)} mm³, ${aristasAbiertas(tapon.mesh)} aristas abiertas`);
 
   const r = DEFAULTS.neckRadius;
-  const cresta = r + 1.2 * 0.4;
-  const interior = r + 1.2 * 0.2 + DEFAULTS.capClearance;
-  check('el tapón entra por el cuello liso', interior > r, `agujero ${interior.toFixed(2)} > cuello ${r}`);
-  check('y agarra en las estrías', interior < cresta, `agujero ${interior.toFixed(2)} < cresta ${cresta.toFixed(2)}`);
+  const crestaCuello = r + FONDO_ROSCA;
+  const crestaTuerca = r + DEFAULTS.capClearance; // lo más estrecho de la tuerca
+  check('la tuerca pasa por el núcleo del cuello', crestaTuerca > r,
+    `${crestaTuerca.toFixed(2)} > ${r}`);
+  check('y sus filetes se enganchan con los del cuello', crestaTuerca < crestaCuello,
+    `${crestaTuerca.toFixed(2)} < ${crestaCuello.toFixed(2)}`);
 
-  // Cada plancha lleva MEDIO cuello: su alto es un radio (con la estría), así
+  // Cuello y tuerca comparten la espiral: en cada punto, el hueco de la tuerca
+  // es el cuello más la holgura. Se comprueba con la propia fórmula del cuello,
+  // en un recorrido entero de ángulos y alturas.
+  // Desde 1 mm: el primer milímetro el filete entra suave, a propósito.
+  let peor = 0;
+  for (let s = 1; s <= 6; s += 0.05) {
+    for (let k = 0; k < 36; k++) {
+      const phi = (k / 36) * 2 * Math.PI;
+      const cuello = radioCuello(r, s, phi, 0);
+      // La tuerca, puesta en el eje del cuello, ve el ángulo con el signo
+      // cambiado (ver `radioCuello`).
+      const tuerca = r + FONDO_ROSCA * filete(s / PASO_ROSCA - -phi / (2 * Math.PI)) + DEFAULTS.capClearance;
+      peor = Math.max(peor, Math.abs(tuerca - cuello - DEFAULTS.capClearance));
+    }
+  }
+  check('la rosca de la tuerca casa con la del cuello en toda la vuelta', peor < 1e-9,
+    `desajuste máximo ${peor.toExponential(1)} mm`);
+
+  // Las dos mitades del cuello: la trasera va desfasada media vuelta y, al
+  // juntarlas, la espiral sigue sin escalón.
+  let salto = 0;
+  for (let s = 0; s <= 6; s += 0.05) {
+    salto = Math.max(salto, Math.abs(radioCuello(r, s, Math.PI, 0) - radioCuello(r, s, 0, 0.5)));
+  }
+  check('la espiral sigue de una mitad del cuello a la otra', salto < 1e-9, `${salto.toExponential(1)} mm`);
+
+  // Cada plancha lleva MEDIO cuello: su alto es un radio con el filete, así
   // que al juntar las dos por la cara plana sale un cuello redondo entero.
-  check('el medio cuello mide un radio de alto', Math.abs(alto(traseraPlana.mesh).max - cresta) < 0.05,
-    `${alto(traseraPlana.mesh).max.toFixed(2)} mm (radio + estría = ${cresta.toFixed(2)})`);
+  check('el medio cuello mide un radio de alto', Math.abs(alto(traseraPlana.mesh).max - crestaCuello) < 0.05,
+    `${alto(traseraPlana.mesh).max.toFixed(2)} mm (radio + filete = ${crestaCuello.toFixed(2)})`);
 }
 
 // --- Sin molde: las planchas salen ya abombadas ------------------------------

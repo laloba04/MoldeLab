@@ -23,11 +23,12 @@
 
 import type { HolePattern, Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, cap, extrudeRegion, loft, merge } from '../mesh';
-import { offsetRegions, sanitize, subtract, type Region } from '../clipper';
+import { offsetRegions, sanitize, subtract, union, type Region } from '../clipper';
 import { boxOf, circle, egg, heart, polygon, roundedRect, star } from '../shapes';
 import { orient, pointInPolygon } from '../polygon';
 import { fitDetailToBase, regionsOf, reliefSolids } from './catalog-parts';
 import { abombar, domeOf } from '../dome';
+import { FONDO_ROSCA, medioCuelloRoscado, tuercaRoscada } from './rosca';
 
 /** Lo que el reborde de la plancha sobresale por encima de ella. */
 const REBORDE_ALTO = 0.6;
@@ -139,16 +140,13 @@ function dentroDe(zona: Region[], pt: Pt): boolean {
 // El cuello y el tapón: lo que une las dos medias planchas
 // -----------------------------------------------------------------------------
 
-/** Paso de las estrías del cuello. */
-const ESTRIA = 1.2;
-
 /**
  * Gira +90° alrededor del eje X: (x, y, z) → (x, −z, y), y luego traslada.
  *
  * Es un giro de verdad (determinante +1), no un cambio de ejes: las caras siguen
  * mirando hacia fuera sin tener que dar la vuelta a ningún triángulo. Sirve para
- * construir de pie lo que tiene que acabar tumbado —el cuello, que va acostado
- * sobre la cama— con la única herramienta que hay, que es extruir en Z.
+ * poner de pie el ojal de la tuerca, que se monta tumbado porque lo único que se
+ * sabe hacer es extruir en Z.
  */
 function girarX(m: Mesh, dx: number, dy: number, dz: number): Mesh {
   const p = m.positions;
@@ -161,85 +159,22 @@ function girarX(m: Mesh, dx: number, dy: number, dz: number): Mesh {
   return { positions: out };
 }
 
-/** Medio círculo hacia arriba (y ≥ 0), cerrado por el diámetro. */
-function semicirculo(r: number, seg = 24): Pt[] {
-  const pts: Pt[] = [];
-  for (let i = 0; i <= seg; i++) {
-    const a = (i / seg) * Math.PI;
-    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
-  }
-  return orient(pts, true);
-}
-
-/** Radio del cuello en cada tramo: liso y estría, alternando. */
-function radiosCuello(r: number, largo: number): { desde: number; hasta: number; r: number }[] {
-  const tramos: { desde: number; hasta: number; r: number }[] = [];
-  const n = Math.max(2, Math.round(largo / ESTRIA));
-  const paso = largo / n;
-  for (let k = 0; k < n; k++) {
-    // Estría en los impares: el primer tramo, el que nace de la plancha, va liso
-    // y gordo de base, que es por donde se partiría si fuera fino.
-    tramos.push({ desde: k * paso, hasta: (k + 1) * paso, r: k % 2 ? r + ESTRIA * 0.4 : r });
-  }
-  return tramos;
-}
-
 /**
- * Medio cuello, tumbado sobre la cama y apuntando hacia +Y desde `y0`.
- *
- * Cada plancha lleva la mitad: la cara plana va contra la cama, y al juntar
- * las dos planchas por esa cara las dos mitades forman un cuello redondo
- * entero. Ahí se encaja el tapón.
+ * La tuerca que cierra el adorno por arriba: se enrosca en el cuello y sujeta
+ * las dos mitades. Lleva encima el ojal por donde pasa el cordón.
  */
-function medioCuello(cx: number, y0: number, r: number, largo: number): Mesh {
-  const local = emptyMesh();
-  // Se monta de pie a lo largo de −Z, que el giro convierte en +Y. El primer
-  // tramo se mete 1 mm dentro de la plancha para que suelde con ella.
-  for (const t of radiosCuello(r, largo)) {
-    const desde = t.desde === 0 ? -1 : t.desde;
-    extrudeRegion(local, { outer: semicirculo(t.r), holes: [] }, -(y0 + t.hasta), -(y0 + desde) + 0.01);
-  }
-  return girarX(local, cx, 0, 0);
-}
-
-/**
- * El tapón: un manguito que entra por el cuello y sujeta las dos mitades, con
- * el ojal para colgar arriba.
- *
- * El agujero es liso y un poco más estrecho que las crestas de las estrías: al
- * empujarlo, las estrías se clavan en las paredes y el tapón no se sale. Es un
- * ajuste a presión, no una rosca: se imprime sin soportes y no hay que acertar
- * con el paso. Si entra flojo se baja la holgura; si no entra, se sube.
- */
-function tapon(
-  r: number,
-  largo: number,
-  holgura: number,
-  pared: number,
-  ojo: number,
-  ojoHueco: number,
-): Mesh {
-  const interior = r + ESTRIA * 0.2 + holgura;
-  const exterior = interior + pared;
+function tuerca(r: number, alto: number, holgura: number, ojo: number, ojoHueco: number): Mesh {
   const techo = 1.5;
+  // Un pelo menos que lo que asoma el cuello, para que llegue a apretar.
+  const hueco = Math.max(2, alto - 0.5);
+  const cuerpo = tuercaRoscada(r, hueco, holgura, 1.6, techo);
 
-  const m = emptyMesh();
-  // El manguito, abierto por abajo: así se imprime de pie sin soportes.
-  extrudeRegion(
-    m,
-    { outer: circle(0, 0, exterior, 40), holes: [rev(circle(0, 0, interior, 36))] },
-    0,
-    largo,
-  );
-  // El techo, macizo.
-  extrudeRegion(m, { outer: circle(0, 0, exterior, 40), holes: [] }, largo - 0.01, largo + techo);
-
-  // El ojal: un aro de pie encima del techo, con el agujero horizontal, que es
-  // por donde pasa el cordón. Se monta tumbado y se pone de pie con el giro.
+  // El ojal: un aro de pie encima del techo, con el agujero horizontal. Se
+  // monta tumbado y se pone de pie con el giro.
   const aro = emptyMesh();
   extrudeRegion(aro, { outer: circle(0, 0, ojo, 32), holes: [rev(circle(0, 0, ojoHueco, 24))] }, -1, 1);
-  const zAro = largo + techo + ojo - Math.min(ojo * 0.35, 1.2);
-  return merge(m, girarX(aro, 0, 0, zAro));
+  const zAro = hueco + techo + ojo - Math.min(ojo * 0.35, 1.2);
+  return merge(cuerpo, girarX(aro, 0, 0, zAro));
 }
 
 /**
@@ -283,7 +218,7 @@ function formaDelAdorno(forma: MoldShape, cx: number, cy: number, ancho: number,
   const a = Math.max(10, ancho);
   switch (forma) {
     case 'heart':
-      return heart(cx, cy, a, a * 0.9);
+      return corazonRedondo(cx, cy, a);
     case 'hexagon':
       return polygon(cx, cy, a, a * 0.88, 6, false);
     case 'triangle':
@@ -306,6 +241,37 @@ function formaDelAdorno(forma: MoldShape, cx: number, cy: number, ancho: number,
       // de toda la vida.
       return circle(cx, cy, a / 2, 96);
   }
+}
+
+/**
+ * Corazón redondeado, el del emoji ♥: un cuadrado girado con dos círculos sobre
+ * sus lados de arriba.
+ *
+ * El corazón de las placas es el de la curva clásica, con una muesca en V muy
+ * honda entre los lóbulos. Para un adorno no sirve: el cuello nace del fondo de
+ * esa muesca y se quedaba hundido entre los lóbulos, sin sitio para la tuerca.
+ * Este tiene la muesca poco honda —como el de Formify— y el cuello asoma.
+ */
+function corazonRedondo(cx: number, cy: number, ancho: number): Pt[] {
+  // Con lado `l`, el corazón mide 1,707·l de ancho (l/√2 + l).
+  const l = ancho / (1 / Math.SQRT2 + 1);
+  const d = l / Math.SQRT2;
+  const cuadrado: Pt[] = [
+    [0, -d],
+    [d, 0],
+    [0, d],
+    [-d, 0],
+  ];
+  const lobulo = (sx: number) => circle((sx * d) / 2, d / 2, l / 2, 72);
+  const juntos = union(sanitize([cuadrado], []), sanitize([lobulo(-1), lobulo(1)], []));
+  const borde = juntos.reduce<Pt[] | null>(
+    (a, r) => (!a || Math.abs(areaDe(r.outer)) > Math.abs(areaDe(a)) ? r.outer : a),
+    null,
+  );
+  if (!borde) return circle(cx, cy, ancho / 2, 96);
+  // Centrado por su caja, que es lo que espera quien lo coloca.
+  const b = boxOf([{ pts: borde, hole: false }]);
+  return borde.map(([x, y]) => [cx + x - b.cx, cy + y - b.cy] as Pt);
 }
 
 /**
@@ -344,11 +310,37 @@ export function buildThermoform(
   const alto = Math.max(1, p.formHeight);
   const grosor = Math.max(0.2, p.sheetThickness);
 
+  // --- El cuello ---------------------------------------------------------------
+  //
+  // Nace del borde DE VERDAD, no de lo alto de la caja. En un corazón lo alto de
+  // la caja son las puntas de los lóbulos, y entre ellos, en el centro, no hay
+  // plancha: es el hueco de la muesca. Se busca dónde corta el contorno la
+  // vertical del centro, y el cuello nace del corte más alto: el fondo de la
+  // muesca.
+  //
+  // Y ASOMA por encima de todo: lo que mide «Largo del cuello» queda por fuera
+  // de la forma. Si se quedaba dentro de la muesca, entre los lóbulos, la tuerca
+  // no tenía sitio para entrar y enroscarse.
+  const rCuello = Math.max(2, p.neckRadius);
+  const yCuello = bordeArriba(outer, cx) ?? caja.maxY;
+  const yNace = yCuello - 1.6; // se mete un poco en la plancha, para soldar
+  const largoCuello = caja.maxY - yNace + Math.max(3, p.neckLength);
+
   // El borde PLANO de la plancha: no se abomba, se apoya en el escalón del
   // cuenco y es lo que la deja quieta al prensar. La cúpula va por dentro de él.
+  //
+  // Y alrededor del cuello tampoco se abomba. Si no, la cúpula subía por los
+  // lados del cuello y lo dejaba enterrado entre los lóbulos.
   const reborde = Math.max(2.5, p.holeWall * 3);
+  const sitioCuello = roundedRect(
+    cx,
+    yCuello + 50 - 3,
+    (rCuello + FONDO_ROSCA + 1.5) * 2,
+    100,
+    0,
+  );
   const cupulaOuter =
-    offsetRegions([outer], [], -reborde).reduce<Pt[] | null>(
+    subtract(offsetRegions([outer], [], -reborde), sanitize([sitioCuello], [])).reduce<Pt[] | null>(
       (a, r) => (!a || Math.abs(areaDe(r.outer)) > Math.abs(areaDe(a)) ? r.outer : a),
       null,
     ) ?? encoger(outer, cx, cy, 0.85);
@@ -366,7 +358,18 @@ export function buildThermoform(
   // Y se encajan en la CÚPULA, no en la plancha entera, con el margen de
   // «Marco» alrededor: en el borde plano no lucen, y al prensar es la zona que
   // se aplasta contra el escalón.
-  const plano = sanitize([outer], []);
+  // La plancha es la forma MÁS un relleno macizo en la base del cuello: tapa la
+  // muesca entre los lóbulos justo donde nace, para que el cuello salga de
+  // material firme y no de un pellizco de plancha. Es plano —no se abomba— y
+  // forma parte del reborde.
+  const relleno = roundedRect(
+    cx,
+    (yCuello - 3 + caja.maxY) / 2,
+    (rCuello + 0.5) * 2,
+    Math.max(1, caja.maxY - yCuello + 3),
+    0,
+  );
+  const plano = union(sanitize([outer], []), sanitize([relleno], []));
   const dondeVa = offsetRegions([cupulaOuter], [], -Math.max(0, p.border));
   const juntos = fitDetailToBase(
     [...detail, ...(textLoops ?? [])],
@@ -396,16 +399,15 @@ export function buildThermoform(
 
   // El medio cuello nace del borde de arriba, centrado. Va FUERA de la cúpula:
   // lo de dentro se abomba, y un cuello torcido no se puede tapar.
+  // Cada plancha lleva MEDIO cuello roscado. La trasera, al darle la vuelta
+  // para juntarla, gira media vuelta sobre el eje del cuello: su espiral va
+  // desfasada media vuelta y la rosca sigue de una mitad a la otra.
   //
-  // Del borde DE VERDAD, no de lo alto de la caja. En un corazón lo alto de la
-  // caja son las puntas de los lóbulos, y entre ellos, en el centro, no hay
-  // plancha: es el hueco de la muesca. El cuello se quedaba ahí flotando, suelto
-  // a un lado. Se busca dónde corta el contorno la vertical del centro, y el
-  // cuello nace del punto más alto de esos cortes: el fondo de la muesca.
-  const rCuello = Math.max(2, p.neckRadius);
-  const largoCuello = Math.max(3, p.neckLength);
-  const yCuello = bordeArriba(outer, cx) ?? caja.maxY;
-  const cuello = medioCuello(cx, yCuello - 0.6, rCuello, largoCuello);
+  // Rosca SOLO en lo que asoma, que es donde se enrosca la tuerca. El tramo que
+  // cruza la muesca va liso: roscado entero salía un tornillo larguísimo.
+  const liso = caja.maxY - yNace;
+  const cuello = medioCuelloRoscado(cx, yNace, rCuello, largoCuello, 0, liso);
+  const cuelloTrasera = medioCuelloRoscado(cx, yNace, rCuello, largoCuello, 0.5, liso);
 
   const relieve = reliefSolids(dibujo, p, grosor - 0.01, p.reliefHeight, [outer]);
   const relieveNombre = nombre.length
@@ -434,7 +436,7 @@ export function buildThermoform(
   // cuello entero, el tapón entra por él y las deja sujetas. Así el adorno sale
   // cerrado y hueco, que es lo que deja que la luz pase por el calado.
   const rebordeTrasera = prensar(rebordeMalla);
-  const trasera = merge(prensar(merge(solid(planchaReg, 0, grosor), cuello)), rebordeTrasera);
+  const trasera = merge(prensar(merge(solid(planchaReg, 0, grosor), cuelloTrasera)), rebordeTrasera);
 
   // Con molde, las planchas se imprimen planas pero el visor sabe abombarlas
   // para enseñar cómo quedan. Sin molde ya vienen abombadas de fábrica.
@@ -470,8 +472,8 @@ export function buildThermoform(
 
   // El tapón: solo tiene sentido si hay dos mitades que unir.
   if (p.formBack) {
-    const t = tapon(rCuello, largoCuello, p.capClearance, 1.4, p.ringOuter, p.ringInner);
-    piezas.push({ id: 'cap', label: 'Tapón (cierra por arriba)', role: 'body', mesh: t, noMark: true });
+    const t = tuerca(rCuello, Math.max(3, p.neckLength), p.capClearance, p.ringOuter, p.ringInner);
+    piezas.push({ id: 'cap', label: 'Tuerca (cierra por arriba)', role: 'body', mesh: t, noMark: true });
     piezas.push({
       id: 'clip',
       label: 'Pinza (cierra por abajo)',
@@ -538,7 +540,7 @@ export function buildThermoform(
   // El escalón es el contorno entero de la plancha, con un pelo de holgura para
   // que entre sin forzar. Y la ranura del cuello, que atraviesa la pared: sin
   // ella, el cuello tropieza con el borde del cuenco y la plancha no asienta.
-  const rCrestas = rCuello + 1.2 * 0.4 + 0.3;
+  const rCrestas = rCuello + FONDO_ROSCA + 0.3;
   // Desde el fondo de la muesca hasta fuera de la pared, que es por donde sale.
   const ranuraLargo = caja.maxY - yCuello + pared * 2 + 4;
   const ranura = roundedRect(cx, yCuello + ranuraLargo / 2 - 1, rCrestas * 2, ranuraLargo, 0);

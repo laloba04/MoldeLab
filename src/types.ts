@@ -300,9 +300,9 @@ export interface Params {
   formMold: boolean;
   /** Radio del cuello por donde se unen las dos planchas. */
   neckRadius: number;
-  /** Largo del cuello. */
+  /** Lo que asoma el cuello por encima de la forma: ahí se enrosca la tuerca. */
   neckLength: number;
-  /** Holgura del tapón sobre el cuello. Más, entra más suelto. */
+  /** Holgura entre la rosca del cuello y la de la tuerca. Más, entra más suelta. */
   capClearance: number;
 
   /**
@@ -432,8 +432,9 @@ export const DEFAULTS: Params = {
   formBack: true,
   formMold: true,
   neckRadius: 3.5,
-  neckLength: 6,
-  capClearance: 0.1,
+  neckLength: 5,
+  // Holgura de una rosca impresa: con menos, la tuerca no entra; con más, baila.
+  capClearance: 0.3,
   cutoutMode: 'lines',
   cutLineWidth: 2,
   cutBridges: 6,
@@ -560,11 +561,11 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   holeWall: { label: 'Pared entre agujeros', unit: 'mm', min: 0.4, max: 3, step: 0.1 },
   holesOnDesign: { toggle: true, label: 'Calar también el dibujo' },
   formClearance: { label: 'Holgura del molde', unit: 'mm', min: 0, max: 1.5, step: 0.05 },
-  formBack: { toggle: true, label: 'Plancha trasera y tapón (cierra el adorno)' },
+  formBack: { toggle: true, label: 'Plancha trasera y tuerca (cierra el adorno)' },
   formMold: { toggle: true, label: 'Con molde (planchas planas para prensar)' },
   neckRadius: { label: 'Grosor del cuello', unit: 'mm', min: 2, max: 8, step: 0.5 },
   neckLength: { label: 'Largo del cuello', unit: 'mm', min: 3, max: 15, step: 0.5 },
-  capClearance: { label: 'Holgura del tapón', unit: 'mm', min: -0.2, max: 0.6, step: 0.05 },
+  capClearance: { label: 'Holgura de la rosca', unit: 'mm', min: 0.1, max: 0.6, step: 0.05 },
   holePattern: {
     select: true,
     label: 'Calado de la plancha',

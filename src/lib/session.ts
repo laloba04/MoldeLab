@@ -16,7 +16,12 @@ import type { Params } from '../types';
 import { cleanParams } from './presets';
 import { FONT_STYLES, type FontStyle } from './font';
 
-const KEY = 'moldelab-sesion';
+// Cada página guarda lo suyo: lo último que se dejó en la de novedades no tiene
+// por qué pisar lo de la de siempre, y al revés.
+const KEY =
+  typeof location !== 'undefined' && location.pathname.includes('/novedades')
+    ? 'moldelab-novedades'
+    : 'moldelab-sesion';
 const MARK_MAX = 40;
 
 export interface Session {

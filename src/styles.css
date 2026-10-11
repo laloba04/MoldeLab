@@ -98,6 +98,41 @@ body {
   border-radius: 1px;
 }
 
+/* El salto a la otra página: la de siempre y la de novedades. */
+.brand {
+  flex-wrap: wrap;
+}
+.to-page {
+  margin-left: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--blade);
+  border-radius: 999px;
+  color: var(--blade);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.to-page:hover {
+  background: var(--blade);
+  color: var(--graphite);
+}
+.brand h1 em {
+  font-style: normal;
+  color: var(--blade);
+}
+
+/* La página de novedades se distingue de un vistazo: otro acento (violeta en
+   vez de cian), así nunca se confunde con la de siempre. */
+.app.novedades {
+  --blade: #a78bfa;
+}
+.app.novedades .mark {
+  border-color: var(--blade);
+}
+
 .brand h1 {
   font-family: var(--display);
   font-weight: 800;

@@ -3,7 +3,7 @@ import { Download, FlipVertical, Image as ImageIcon, Layers, Redo2, Send, Undo2,
 import { DEFAULTS, type Params, type Piece, type Silhouette } from './types';
 import { autoLevels, loadImageData } from './lib/image';
 import { buildPieces, vectorize } from './lib/pipeline';
-import { byId } from './lib/catalog';
+import { byId, productosDe } from './lib/catalog';
 import { boxOf } from './lib/shapes';
 import { ringHandle } from './lib/generators/catalog-parts';
 import { arcTextImage, imageWithText, textImage, textLayout, textOnlyImage, useFont } from './lib/sources';
@@ -35,8 +35,23 @@ import { watchForUpdates } from './lib/version';
 // Lo último que se dejó la vez anterior: producto, ajustes y marca del taller.
 const SAVED = loadSession();
 
-export default function App() {
+/**
+ * `novedades`: esta es la página de NOVEDADES (/novedades/), donde se prueba lo
+ * nuevo sin estorbar en el día a día del taller. Es otra página de verdad —su
+ * dirección, su pestaña, sus ajustes guardados—, pero la misma aplicación por
+ * dentro: lo que se arregla en una queda arreglado en la otra.
+ */
+export default function App({ novedades = false }: { novedades?: boolean }) {
   const [params, setParams] = useState<Params>(SAVED.params ?? DEFAULTS);
+
+  // El producto tiene que ser de la página en la que se está. Si no —se llega a
+  // la de siempre con el termoformado puesto de la última vez, o al revés—, se
+  // pasa al primero de esta página.
+  useEffect(() => {
+    if (!!byId(params.product).novedad === novedades) return;
+    const primero = productosDe(novedades)[0];
+    if (primero) setParams((prev) => ({ ...prev, product: primero.id }));
+  }, [novedades, params.product]);
   const [presets, setPresets] = useState<Preset[]>(() => loadPresets());
   const [presetName, setPresetName] = useState('');
   const [img, setImg] = useState<ImageData | null>(null);
@@ -689,12 +704,23 @@ export default function App() {
   };
 
   const brand = (
-    <header className="brand">
+    <header className={novedades ? 'brand novedades' : 'brand'}>
       <span className="mark" aria-hidden />
       <div>
-        <h1>MoldeLab</h1>
-        <p>Una imagen entra. Un STL sale.</p>
+        <h1>MoldeLab{novedades && <em> Novedades</em>}</h1>
+        <p>{novedades ? 'Lo nuevo, en pruebas.' : 'Una imagen entra. Un STL sale.'}</p>
       </div>
+      <a
+        className="to-page"
+        href={novedades ? '../' : './novedades/'}
+        title={
+          novedades
+            ? 'Volver a la página de siempre'
+            : 'Ir a la página de novedades: lo nuevo, todavía en pruebas'
+        }
+      >
+        {novedades ? '← Volver' : 'Novedades →'}
+      </a>
     </header>
   );
 
@@ -1267,7 +1293,11 @@ export default function App() {
   ) : null;
 
   return (
-    <div className="app work" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+    <div
+      className={novedades ? 'app work novedades' : 'app work'}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+    >
       <input
         ref={fileRef}
         type="file"
@@ -1279,13 +1309,13 @@ export default function App() {
       <aside className="col col-left">
         {brand}
         {imageBlock}
-        <Controls p={params} set={set} reset={reset} view="product" />
+        <Controls p={params} set={set} reset={reset} view="product" novedades={novedades} />
       </aside>
 
       <main className="stage">{stageInner}</main>
 
       <aside className="col col-right">
-        <Controls p={params} set={set} reset={reset} view="tune" />
+        <Controls p={params} set={set} reset={reset} view="tune" novedades={novedades} />
         {finishBlock}
         {downloadFooter}
       </aside>

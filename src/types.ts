@@ -206,6 +206,15 @@ export interface Product {
   imageAndText?: boolean;
   /** El pipeline calcula bandas por umbral además de la silueta. */
   needsBands?: boolean;
+  /**
+   * Vive en la página de NOVEDADES (`#novedades`), no en la de siempre.
+   *
+   * Lo nuevo se prueba aparte: la página de siempre se queda tal cual, que es
+   * la que se usa en el taller a diario, y lo que aún está por afinar no se le
+   * cruza a nadie por medio. Cuando algo esté probado, se le quita la marca y
+   * pasa a la de siempre.
+   */
+  novedad?: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -481,7 +490,12 @@ export const DEFAULTS: Params = {
 export type FieldMeta =
   | { label: string; unit?: string; min: number; max: number; step: number }
   | { toggle: true; label: string }
-  | { select: true; label: string; options: { value: string; label: string }[] };
+  | {
+      select: true;
+      label: string;
+      /** `novedad`: la opción solo sale en la página de novedades. */
+      options: { value: string; label: string; novedad?: boolean }[];
+    };
 
 /** Etiquetas y rangos de cada control. Un sitio, no cinco. */
 export const FIELD_META: Record<Field, FieldMeta> = {
@@ -532,11 +546,11 @@ export const FIELD_META: Record<Field, FieldMeta> = {
       { value: 'square', label: 'Cuadrado' },
       { value: 'circle', label: 'Círculo' },
       { value: 'heart', label: 'Corazón' },
-      { value: 'hexagon', label: 'Hexágono' },
-      { value: 'triangle', label: 'Triángulo' },
-      { value: 'diamond', label: 'Rombo' },
-      { value: 'star', label: 'Estrella' },
-      { value: 'egg', label: 'Huevo' },
+      { value: 'hexagon', label: 'Hexágono', novedad: true },
+      { value: 'triangle', label: 'Triángulo', novedad: true },
+      { value: 'diamond', label: 'Rombo', novedad: true },
+      { value: 'star', label: 'Estrella', novedad: true },
+      { value: 'egg', label: 'Huevo', novedad: true },
     ],
   },
 

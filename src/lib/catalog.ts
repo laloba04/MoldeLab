@@ -351,7 +351,7 @@ export const PRODUCTS: Entry[] = [
   {
     id: 'thermoform',
     category: 'personalizados',
-    badge: 'nuevo',
+    novedad: true,
     label: 'Termoformado',
     hint: 'Dos medias planchas que se abomban y se unen con un tapón: una bola para colgar. Con imagen, nombre o las dos.',
     needsText: true,
@@ -512,10 +512,16 @@ export function buildProduct(s: Silhouette, p: Params): Piece[] {
   return entry.build(s, p).filter((pc) => pc.mesh.positions.length > 0);
 }
 
-export function searchProducts(q: string): Entry[] {
+/** Los productos de una página: la de siempre o la de novedades. */
+export function productosDe(novedades: boolean): Entry[] {
+  return PRODUCTS.filter((p) => !!p.novedad === novedades);
+}
+
+export function searchProducts(q: string, novedades = false): Entry[] {
   const needle = q.trim().toLowerCase();
-  if (!needle) return PRODUCTS;
-  return PRODUCTS.filter(
+  const lista = productosDe(novedades);
+  if (!needle) return lista;
+  return lista.filter(
     (p) =>
       p.label.toLowerCase().includes(needle) ||
       p.hint.toLowerCase().includes(needle) ||

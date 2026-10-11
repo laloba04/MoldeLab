@@ -8,7 +8,7 @@ import {
   type Params,
   type ProductId,
 } from '../types';
-import { PRODUCTS, byId, searchProducts } from '../lib/catalog';
+import { byId, productosDe, searchProducts } from '../lib/catalog';
 
 interface Props {
   p: Params;
@@ -17,6 +17,8 @@ interface Props {
   /** Qué parte enseñar: solo el selector de producto, solo sus ajustes, o
    *  ambos (por defecto). Las maquetas nuevas los colocan en columnas distintas. */
   view?: 'product' | 'tune' | 'all';
+  /** En la página de novedades: solo se ven sus productos y sus opciones. */
+  novedades?: boolean;
 }
 
 /** El distintivo del producto en el menú, si lo tiene. */
@@ -51,7 +53,17 @@ function limitOf(field: Field, p: Params, max: number): number {
 }
 
 /** Un control se dibuja solo a partir de su metadato. Sin JSX a mano por campo. */
-function Control({ field, p, set }: { field: Field; p: Params; set: Props['set'] }) {
+function Control({
+  field,
+  p,
+  set,
+  novedades = false,
+}: {
+  field: Field;
+  p: Params;
+  set: Props['set'];
+  novedades?: boolean;
+}) {
   const meta = FIELD_META[field];
   if (!meta) return null;
 
@@ -78,7 +90,12 @@ function Control({ field, p, set }: { field: Field; p: Params; set: Props['set']
           <span>{meta.label}</span>
         </span>
         <select value={value} onChange={(e) => set(field, e.target.value as never)}>
-          {meta.options.map((o) => (
+          {meta.options
+            // Las opciones nuevas solo salen en la página de novedades. La que
+            // ya esté elegida se enseña siempre, para no dejar el desplegable
+            // en blanco si se llegó aquí desde la otra página con ella puesta.
+            .filter((o) => novedades || !o.novedad || o.value === value)
+            .map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
@@ -140,12 +157,13 @@ function Control({ field, p, set }: { field: Field; p: Params; set: Props['set']
   );
 }
 
-export function Controls({ p, set, reset, view = 'all' }: Props) {
+export function Controls({ p, set, reset, view = 'all', novedades = false }: Props) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({ reposteria: true });
 
   const current = byId(p.product);
-  const matches = useMemo(() => searchProducts(query), [query]);
+  const matches = useMemo(() => searchProducts(query, novedades), [query, novedades]);
+  const lista = useMemo(() => productosDe(novedades), [novedades]);
   const searching = query.trim().length > 0;
 
   const pick = (id: ProductId) => {
@@ -194,8 +212,11 @@ export function Controls({ p, set, reset, view = 'all' }: Props) {
           </ul>
         ) : (
           CATEGORIES.map((cat) => {
-            const items = PRODUCTS.filter((x) => x.category === cat.id);
-            const isOpen = open[cat.id] ?? false;
+            const items = lista.filter((x) => x.category === cat.id);
+            // Una categoría sin nada en esta página no se enseña.
+            if (!items.length) return null;
+            // En novedades hay poco: se enseña todo abierto.
+            const isOpen = open[cat.id] ?? novedades;
             return (
               <div key={cat.id} className="cat">
                 <button
@@ -269,14 +290,14 @@ export function Controls({ p, set, reset, view = 'all' }: Props) {
         </h3>
         <p className="hint">{current.hint}</p>
         {current.fields.map((f) => (
-          <Control key={f} field={f} p={p} set={set} />
+          <Control key={f} field={f} p={p} set={set} novedades={novedades} />
         ))}
       </section>
 
       <section>
         <h3>Contorno</h3>
         {traceFields.map((f) => (
-          <Control key={f} field={f} p={p} set={set} />
+          <Control key={f} field={f} p={p} set={set} novedades={novedades} />
         ))}
       </section>
       </>

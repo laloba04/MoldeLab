@@ -9,6 +9,8 @@ export interface BarraProps {
   puedeDeshacer: boolean;
   puedeRehacer: boolean;
   variasPiezas: boolean;
+  /** Las piezas se pueden ver montadas (el rodillo en su mango). */
+  montable?: boolean;
   exploded: boolean;
   toggleExploded: () => void;
   viewMode: ViewMode;
@@ -40,7 +42,14 @@ export function Barra(b: BarraProps) {
       </button>
       {b.variasPiezas && (
         <button className="chip" onClick={b.toggleExploded}>
-          <Layers size={14} /> {b.exploded ? 'Juntar' : 'Separar'}
+          <Layers size={14} />{' '}
+          {b.montable
+            ? b.exploded
+              ? 'Ver montado'
+              : 'Ver por piezas'
+            : b.exploded
+              ? 'Juntar'
+              : 'Separar'}
         </button>
       )}
       <button className="chip" onClick={b.siguienteVista} title="Cambiar cómo se ve el modelo">

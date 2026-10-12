@@ -14,6 +14,7 @@ import { buildCutter } from './generators/cutter';
 import { stampParts, stampPlate } from './generators/stamp';
 import { buildEjector } from './generators/ejector';
 import { buildThermoform } from './generators/thermoform';
+import { buildRoller } from './generators/rodillo';
 import {
   buildBox,
   buildColoringPlate,
@@ -114,6 +115,34 @@ const THERMOFORM_GROUPS: FieldGroup[] = [
     label: 'Relieve del dibujo',
     hint: 'Cuánto sobresale el dibujo y su grosor de línea.',
     fields: ['reliefHeight', 'reliefTaper', 'strokeWidth'],
+  },
+];
+
+const ROLLER_GROUPS: FieldGroup[] = [
+  {
+    label: 'Rodillo',
+    hint: 'Qué piezas sacar, lo que mide y los bordes de los extremos.',
+    fields: ['rollerPart', 'rollerDia', 'rollerWidth', 'rollerEdges'],
+    open: true,
+  },
+  {
+    label: 'Estampado',
+    hint: 'Cuántas veces se repite el dibujo, cómo se coloca y cuánto sobresale.',
+    fields: [
+      'rollerRepeats',
+      'rollerRows',
+      'rollerLayout',
+      'rollerShift',
+      'rollerRot',
+      'reliefHeight',
+      'strokeWidth',
+    ],
+    open: true,
+  },
+  {
+    label: 'Texto',
+    hint: 'Letra y colocación del nombre.',
+    fields: ['textFont', 'textScale', 'textRot', 'textX', 'textY'],
   },
 ];
 
@@ -405,6 +434,18 @@ export const PRODUCTS: Entry[] = [
     groups: THERMOFORM_GROUPS,
     fields: THERMOFORM_GROUPS.flatMap((g) => g.fields),
     build: (s, p) => buildThermoform(s.loops, s.detail, p, s.textLoops),
+  },
+  {
+    id: 'roller',
+    category: 'reposteria',
+    novedad: true,
+    label: 'Rodillo',
+    hint: 'Un rodillo con tu dibujo repetido alrededor: lo pasas por la masa o el fondant y deja el estampado. Se imprime de pie; los mangos van aparte.',
+    needsText: true,
+    imageAndText: true,
+    groups: ROLLER_GROUPS,
+    fields: ROLLER_GROUPS.flatMap((g) => g.fields),
+    build: (s, p) => buildRoller(s, p),
   },
   {
     id: 'figure-box',

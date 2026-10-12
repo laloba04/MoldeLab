@@ -71,6 +71,12 @@ function sirve(f: Field, p: Params, campos: Field[], hayImagen: boolean): boolea
   if ((f === 'textScale' || f === 'textX' || f === 'textY') && campos.includes('textX')) {
     return hayImagen;
   }
+  // Lo que se corre cada fila solo cuenta colocando en diagonal.
+  if (f === 'rollerShift') return p.rollerLayout === 'diagonal';
+  // Con solo el mango no hay dibujo que colocar.
+  if (p.product === 'roller' && p.rollerPart === 'handle') {
+    return f === 'rollerPart' || f === 'rollerDia' || f === 'rollerWidth';
+  }
   return true;
 }
 
@@ -192,6 +198,12 @@ export function Controls({ p, set, reset, view = 'all', novedades = false, hayIm
 
   const pick = (id: ProductId) => {
     set('product', id);
+    // Cada producto nuevo arranca con sus medidas: un jibbitz no puede heredar
+    // los 70 mm del producto de antes.
+    const inicial = byId(id).inicial;
+    if (inicial && id !== p.product) {
+      for (const [k, v] of Object.entries(inicial)) set(k as keyof Params, v as never);
+    }
     setQuery('');
   };
 

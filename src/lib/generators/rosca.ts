@@ -194,3 +194,116 @@ export function exteriorTuerca(r: number, holgura: number, pared: number): numbe
 }
 
 export type { Pt };
+
+// -----------------------------------------------------------------------------
+// Tornillo y tuerca completos (vuelta entera), con paso y fondo a elegir
+// -----------------------------------------------------------------------------
+
+/**
+ * Radio de un tornillo de eje Z en el punto (θ, z). Rosca a derechas: la cresta
+ * sube al girar en sentido antihorario visto desde arriba.
+ *
+ * La tuerca usa la MISMA cuenta más la holgura, así que donde el tornillo tiene
+ * cresta la tuerca tiene valle, igual que en el cuello del termoformado.
+ */
+function radioRosca(r: number, z: number, theta: number, paso: number, fondo: number): number {
+  return r + fondo * filete(z / paso - theta / (2 * Math.PI));
+}
+
+/**
+ * Tornillo: cilindro roscado de eje Z, de `z0` a `z0 + largo`, centrado en
+ * (cx, cy). `r` es el radio del NÚCLEO; la cresta llega a r + fondo.
+ *
+ * La rosca se desvanece en el último paso de la punta: así la tuerca entra sin
+ * engancharse en un filo, que es lo que en un tornillo de tienda hace el
+ * chaflán. Cerrado por los dos extremos.
+ */
+export function tornilloRoscado(
+  cx: number,
+  cy: number,
+  r: number,
+  z0: number,
+  largo: number,
+  paso: number,
+  fondo: number,
+): Mesh {
+  const m = emptyMesh();
+  const nT = 72;
+  const nZ = Math.max(4, Math.round((largo / paso) * 16));
+  const P = (i: number, j: number): number[] => {
+    const theta = (i / nT) * 2 * Math.PI;
+    const s = (j / nZ) * largo;
+    // De lleno a nada en el último paso: entrada suave.
+    const entra = Math.min(1, Math.max(0, (largo - s) / paso));
+    const rho = r + (radioRosca(r, s, theta, paso, fondo) - r) * entra;
+    return [cx + rho * Math.cos(theta), cy + rho * Math.sin(theta), z0 + s];
+  };
+  for (let i = 0; i < nT; i++) {
+    const k = (i + 1) % nT;
+    for (let j = 0; j < nZ; j++) {
+      const a = P(i, j);
+      const b = P(k, j);
+      const c = P(k, j + 1);
+      const d = P(i, j + 1);
+      tri(m, a, b, c);
+      tri(m, a, c, d);
+    }
+    tri(m, [cx, cy, z0], P(k, 0), P(i, 0)); // abajo, mirando a −Z
+    tri(m, [cx, cy, z0 + largo], P(i, nZ), P(k, nZ)); // arriba, mirando a +Z
+  }
+  return m;
+}
+
+/**
+ * Tuerca pasante: el hueco roscado por dentro y, por fuera, el contorno que se
+ * le dé (hexágono, cuadrado, círculo…) como función del ángulo. De eje Z,
+ * centrada en el origen, de z = 0 a `alto`.
+ *
+ * El contorno de fuera se muestrea en los MISMOS ángulos que la rosca: así las
+ * dos tapas son tiras de cuadriláteros entre un punto de dentro y su pareja de
+ * fuera, sin triangular nada a ciegas, y la malla cierra siempre.
+ */
+export function tuercaPasante(
+  r: number,
+  alto: number,
+  holgura: number,
+  paso: number,
+  fondo: number,
+  fuera: (theta: number) => number,
+): Mesh {
+  const m = emptyMesh();
+  const nT = 72;
+  const nZ = Math.max(4, Math.round((alto / paso) * 16));
+  const B = (i: number, j: number): number[] => {
+    const theta = (i / nT) * 2 * Math.PI;
+    const z = (j / nZ) * alto;
+    const rho = radioRosca(r, z, theta, paso, fondo) + holgura;
+    return [rho * Math.cos(theta), rho * Math.sin(theta), z];
+  };
+  const O = (i: number, z: number): number[] => {
+    const theta = (i / nT) * 2 * Math.PI;
+    const R = fuera(theta);
+    return [R * Math.cos(theta), R * Math.sin(theta), z];
+  };
+  for (let i = 0; i < nT; i++) {
+    const k = (i + 1) % nT;
+    // El hueco, mirando hacia el eje.
+    for (let j = 0; j < nZ; j++) {
+      const a = B(i, j);
+      const b = B(i, j + 1);
+      const c = B(k, j + 1);
+      const d = B(k, j);
+      tri(m, a, b, c);
+      tri(m, a, c, d);
+    }
+    // Fuera.
+    tri(m, O(i, 0), O(k, 0), O(k, alto));
+    tri(m, O(i, 0), O(k, alto), O(i, alto));
+    // Tapa de abajo (−Z) y de arriba (+Z).
+    tri(m, B(i, 0), B(k, 0), O(k, 0));
+    tri(m, B(i, 0), O(k, 0), O(i, 0));
+    tri(m, B(i, nZ), O(k, alto), B(k, nZ));
+    tri(m, B(i, nZ), O(i, alto), O(k, alto));
+  }
+  return m;
+}

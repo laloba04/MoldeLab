@@ -369,6 +369,12 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   const dims = useMemo(() => medidas(marked), [marked]);
   const markable = pieces.some(canWatermark);
   const hasTrace = marked.some((p) => (p.overlay?.positions.length ?? 0) > 0);
+  // Lo que se monta (el rodillo en su mango) se enseña montado nada más
+  // elegirlo, que es como se entiende qué es; lo demás, por piezas.
+  const montable = marked.some((p) => p.montaje);
+  useEffect(() => {
+    setExploded(!montable);
+  }, [montable]);
 
   // El color pintado a mano de una zona, si lo tiene. Lo comparten el visor y el
   // 3MF, así que el archivo sale pintado exactamente igual que se ve.
@@ -584,6 +590,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
               puedeDeshacer={puedeDeshacer}
               puedeRehacer={puedeRehacer}
               variasPiezas={pieces.length > 1}
+              montable={montable}
               exploded={exploded}
               toggleExploded={() => setExploded((v) => !v)}
               viewMode={viewMode}

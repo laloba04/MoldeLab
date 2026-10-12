@@ -106,13 +106,35 @@ export interface Piece {
    * sigue saliendo plano, que es como se imprime.
    */
   dome?: Dome;
+  /**
+   * La pieza se imprime BOCA ABAJO: la cara con el dibujo va contra la cama,
+   * lisa, y lo demás (el pincho del jibbitz, la copa del AirTag, los huecos
+   * del imán) crece hacia arriba. El número es lo que mide de alto.
+   *
+   * El archivo sale así, que es como se imprime; el visor puede darle la vuelta
+   * para enseñarla por la cara, que es como se va a ver.
+   */
+  caraAbajo?: number;
+  /**
+   * Dónde va la pieza con todo MONTADO: un giro y un desplazamiento (matriz de
+   * 3×4, por filas). Las piezas se imprimen cada una tumbada a su manera; con
+   * esto el visor las puede enseñar puestas en su sitio, como quedan una vez
+   * encajadas (el rodillo dentro del mango, los tapones en los lados).
+   */
+  montaje?: number[];
 }
 
 // -----------------------------------------------------------------------------
 // Catálogo
 // -----------------------------------------------------------------------------
 
-export type CategoryId = 'reposteria' | 'llaveros' | 'letreros' | 'personalizados';
+export type CategoryId =
+  | 'reposteria'
+  | 'llaveros'
+  | 'letreros'
+  | 'personalizados'
+  | 'accesorios'
+  | 'decoracion';
 
 export interface Category {
   id: CategoryId;
@@ -125,6 +147,8 @@ export const CATEGORIES: Category[] = [
   { id: 'llaveros', label: 'Llaveros', icon: '🔑' },
   { id: 'letreros', label: 'Letreros', icon: '🪧' },
   { id: 'personalizados', label: 'Personalizados', icon: '🎨' },
+  { id: 'accesorios', label: 'Accesorios', icon: '🧲' },
+  { id: 'decoracion', label: 'Decoración', icon: '⭐' },
 ];
 
 export type ProductId =
@@ -172,7 +196,24 @@ export type ProductId =
   | 'opener-stamp'
   | 'thermoform'
   | 'figure-box'
-  | 'puzzle';
+  | 'puzzle'
+  // Accesorios (novedades)
+  | 'magnet'
+  | 'jibbitz'
+  | 'pen-topper'
+  | 'airtag'
+  | 'griptok'
+  | 'button'
+  | 'letter-beads'
+  | 'bolt-nut'
+  // Decoración y repostería (novedades)
+  | 'snowflake'
+  | 'roller';
+
+/** Cómo va el dibujo en las piezas que se imprimen boca abajo. */
+export type ArtMode = 'inlay' | 'engrave';
+/** Dónde va la anilla de colgar, si va. */
+export type LoopSide = 'none' | 'top' | 'right' | 'bottom' | 'left';
 
 /** Dibujo del calado de la plancha de termoformado. */
 export type HolePattern = 'none' | 'hexagon' | 'circle' | 'square' | 'diamond' | 'triangle';
@@ -221,6 +262,17 @@ export interface Product {
    * pasa a la de siempre.
    */
   novedad?: boolean;
+  /**
+   * Ajustes con los que arranca el producto al elegirlo. Un jibbitz mide 25 mm y
+   * un rodillo 40 de diámetro: con el tamaño que traiga de otro producto (70 mm)
+   * saldría un jibbitz del tamaño de una galleta.
+   */
+  inicial?: Partial<Params>;
+  /**
+   * Se genera sin imagen (el copo de nieve): la imagen y el nombre son opcionales
+   * y van en el centro, pero sin ellos también sale la pieza.
+   */
+  sinImagen?: boolean;
   /**
    * Los ajustes repartidos en apartados plegables. Para los productos con
    * muchos mandos: una lista de veinte seguidos abruma, y lo importante (la
@@ -400,6 +452,76 @@ export interface Params {
   // Caja
   boxHeight: number;
   lidLip: number;
+
+  // --- Piezas boca abajo (novedades: imán, jibbitz, AirTag…) -----------------
+  /** Dibujo incrustado a color (a ras) o grabado hundido (para una tinta). */
+  artMode: ArtMode;
+  /** Lo que se mete el dibujo en la cara. */
+  artDepth: number;
+  /** Anilla para colgar (AirTag). */
+  loopSide: LoopSide;
+
+  // Imán
+  magnetCount: number;
+  magnetDia: number;
+  magnetDepth: number;
+
+  // Jibbitz
+  pegDia: number;
+  pegLength: number;
+  pegHead: number;
+
+  // Remate de bolígrafo
+  penDia: number;
+  penHex: boolean;
+  penThrough: boolean;
+
+  // AirTag
+  airtagWall: number;
+
+  // GripTok
+  gripRadius: number;
+  gripHeight: number;
+
+  // Botón
+  buttonHoles: number;
+  buttonHoleDia: number;
+
+  // Cuentas de letras
+  beadSize: number;
+  beadCombined: boolean;
+  cordDia: number;
+
+  // Copo de nieve
+  flakeArms: number;
+  flakeBranches: number;
+  flakeBranchWidth: number;
+  flakeBranchLength: number;
+  flakeAngle: number;
+
+  // Rodillo
+  rollerDia: number;
+  rollerWidth: number;
+  rollerRepeats: number;
+  rollerRows: number;
+  /** Cómo se colocan las filas: en cuadrícula, al tresbolillo o en diagonal. */
+  rollerLayout: 'grid' | 'staggered' | 'diagonal';
+  /** En diagonal, lo que se corre cada fila (en fracción de celda). */
+  rollerShift: number;
+  /** Giro del dibujo dentro de su celda, en grados. */
+  rollerRot: number;
+  /** Aros en los extremos: ninguno, lisos o a trozos. */
+  rollerEdges: 'none' | 'straight' | 'dashed';
+  /** Qué sacar: el rodillo, el mango o las dos cosas. */
+  rollerPart: 'both' | 'roller' | 'handle';
+
+  // Tornillo y tuerca
+  boltPart: 'both' | 'bolt' | 'nut';
+  boltDia: number;
+  boltLength: number;
+  boltPitch: number;
+  boltClearance: number;
+  nutShape: 'hexagon' | 'square' | 'round';
 }
 
 export const DEFAULTS: Params = {
@@ -507,6 +629,60 @@ export const DEFAULTS: Params = {
 
   boxHeight: 30,
   lidLip: 3,
+
+  artMode: 'inlay',
+  artDepth: 0.8,
+  loopSide: 'top',
+
+  magnetCount: 1,
+  magnetDia: 8,
+  magnetDepth: 2,
+
+  // Lo que miden los de tienda: tallo de 6 para el agujero del zueco, que mide
+  // unos 4 de grueso, y cabeza de 10 para que no se salga.
+  pegDia: 6,
+  pegLength: 4,
+  pegHead: 10,
+
+  penDia: 7,
+  penHex: false,
+  penThrough: false,
+
+  airtagWall: 1.6,
+
+  gripRadius: 19.9,
+  gripHeight: 1.3,
+
+  buttonHoles: 4,
+  buttonHoleDia: 2,
+
+  beadSize: 10,
+  beadCombined: false,
+  cordDia: 3,
+
+  flakeArms: 6,
+  flakeBranches: 3,
+  flakeBranchWidth: 3,
+  flakeBranchLength: 12,
+  flakeAngle: 60,
+
+  // Los mismos de partida que Formify.
+  rollerDia: 60,
+  rollerWidth: 80,
+  rollerRepeats: 5,
+  rollerRows: 2,
+  rollerLayout: 'diagonal',
+  rollerShift: 0.3,
+  rollerRot: 0,
+  rollerEdges: 'none',
+  rollerPart: 'both',
+
+  boltPart: 'both',
+  boltDia: 10,
+  boltLength: 20,
+  boltPitch: 1.5,
+  boltClearance: 0.25,
+  nutShape: 'hexagon',
 };
 
 /** Un metadato de control: deslizador (rango), interruptor o desplegable. */
@@ -664,6 +840,114 @@ export const FIELD_META: Record<Field, FieldMeta> = {
 
   boxHeight: { label: 'Alto de la caja', unit: 'mm', min: 10, max: 60, step: 1 },
   lidLip: { label: 'Labio de la tapa', unit: 'mm', min: 1.5, max: 6, step: 0.5 },
+
+  artMode: {
+    select: true,
+    label: 'El dibujo',
+    options: [
+      { value: 'inlay', label: 'Incrustado a color (a ras)' },
+      { value: 'engrave', label: 'Grabado hundido (una tinta)' },
+    ],
+  },
+  artDepth: { label: 'Profundidad del dibujo', unit: 'mm', min: 0.2, max: 2, step: 0.1 },
+  loopSide: {
+    select: true,
+    label: 'Anilla para colgar',
+    options: [
+      { value: 'none', label: 'Sin anilla' },
+      { value: 'top', label: 'Arriba' },
+      { value: 'right', label: 'Derecha' },
+      { value: 'bottom', label: 'Abajo' },
+      { value: 'left', label: 'Izquierda' },
+    ],
+  },
+
+  magnetCount: { label: 'Imanes', min: 1, max: 4, step: 1 },
+  magnetDia: { label: 'Diámetro del imán', unit: 'mm', min: 3, max: 25, step: 0.5 },
+  magnetDepth: { label: 'Grosor del imán', unit: 'mm', min: 1, max: 6, step: 0.5 },
+
+  pegDia: { label: 'Grosor del tallo', unit: 'mm', min: 4, max: 9, step: 0.1 },
+  pegLength: { label: 'Largo del tallo (grosor del zueco)', unit: 'mm', min: 2, max: 8, step: 0.5 },
+  pegHead: { label: 'Cabeza del tallo', unit: 'mm', min: 7, max: 14, step: 0.5 },
+
+  penDia: { label: 'Grosor del bolígrafo', unit: 'mm', min: 5, max: 14, step: 0.1 },
+  penHex: { toggle: true, label: 'Bolígrafo hexagonal' },
+  penThrough: { toggle: true, label: 'Agujero pasante' },
+
+  airtagWall: { label: 'Pared del soporte', unit: 'mm', min: 1, max: 3, step: 0.1 },
+
+  gripRadius: { label: 'Radio del agarre', unit: 'mm', min: 12, max: 25, step: 0.1 },
+  gripHeight: { label: 'Alto del aro', unit: 'mm', min: 0.6, max: 4, step: 0.1 },
+
+  buttonHoles: { label: 'Agujeros para coser', min: 2, max: 4, step: 2 },
+  buttonHoleDia: { label: 'Tamaño de los agujeros', unit: 'mm', min: 1, max: 4, step: 0.1 },
+
+  beadSize: { label: 'Tamaño de la cuenta', unit: 'mm', min: 6, max: 20, step: 0.5 },
+  beadCombined: { toggle: true, label: 'Todo en una sola cuenta' },
+  cordDia: { label: 'Grosor del cordón', unit: 'mm', min: 0.8, max: 6, step: 0.1 },
+
+  flakeArms: { label: 'Brazos', min: 5, max: 8, step: 1 },
+  flakeBranches: { label: 'Ramitas por brazo', min: 0, max: 6, step: 1 },
+  flakeBranchWidth: { label: 'Grosor de las ramas', unit: 'mm', min: 1.5, max: 8, step: 0.5 },
+  flakeBranchLength: { label: 'Largo de las ramitas', unit: 'mm', min: 3, max: 40, step: 0.5 },
+  flakeAngle: { label: 'Ángulo de las ramitas', unit: '°', min: 20, max: 80, step: 5 },
+
+  rollerDia: { label: 'Diámetro del rodillo', unit: 'mm', min: 20, max: 80, step: 1 },
+  rollerWidth: { label: 'Ancho del rodillo', unit: 'mm', min: 20, max: 150, step: 1 },
+  rollerRepeats: { label: 'Dibujos por vuelta', min: 1, max: 12, step: 1 },
+  rollerRows: { label: 'Filas', min: 1, max: 6, step: 1 },
+  rollerLayout: {
+    select: true,
+    label: 'Colocación',
+    options: [
+      { value: 'grid', label: 'En cuadrícula' },
+      { value: 'staggered', label: 'Al tresbolillo' },
+      { value: 'diagonal', label: 'En diagonal' },
+    ],
+  },
+  rollerShift: { label: 'Desplazamiento diagonal', min: 0.05, max: 0.95, step: 0.05 },
+  rollerRot: { label: 'Girar el dibujo', unit: '°', min: -180, max: 180, step: 5 },
+  rollerEdges: {
+    select: true,
+    label: 'Bordes de los extremos',
+    options: [
+      { value: 'none', label: 'Sin bordes' },
+      { value: 'straight', label: 'Lisos (marca una raya)' },
+      { value: 'dashed', label: 'A trozos (marca un punteado)' },
+    ],
+  },
+  rollerPart: {
+    select: true,
+    label: 'Qué sacar',
+    options: [
+      { value: 'both', label: 'Rodillo y mango' },
+      { value: 'roller', label: 'Solo el rodillo' },
+      { value: 'handle', label: 'Solo el mango' },
+    ],
+  },
+
+  boltPart: {
+    select: true,
+    label: 'Qué sacar',
+    options: [
+      { value: 'both', label: 'Tornillo y tuerca' },
+      { value: 'bolt', label: 'Solo el tornillo' },
+      { value: 'nut', label: 'Solo la tuerca' },
+    ],
+  },
+  boltDia: { label: 'Grosor del tornillo', unit: 'mm', min: 5, max: 24, step: 0.5 },
+  boltLength: { label: 'Largo de la rosca', unit: 'mm', min: 5, max: 80, step: 1 },
+  boltPitch: { label: 'Paso de la rosca', unit: 'mm', min: 0.8, max: 3, step: 0.05 },
+  boltClearance: { label: 'Holgura de la rosca', unit: 'mm', min: 0.1, max: 0.6, step: 0.05 },
+  nutShape: {
+    select: true,
+    label: 'Forma de la tuerca',
+    options: [
+      { value: 'hexagon', label: 'Hexagonal' },
+      { value: 'square', label: 'Cuadrada' },
+      { value: 'round', label: 'Redonda' },
+    ],
+  },
 };
 
 /** Controles de vectorizado: los ve todo producto, siempre. */

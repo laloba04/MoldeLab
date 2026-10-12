@@ -137,6 +137,48 @@ function geomOf(positions: number[]): THREE.BufferGeometry {
 
 type ViewMode = 'solid' | 'xray' | 'wire';
 
+/** Aplica una matriz 3×4 (por filas) a una lista de posiciones x, y, z. */
+function colocar(pos: number[], M: number[]): number[] {
+  const out = new Array<number>(pos.length);
+  for (let i = 0; i < pos.length; i += 3) {
+    const x = pos[i], y = pos[i + 1], z = pos[i + 2];
+    out[i] = M[0] * x + M[1] * y + M[2] * z + M[3];
+    out[i + 1] = M[4] * x + M[5] * y + M[6] * z + M[7];
+    out[i + 2] = M[8] * x + M[9] * y + M[10] * z + M[11];
+  }
+  return out;
+}
+
+/**
+ * Encuadra la cámara para que se vea todo lo que hay en la cama.
+ *
+ * Solo cuando cambia QUÉ se enseña (otro producto, otras piezas, montado o por
+ * piezas), no con cada deslizador: si la cámara saltara a cada retoque no habría
+ * forma de mirar un detalle de cerca mientras se ajusta. Sale siempre desde la
+ * misma esquina, que es la vista de siempre, solo que a la distancia que toca.
+ */
+function Encuadre({ caja, clave }: { caja: THREE.Box3 | null; clave: string }) {
+  const { camera, controls } = useThree();
+  useEffect(() => {
+    if (!caja || caja.isEmpty()) return;
+    const centro = caja.getCenter(new THREE.Vector3());
+    const radio = caja.getSize(new THREE.Vector3()).length() / 2;
+    const cam = camera as THREE.PerspectiveCamera;
+    const fov = ((cam.fov ?? 40) * Math.PI) / 180;
+    const d = Math.max(60, (radio / Math.sin(fov / 2)) * 1.05);
+    const dir = new THREE.Vector3(80, -130, 92).normalize();
+    cam.position.copy(centro).addScaledVector(dir, d);
+    cam.far = Math.max(3000, d * 10);
+    cam.updateProjectionMatrix();
+    const ctl = controls as unknown as { target?: THREE.Vector3; update?: () => void } | null;
+    ctl?.target?.copy(centro);
+    ctl?.update?.();
+    cam.lookAt(centro);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clave, controls]);
+  return null;
+}
+
 /**
  * «Ver por detrás»: lleva la cámara al otro lado de la cama.
  *
@@ -195,6 +237,7 @@ function PieceMesh({
   colorOf,
   onPaint,
   formed = false,
+  montado = false,
 }: {
   piece: Piece;
   offset: [number, number];
@@ -210,6 +253,8 @@ function PieceMesh({
   onPaint?: (pieceId: string, zone: string) => void;
   /** Enseñar ya abombadas las piezas que se abomban (termoformado). */
   formed?: boolean;
+  /** Enseñar la pieza puesta en su sitio, con todo montado (`Piece.montaje`). */
+  montado?: boolean;
 }) {
   // El cortador conserva su cian (corta) para distinguirlo de un vistazo. Las
   // piezas con color propio (las capas de color) mandan sobre el color de
@@ -238,8 +283,11 @@ function PieceMesh({
   // recortar las colas: el abombado parte triángulos y cambia cuántos hay, así
   // que contar colas sobre la malla ya abombada daría trozos que no son.
   const domo = formed ? piece.dome : undefined;
-  const bombear = (pos: number[]): number[] =>
-    domo ? abombar({ positions: pos }, domo).positions : pos;
+  const M = montado ? piece.montaje : undefined;
+  const bombear = (pos: number[]): number[] => {
+    const p = domo ? abombar({ positions: pos }, domo).positions : pos;
+    return M ? colocar(p, M) : p;
+  };
 
   const baseGeom = useMemo(() => {
     const p = piece.mesh.positions;
@@ -247,16 +295,16 @@ function PieceMesh({
       bombear(hideTrace && overlayLen + textLen ? p.slice(0, p.length - overlayLen - textLen) : p),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [piece.mesh, hideTrace, overlayLen, textLen, domo]);
+  }, [piece.mesh, hideTrace, overlayLen, textLen, domo, M]);
   const partGeoms = useMemo(
     () => (hideTrace ? [] : parts.map((m) => geomOf(bombear(m.positions)))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [parts, hideTrace, domo],
+    [parts, hideTrace, domo, M],
   );
   const textGeom = useMemo(
     () => (!hideTrace && textLen ? geomOf(bombear(piece.textMesh!.positions)) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [piece.textMesh, hideTrace, textLen, domo],
+    [piece.textMesh, hideTrace, textLen, domo, M],
   );
 
   const ref = useRef<THREE.Group>(null);
@@ -476,6 +524,21 @@ export function Viewer({
     ];
   };
 
+  // Lo que ocupa todo lo que se ve, ya colocado (montado o separado): para
+  // encuadrar la cámara.
+  const claveEncuadre = `${pieces.map((p) => p.id).join(',')}|${exploded}`;
+  const cajaTotal = useMemo(() => {
+    const caja = new THREE.Box3();
+    pieces.forEach((p, i) => {
+      const [dx, dy] = corrimiento(i);
+      const pos = !exploded && p.montaje ? colocar(p.mesh.positions, p.montaje) : p.mesh.positions;
+      for (let k = 0; k < pos.length; k += 3) caja.expandByPoint(new THREE.Vector3(pos[k] + dx, pos[k + 1] + dy, pos[k + 2]));
+    });
+    return caja;
+    // Solo hace falta cuando cambia lo que se enseña (ver `Encuadre`).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveEncuadre]);
+
   return (
     <div className={`viewer-wrap${onPaint ? ' pintando' : ''}`}>
     <Canvas
@@ -536,6 +599,7 @@ export function Viewer({
           colorOf={colorOf}
           onPaint={onPaint}
           formed={formed}
+          montado={!exploded}
         />
       ))}
 
@@ -568,8 +632,9 @@ export function Viewer({
         />
       )}
 
+      <Encuadre caja={cajaTotal} clave={claveEncuadre} />
       <FlipCamera flipped={flipped} />
-      <OrbitControls makeDefault enablePan enabled={!dragging} target={[0, 0, 8]} />
+      <OrbitControls makeDefault enablePan enabled={!dragging} />
     </Canvas>
     {mark ? <span className="viewer-mark">{mark}</span> : null}
     </div>

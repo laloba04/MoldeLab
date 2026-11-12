@@ -490,5 +490,44 @@ check('la plancha trasera cierra', aristasAbiertas(traseraPlana.mesh) === 0,
   }
 }
 
+// --- Formas asimétricas: las mitades y los moldes casan ------------------------
+// Se quejó de que «las formas no coinciden». La plancha de delante entra en el
+// cuenco dada la vuelta, y la de atrás se junta con ella dada la vuelta: con un
+// dibujo que no es igual por los dos lados, todo tiene que ir en espejo donde
+// toca, o no encaja. Se mira en qué lado cae el centro de cada pieza.
+{
+  const gota: Pt[] = [];
+  for (let i = 0; i < 120; i++) {
+    const a = (i / 120) * Math.PI * 2;
+    const r = 20 * (1 + 0.45 * Math.cos(a + Math.PI));
+    gota.push([r * Math.cos(a), 0.8 * r * Math.sin(a)]);
+  }
+  const g = [{ pts: gota, hole: false }];
+  const ps = buildProduct({ loops: g, detail: g, widthMm: 50, heightMm: 40 }, { ...DEFAULTS, product: 'thermoform', holePattern: 'none' });
+  const ids = ps.map((x) => x.id);
+  check('forma asimétrica: la trasera lleva sus propios moldes', ['mold-down-back', 'mold-up-back'].every((id) => ids.includes(id)), ids.join(', '));
+  const centro = (id: string, arriba: boolean) => {
+    const q = ps.find((x) => x.id === id)!.mesh.positions;
+    let z0 = arriba ? -Infinity : Infinity;
+    for (let i = 2; i < q.length; i += 3) z0 = arriba ? Math.max(z0, q[i]) : Math.min(z0, q[i]);
+    let s = 0, n = 0, x0 = Infinity, x1 = -Infinity;
+    for (let i = 0; i < q.length; i += 3) {
+      if (Math.abs(q[i + 2] - z0) > 1e-3) continue;
+      s += q[i]; n++; x0 = Math.min(x0, q[i]); x1 = Math.max(x1, q[i]);
+    }
+    return s / n - (x0 + x1) / 2; // a qué lado de su caja cae
+  };
+  const lado = (v: number) => Math.sign(v);
+  const del = lado(centro('sheet', false));
+  check('la trasera es el espejo de la delantera', lado(centro('sheet-back', false)) === -del);
+  check('el cuenco de delante es su espejo (la plancha entra dada la vuelta)', lado(centro('mold-down', true)) === -del);
+  check('la cúpula de delante va como la plancha', lado(centro('mold-up', false)) === del);
+  check('y los moldes de atrás, al revés', lado(centro('mold-down-back', true)) === del && lado(centro('mold-up-back', false)) === -del);
+}
+{
+  const ids = hacer().map((x) => x.id);
+  check('forma simétrica: basta una pareja de moldes', !ids.includes('mold-down-back'), ids.join(', '));
+}
+
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');
 process.exitCode = failures ? 1 : 0;

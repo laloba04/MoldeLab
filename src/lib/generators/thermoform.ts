@@ -241,28 +241,30 @@ function formaDelAdorno(
     case 'rounded':
       return roundedRect(cx, cy, a, a * 0.72, Math.min(radio, a / 4));
     case 'image': {
-      // La forma del dibujo, ENVUELTA: como si se le pasara una goma elástica
-      // por fuera, con las esquinas redondeadas. Tal cual no vale para abombar
-      // —un contorno con entrantes y salientes se arruga al prensarlo—, pero
-      // envuelto sí, y sigue pareciéndose al dibujo. Antes esta opción hacía
-      // exactamente lo mismo que «Círculo», que era engañoso.
-      const envuelta = envolver(silueta.filter((l) => !l.hole).flatMap((l) => l.pts));
-      if (envuelta.length < 3) return circle(cx, cy, a / 2, 96);
-      const b = boxOf([{ pts: envuelta, hole: false }]);
+      // La forma del PROPIO dibujo: una flor sale con sus pétalos, un gato con
+      // sus orejas.
+      //
+      // Antes se envolvía con una goma elástica (la envolvente convexa) y una
+      // flor salía hexagonal: la plancha no se parecía al dibujo. Ahora solo se
+      // arregla lo que de verdad no se puede prensar: las rendijas estrechas se
+      // rellenan (cerrar: engordar y volver a adelgazar) y los picos se
+      // redondean (abrir: adelgazar y volver a engordar), que es por donde una
+      // plancha caliente se rasga.
+      const fuera = silueta.filter((l) => !l.hole).map((l) => l.pts);
+      if (!fuera.length) return circle(cx, cy, a / 2, 96);
+      const b = boxOf(silueta.filter((l) => !l.hole));
       const k = a / Math.max(b.w, b.h, 1e-6);
-      const escalada = envuelta.map(([x, y]) => [cx + (x - b.cx) * k, cy + (y - b.cy) * k] as Pt);
-      const r = a * 0.08;
-      const redondeada = offsetRegions(
-        offsetRegions([escalada], [], -r).map((reg) => reg.outer),
-        [],
-        r,
-        'round',
-      );
+      const escalada = fuera.map((pts) => pts.map(([x, y]) => [cx + (x - b.cx) * k, cy + (y - b.cy) * k] as Pt));
+      const rendija = a * 0.06;
+      const pico = a * 0.04;
+      const soloFuera = (rs: { outer: Pt[] }[]) => rs.map((reg) => reg.outer);
+      const cerrada = offsetRegions(soloFuera(offsetRegions(escalada, [], rendija, 'round')), [], -rendija, 'round');
+      const redondeada = offsetRegions(soloFuera(offsetRegions(soloFuera(cerrada), [], -pico, 'round')), [], pico, 'round');
       const mayor = redondeada.reduce<Pt[] | null>(
         (m, reg) => (!m || Math.abs(areaDe(reg.outer)) > Math.abs(areaDe(m)) ? reg.outer : m),
         null,
       );
-      return mayor ?? escalada;
+      return mayor ?? envolver(escalada.flat());
     }
     case 'circle':
     default:
@@ -401,6 +403,61 @@ export function buildThermoform(
     ) ?? encoger(outer, cx, cy, 0.85);
   const domo = domeOf(cupulaOuter, alto);
 
+  // --- El espejo -----------------------------------------------------------
+  //
+  // Las piezas que se ponen BOCA ABAJO quedan en espejo, y con un dibujo que no
+  // es igual por los dos lados eso decide si encajan o no:
+  //
+  // - La plancha de delante entra en el cuenco con el dibujo hacia abajo, o sea
+  //   dada la vuelta: el hueco del cuenco tiene que ser el ESPEJO de la forma.
+  // - La de atrás se junta con la de delante dándole la vuelta sobre el eje del
+  //   cuello: se imprime en espejo para que, vuelta, case con la de delante.
+  //
+  // Antes todo salía sin espejar y solo encajaba con formas simétricas (un
+  // corazón, una flor). Con un dibujo asimétrico las dos mitades no
+  // coincidían, y la plancha no entraba en su molde.
+  const espejoPts = (pts: Pt[]): Pt[] => pts.map(([x, y]) => [2 * cx - x, y] as Pt).reverse();
+  const espejoRegs = (rs: Region[]): Region[] =>
+    rs.map((r) => ({ outer: espejoPts(r.outer), holes: r.holes.map(espejoPts) }));
+  const espejoMalla = (m: Mesh): Mesh => {
+    const q = m.positions;
+    const out = new Array<number>(q.length);
+    for (let i = 0; i < q.length; i += 9) {
+      // Espejar le da la vuelta a cada cara: se cambia el orden de dos vértices
+      // para que siga mirando hacia fuera.
+      for (const [d, o] of [[0, 0], [3, 6], [6, 3]]) {
+        out[i + d] = 2 * cx - q[i + o];
+        out[i + d + 1] = q[i + o + 1];
+        out[i + d + 2] = q[i + o + 2];
+      }
+    }
+    return { positions: out };
+  };
+  const cupulaTrasera = espejoPts(cupulaOuter);
+  const domoTrasera = domeOf(cupulaTrasera, alto);
+  // ¿Es la forma igual a su espejo? Entonces los mismos moldes sirven para las
+  // dos planchas; si no, la trasera lleva los suyos.
+  const asimetrica = (() => {
+    const a = sanitize([outer], []);
+    const b = sanitize([espejoPts(outer)], []);
+    const dif = union(subtract(a, b), subtract(b, a));
+    const area = Math.abs(areaDe(outer)) || 1;
+    return dif.reduce((t, r) => t + Math.abs(areaDe(r.outer)), 0) / area > 0.02;
+  })();
+
+  // --- Montado (para el visor) -----------------------------------------------
+  //
+  // Dónde va cada pieza con el adorno cerrado: la delantera tal cual, la
+  // trasera vuelta sobre el eje del cuello debajo de ella, la tuerca en la punta
+  // del cuello, la pinza mordiendo el borde de abajo y los moldes a un lado. Todo
+  // levantado lo que mide la cúpula, para que el adorno no atraviese la cama.
+  // Son matrices 3×4 por filas (ver `Piece.montaje`).
+  const sube = alto + grosor + 1;
+  const montajeDelantera = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, sube];
+  const montajeTrasera = [-1, 0, 0, 2 * cx, 0, 1, 0, 0, 0, 0, -1, sube];
+  const aparte = caja.w + 25;
+  const montajeMolde = (col: number, fila: number) => [1, 0, 0, aparte * col, 0, 1, 0, -(caja.h + 20) * fila, 0, 0, 1, 0];
+
   // --- La plancha ------------------------------------------------------------
   //
   // El dibujo se encoge para caber dentro, igual que en la placa con relieve: si
@@ -478,12 +535,21 @@ export function buildThermoform(
   const overlay = merge(...partes);
   const delantera = merge(cuerpo, overlay, capaNombre ?? emptyMesh());
 
-  // La TRASERA: la misma plancha sin dibujo. Las dos se abomban en el mismo
-  // molde y se juntan por la cara plana: las dos mitades del cuello forman un
-  // cuello entero, el tapón entra por él y las deja sujetas. Así el adorno sale
-  // cerrado y hueco, que es lo que deja que la luz pase por el calado.
-  const rebordeTrasera = prensar(rebordeMalla);
-  const trasera = merge(prensar(merge(solid(planchaReg, 0, grosor), cuelloTrasera)), rebordeTrasera);
+  // La TRASERA: la misma plancha sin dibujo, EN ESPEJO (ver arriba). Se juntan
+  // por la cara plana: las dos mitades del cuello forman un cuello entero, el
+  // tapón entra por él y las deja sujetas. Así el adorno sale cerrado y hueco,
+  // que es lo que deja que la luz pase por el calado.
+  //
+  // Se espeja la plancha, no el cuello: el cuello ya es simétrico, y espejar
+  // una rosca la cambiaría de a derechas a a izquierdas.
+  const prensarTrasera = (m: Mesh): Mesh => (p.formMold ? m : abombar(m, domoTrasera));
+  const rebordeTrasera = anillo.length
+    ? prensarTrasera(solid(espejoRegs(anillo), grosor - 0.01, grosor + REBORDE_ALTO))
+    : emptyMesh();
+  const trasera = merge(
+    prensarTrasera(merge(solid(espejoRegs(planchaReg), 0, grosor), cuelloTrasera)),
+    rebordeTrasera,
+  );
 
   // Con molde, las planchas se imprimen planas pero el visor sabe abombarlas
   // para enseñar cómo quedan. Sin molde ya vienen abombadas de fábrica.
@@ -504,6 +570,7 @@ export function buildThermoform(
       dome: domoVisor,
       // La marca del taller va en la trasera: aquí estorbaría al dibujo.
       noMark: true,
+      montaje: montajeDelantera,
     });
   }
   if (p.formBack && trasera.positions.length) {
@@ -514,7 +581,7 @@ export function buildThermoform(
       mesh: trasera,
       overlay: rebordeTrasera.positions.length ? rebordeTrasera : undefined,
       overlayParts: rebordeTrasera.positions.length ? [rebordeTrasera] : undefined,
-      dome: domoVisor,
+      dome: p.formMold ? domoTrasera : undefined,
       // La marca del taller va aquí, en RELIEVE por la cara de fuera, como el
       // nombre en la delantera: por encima del panal. Para buscarle sitio se le
       // da la zona de la cúpula MACIZA; con la plancha calada no encontraba un
@@ -522,22 +589,38 @@ export function buildThermoform(
       //
       // Sin molde la plancha ya viene abombada, y una marca plana encima no
       // seguiría la curva: en ese caso no se pone.
-      plate: p.formMold ? { regions: sanitize([cupulaOuter], []), zLo: 0, zHi: grosor } : undefined,
+      plate: p.formMold ? { regions: sanitize([cupulaTrasera], []), zLo: 0, zHi: grosor } : undefined,
       soloRelieve: true,
       noMark: !p.formMold,
+      montaje: montajeTrasera,
     });
   }
 
   // El tapón: solo tiene sentido si hay dos mitades que unir.
   if (p.formBack) {
-    const t = tuerca(rCuello, Math.max(3, p.neckLength), p.capClearance, p.ringOuter, p.ringInner);
-    piezas.push({ id: 'cap', label: 'Tuerca (cierra por arriba)', role: 'body', mesh: t, noMark: true });
+    const altoTuerca = Math.max(3, p.neckLength);
+    const t = tuerca(rCuello, altoTuerca, p.capClearance, p.ringOuter, p.ringInner);
+    // Montada: de pie sobre la punta del cuello, con el eje a lo largo de Y.
+    const huecoTuerca = Math.max(2, altoTuerca - 0.5);
+    const yPunta = yNace + largoCuello;
+    piezas.push({
+      id: 'cap',
+      label: 'Tuerca (cierra por arriba)',
+      role: 'body',
+      mesh: t,
+      noMark: true,
+      montaje: [1, 0, 0, cx, 0, 0, 1, yPunta - huecoTuerca, 0, -1, 0, sube],
+    });
+    // La pinza, mordiendo los dos bordes juntos por abajo (ver `pinza`).
+    const hondo = Math.max(1, reborde - 0.4);
+    const fondo = hondo + 1.6;
     piezas.push({
       id: 'clip',
       label: 'Pinza (cierra por abajo)',
       role: 'body',
       mesh: pinza(grosor, reborde),
       noMark: true,
+      montaje: [0, 0, 1, cx - 3.5, 0, 1, 0, caja.minY - (fondo / 2 - hondo), -1, 0, 0, sube],
     });
   }
 
@@ -621,12 +704,23 @@ export function buildThermoform(
     solid(subtract(bloque, escalon), borde - 0.01, borde + grosor),
   );
 
-  if (hembra.positions.length) {
-    piezas.push({ id: 'mold-down', label: 'Molde de abajo (cuenco)', role: 'body', mesh: hembra, noMark: true });
-  }
-  if (macho.positions.length) {
-    piezas.push({ id: 'mold-up', label: 'Molde de arriba (cúpula, se le da la vuelta)', role: 'body', mesh: macho, noMark: true });
-  }
+  // La plancha entra en el cuenco dada la vuelta, así que el cuenco es el
+  // espejo de la forma; la cúpula también se da la vuelta para apretar, así que
+  // va sin espejar y, vuelta, casa con el cuenco.
+  //
+  // La trasera se imprime ya en espejo: sus moldes son los mismos espejados. Si
+  // la forma es simétrica, son idénticos y sobran.
+  const pareja = (sufijo: string, cuenco: Mesh, cupula: Mesh, idExtra = '', col = 1) => {
+    if (cuenco.positions.length) {
+      piezas.push({ id: `mold-down${idExtra}`, label: `Molde de abajo (cuenco)${sufijo}`, role: 'body', mesh: cuenco, noMark: true, montaje: montajeMolde(col, 0) });
+    }
+    if (cupula.positions.length) {
+      piezas.push({ id: `mold-up${idExtra}`, label: `Molde de arriba (cúpula, se le da la vuelta)${sufijo}`, role: 'body', mesh: cupula, noMark: true, montaje: montajeMolde(col, 1) });
+    }
+  };
+  const dosParejas = asimetrica && p.formBack;
+  pareja(dosParejas ? ' · delantera' : '', espejoMalla(hembra), macho);
+  if (dosParejas) pareja(' · trasera', hembra, espejoMalla(macho), '-back', 2);
   return piezas;
 }
 

@@ -274,6 +274,12 @@ export interface Product {
    */
   sinImagen?: boolean;
   /**
+   * Se abre ya MONTADO en el visor (el rodillo dentro de su mango). Si no, se
+   * abre por piezas, que es como se imprime; «Ver montado» sigue a mano. En el
+   * termoformado, abrirlo cerrado hacía creer que las piezas salían unidas.
+   */
+  verMontado?: boolean;
+  /**
    * Los ajustes repartidos en apartados plegables. Para los productos con
    * muchos mandos: una lista de veinte seguidos abruma, y lo importante (la
    * forma, el tamaño) queda enterrado entre medidas finas que casi nunca se

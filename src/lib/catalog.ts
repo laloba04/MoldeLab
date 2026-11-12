@@ -440,6 +440,7 @@ export const PRODUCTS: Entry[] = [
     category: 'reposteria',
     novedad: true,
     label: 'Rodillo',
+    verMontado: true,
     hint: 'Un rodillo con tu dibujo repetido alrededor: lo pasas por la masa o el fondant y deja el estampado. Se imprime de pie; los mangos van aparte.',
     needsText: true,
     imageAndText: true,

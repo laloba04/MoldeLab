@@ -369,12 +369,14 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   const dims = useMemo(() => medidas(marked), [marked]);
   const markable = pieces.some(canWatermark);
   const hasTrace = marked.some((p) => (p.overlay?.positions.length ?? 0) > 0);
-  // Lo que se monta (el rodillo en su mango) se enseña montado nada más
-  // elegirlo, que es como se entiende qué es; lo demás, por piezas.
+  // Lo que se puede montar lleva el botón «Ver montado». Solo se ABRE montado
+  // si el producto lo pide (el rodillo, que es como se entiende qué es); el
+  // resto se abre por piezas, que es como se imprime.
   const montable = marked.some((p) => p.montaje);
+  const abrirMontado = montable && !!product.verMontado;
   useEffect(() => {
-    setExploded(!montable);
-  }, [montable]);
+    setExploded(!abrirMontado);
+  }, [abrirMontado]);
 
   // El color pintado a mano de una zona, si lo tiene. Lo comparten el visor y el
   // 3MF, así que el archivo sale pintado exactamente igual que se ve.

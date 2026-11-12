@@ -529,5 +529,19 @@ check('la plancha trasera cierra', aristasAbiertas(traseraPlana.mesh) === 0,
   check('forma simétrica: basta una pareja de moldes', !ids.includes('mold-down-back'), ids.join(', '));
 }
 
+{
+  // Casi simétrica, como un dibujo a mano: un círculo con un bulto pequeño en
+  // un lado. No merece dos parejas de moldes; se iguala y sale una.
+  const casi: Pt[] = [];
+  for (let i = 0; i < 120; i++) {
+    const a = (i / 120) * Math.PI * 2;
+    const r = 20 * (1 + 0.04 * Math.exp(-((a - 0.4) ** 2) * 8));
+    casi.push([r * Math.cos(a), r * Math.sin(a)]);
+  }
+  const c = [{ pts: casi, hole: false }];
+  const ids = buildProduct({ loops: c, detail: c, widthMm: 42, heightMm: 40 }, { ...DEFAULTS, product: 'thermoform' }).map((x) => x.id);
+  check('forma casi simétrica (dibujo a mano): una sola pareja de moldes', !ids.includes('mold-down-back'), ids.join(', '));
+}
+
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');
 process.exitCode = failures ? 1 : 0;

@@ -356,7 +356,7 @@ export function buildThermoform(
   const principal = base.reduce((a, r) =>
     Math.abs(areaDe(r.outer)) > Math.abs(areaDe(a.outer)) ? r : a,
   );
-  const outer = principal.outer;
+  const outer = casiSimetrica(principal.outer);
   const caja = boxOf([{ pts: outer, hole: false }]);
   const cx = caja.cx;
   const cy = caja.cy;
@@ -722,6 +722,36 @@ export function buildThermoform(
   pareja(dosParejas ? ' · delantera' : '', espejoMalla(hembra), macho);
   if (dosParejas) pareja(' · trasera', hembra, espejoMalla(macho), '-back', 2);
   return piezas;
+}
+
+/**
+ * Si la forma es CASI simétrica, la deja simétrica del todo.
+ *
+ * Un dibujo hecho a mano —un osito, una flor— nunca es igual al milímetro por
+ * los dos lados, y por esa nada salía como asimétrico: dos parejas de moldes
+ * casi idénticas, que confunden y gastan plástico. Si lo que cambia entre un
+ * lado y otro es poco, se junta la forma con su espejo: crece unas décimas por
+ * donde le faltaba, no se nota, y sale una sola pareja de moldes con las dos
+ * mitades casando exactas. Una luna, que sí es distinta por cada lado, se queda
+ * como está.
+ */
+function casiSimetrica(outer: Pt[]): Pt[] {
+  const b = boxOf([{ pts: outer, hole: false }]);
+  const espejo = outer.map(([x, y]) => [2 * b.cx - x, y] as Pt).reverse();
+  const a = sanitize([outer], []);
+  const e = sanitize([espejo], []);
+  const dif = union(subtract(a, e), subtract(e, a));
+  const area = Math.abs(areaDe(outer)) || 1;
+  const distinto = dif.reduce((t, r) => t + Math.abs(areaDe(r.outer)), 0) / area;
+  // Hasta un 5 % de área distinta es «casi»: un bulto de un 8 % en el radio
+  // da un 4 %; una gota o una luna pasan de largo.
+  if (distinto < 1e-3 || distinto > 0.05) return outer;
+  const junta = union(a, e);
+  const mayor = junta.reduce<Pt[] | null>(
+    (m, r) => (!m || Math.abs(areaDe(r.outer)) > Math.abs(areaDe(m)) ? r.outer : m),
+    null,
+  );
+  return mayor ?? outer;
 }
 
 /** Área con signo, para quedarse con el contorno más grande. */

@@ -14,6 +14,7 @@
  */
 
 import { buildProduct } from '../src/lib/catalog';
+import { sanitize, subtract, union } from '../src/lib/clipper';
 import { FONDO_ROSCA, PASO_ROSCA, filete, radioCuello } from '../src/lib/generators/rosca';
 import { applyWatermark } from '../src/lib/watermark';
 import { DEFAULTS, type Loop, type Mesh, type Params, type Piece, type Pt } from '../src/types';
@@ -496,12 +497,13 @@ check('la plancha trasera cierra', aristasAbiertas(traseraPlana.mesh) === 0,
 // dibujo que no es igual por los dos lados, todo tiene que ir en espejo donde
 // toca, o no encaja. Se mira en qué lado cae el centro de cada pieza.
 {
-  const gota: Pt[] = [];
-  for (let i = 0; i < 120; i++) {
-    const a = (i / 120) * Math.PI * 2;
-    const r = 20 * (1 + 0.45 * Math.cos(a + Math.PI));
-    gota.push([r * Math.cos(a), 0.8 * r * Math.sin(a)]);
-  }
+  // Una luna: un círculo al que le falta un mordisco de un lado. Nada simétrica.
+  const disco = (cx: number, cy: number, r: number): Pt[] =>
+    Array.from({ length: 120 }, (_, i) => {
+      const a = (i / 120) * Math.PI * 2;
+      return [cx + r * Math.cos(a), cy + r * Math.sin(a)] as Pt;
+    });
+  const gota = subtract(sanitize([disco(0, 0, 20)], []), sanitize([disco(9, 4, 17)], []))[0].outer;
   const g = [{ pts: gota, hole: false }];
   const ps = buildProduct({ loops: g, detail: g, widthMm: 50, heightMm: 40 }, { ...DEFAULTS, product: 'thermoform', holePattern: 'none' });
   const ids = ps.map((x) => x.id);
@@ -541,6 +543,25 @@ check('la plancha trasera cierra', aristasAbiertas(traseraPlana.mesh) === 0,
   const c = [{ pts: casi, hole: false }];
   const ids = buildProduct({ loops: c, detail: c, widthMm: 42, heightMm: 40 }, { ...DEFAULTS, product: 'thermoform' }).map((x) => x.id);
   check('forma casi simétrica (dibujo a mano): una sola pareja de moldes', !ids.includes('mold-down-back'), ids.join(', '));
+}
+
+{
+  // Un osito dibujado a mano: ladeado 8° y con una oreja mayor que la otra. Se
+  // endereza y se iguala: una sola pareja de moldes, no dos casi idénticas.
+  const disco = (cx: number, cy: number, r: number): Pt[] =>
+    Array.from({ length: 90 }, (_, i) => {
+      const a = (i / 90) * Math.PI * 2;
+      return [cx + r * Math.cos(a), cy + r * Math.sin(a)] as Pt;
+    });
+  let oso = sanitize([disco(0, 10, 11)], []);
+  for (const d of [disco(-10, 20, 5.5), disco(10.5, 20.5, 4.2), disco(0, -8, 14), disco(-12, -2, 5), disco(13, -4, 4.5), disco(-7, -21, 5), disco(8, -21, 5.5)]) {
+    oso = union(oso, sanitize([d], []));
+  }
+  const g = (8 * Math.PI) / 180;
+  const torcido = oso[0].outer.map(([x, y]) => [x * Math.cos(g) - y * Math.sin(g), x * Math.sin(g) + y * Math.cos(g)] as Pt);
+  const l = [{ pts: torcido, hole: false }];
+  const ids = buildProduct({ loops: l, detail: l, widthMm: 50, heightMm: 60 }, { ...DEFAULTS, product: 'thermoform' }).map((x) => x.id);
+  check('osito torcido y con una oreja mayor: una sola pareja de moldes', !ids.includes('mold-down-back'), ids.join(', '));
 }
 
 console.log(failures ? `\n${failures} fallo(s).` : '\nTodo correcto.');

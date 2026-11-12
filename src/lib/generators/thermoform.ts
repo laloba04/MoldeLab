@@ -342,8 +342,19 @@ export function buildThermoform(
   p: Params,
   textLoops?: Loop[],
 ): Piece[] {
+  if (!(loops.length ? loops : detail).length) return [];
+  // Con «Silueta», la forma se ENDEREZA antes de nada (ver `enderezar`): un
+  // dibujo un poco torcido sale derecho y simétrico, con una sola pareja de
+  // moldes, y el adorno cuelga recto. El dibujo gira con la forma; el nombre
+  // no, que se queda recto para leerse.
+  if (p.moldShape === 'image') {
+    const g = enderezar(loops.length ? loops : detail);
+    if (g) {
+      loops = g(loops);
+      detail = g(detail);
+    }
+  }
   const fuente = loops.length ? loops : detail;
-  if (!fuente.length) return [];
   const centro = boxOf(fuente);
   const base = sanitize(
     [formaDelAdorno(p.moldShape, centro.cx, centro.cy, p.targetWidthMm, p.cornerRadius, fuente)],
@@ -735,18 +746,59 @@ export function buildThermoform(
  * mitades casando exactas. Una luna, que sí es distinta por cada lado, se queda
  * como está.
  */
-function casiSimetrica(outer: Pt[]): Pt[] {
+/** Cuánto se diferencia una forma de su espejo izquierda-derecha: el área que
+ *  no coincide, en fracción del área de la forma (0 = simétrica). */
+function asimetria(outer: Pt[]): number {
   const b = boxOf([{ pts: outer, hole: false }]);
   const espejo = outer.map(([x, y]) => [2 * b.cx - x, y] as Pt).reverse();
   const a = sanitize([outer], []);
   const e = sanitize([espejo], []);
   const dif = union(subtract(a, e), subtract(e, a));
   const area = Math.abs(areaDe(outer)) || 1;
-  const distinto = dif.reduce((t, r) => t + Math.abs(areaDe(r.outer)), 0) / area;
-  // Hasta un 5 % de área distinta es «casi»: un bulto de un 8 % en el radio
-  // da un 4 %; una gota o una luna pasan de largo.
-  if (distinto < 1e-3 || distinto > 0.05) return outer;
-  const junta = union(a, e);
+  return dif.reduce((t, r) => t + Math.abs(areaDe(r.outer)), 0) / area;
+}
+
+/**
+ * El giro que deja la forma más derecha: el que la hace más simétrica de
+ * izquierda a derecha, buscando hasta 25° a cada lado. Devuelve con qué girar
+ * los contornos, o nada si ya está derecha o girarla no la mejora.
+ *
+ * Un osito dibujado a mano suele estar un poco ladeado, y torcido no hay forma
+ * de que sea simétrico: salía con dos parejas de moldes. Enderezado, la
+ * diferencia que queda (una oreja algo mayor) se iguala con `casiSimetrica`.
+ */
+function enderezar(ls: Loop[]): ((ls: Loop[]) => Loop[]) | null {
+  const fuera = ls.filter((l) => !l.hole);
+  if (!fuera.length) return null;
+  const mayor = fuera.reduce((a, l) => (Math.abs(areaDe(l.pts)) > Math.abs(areaDe(a.pts)) ? l : a)).pts;
+  const b = boxOf(fuera);
+  const girar = (pts: Pt[], g: number): Pt[] => {
+    const c = Math.cos(g);
+    const s = Math.sin(g);
+    return pts.map(([x, y]) => [b.cx + (x - b.cx) * c - (y - b.cy) * s, b.cy + (x - b.cx) * s + (y - b.cy) * c] as Pt);
+  };
+  const base = asimetria(mayor);
+  let mejor = { g: 0, a: base };
+  for (let grados = -25; grados <= 25; grados += 1) {
+    if (!grados) continue;
+    const g = (grados * Math.PI) / 180;
+    const a = asimetria(girar(mayor, g));
+    if (a < mejor.a) mejor = { g, a };
+  }
+  // Solo si de verdad mejora: no se gira una forma por una décima.
+  if (!mejor.g || mejor.a > base * 0.7) return null;
+  return (xs) => xs.map((l) => ({ ...l, pts: girar(l.pts, mejor.g) }));
+}
+
+function casiSimetrica(outer: Pt[]): Pt[] {
+  const distinto = asimetria(outer);
+  // Hasta un 25 % de área distinta se iguala (ya enderezada, ver
+  // `enderezar`): una oreja algo mayor, un brazo más bajo. Una luna difiere más
+  // de un 100 %: esa sí lleva sus propios moldes para la trasera.
+  if (distinto < 1e-3 || distinto > 0.25) return outer;
+  const b = boxOf([{ pts: outer, hole: false }]);
+  const espejo = outer.map(([x, y]) => [2 * b.cx - x, y] as Pt).reverse();
+  const junta = union(sanitize([outer], []), sanitize([espejo], []));
   const mayor = junta.reduce<Pt[] | null>(
     (m, r) => (!m || Math.abs(areaDe(r.outer)) > Math.abs(areaDe(m)) ? r.outer : m),
     null,

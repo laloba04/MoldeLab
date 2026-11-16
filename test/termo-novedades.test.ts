@@ -230,8 +230,9 @@ const np = await nombres(await armarArchivo(ps, null, { ...op, soloPiezas: 'plan
 check('«solo moldes» trae solo moldes', nm.length >= 2 && nm.every((n) => n.includes('mold-')), nm.join(', '));
 check('«solo mallas» trae mallas, tuerca y clip', np.length >= 4 && np.every((n) => !n.includes('mold-')), np.join(', '));
 const z = await armarArchivo(conEl, null, { ...op, formatos: new Set(['3mf' as const]), porPlacas: true });
-const zn = await nombres(z);
-check('3MF por placas: mallas, tuerca y clip, cada molde', ['planchas', 'tuerca-y-pinza', 'molde-abajo', 'molde-arriba'].every((g) => zn.some((n) => n.includes(g))), zn.join(', '));
+const zz = z ? unzipSync(new Uint8Array(await z.blob.arrayBuffer())) : {};
+const cfgT = new TextDecoder().decode((zz as Record<string, Uint8Array>)['Metadata/model_settings.config'] ?? new Uint8Array());
+check('al abrir en Bambu: un .3mf con 4 placas (mallas, tuerca y clip, cada molde)', z?.outName === 'p.3mf' && (cfgT.match(/<plate>/g) ?? []).length === 4, `${z?.outName} · ${(cfgT.match(/<plate>/g) ?? []).length} placas`);
 
 // --- Un dibujo de contorno deja malla por dentro -----------------------------------
 {

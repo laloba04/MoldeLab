@@ -10,6 +10,7 @@ import type { Piece, Silhouette } from '../types';
 import { toStl } from './stl';
 import { toObj, toSvg, zipFiles } from './formats';
 import { to3mf } from './threemf';
+import { toBambu3mf } from './bambu';
 import { dropToBed, spreadPieces } from './layout';
 
 export type Fmt = '3mf' | 'stl' | 'obj' | 'svg';
@@ -32,8 +33,8 @@ export interface OpcionesArchivo {
   /** Color pintado a mano de cada zona (o nada, con «todo de un color»). */
   zona?: (pieceId: string, zone: string) => string | undefined;
   /**
-   * Termoformado: además del archivo con todo, una carpeta `placas/` con un 3MF
-   * por placa de impresión, para laminar sin recolocar nada.
+   * Termoformado: el 3MF sale como proyecto de Bambu con placas (mallas, tuerca
+   * y clip, cada molde). Sin esto, 3MF estándar con todo en una placa.
    */
   porPlacas?: boolean;
   /** Termoformado: bajar todo, solo las planchas (con tuerca y pinza) o solo los moldes. */
@@ -79,12 +80,15 @@ export async function armarArchivo(
     files[fn] = new Uint8Array(await blob.arrayBuffer());
   };
 
-  if (o.formatos.has('3mf')) await add(`${name}.3mf`, to3mf(forExport, { ...o.colores, zone: o.zona }));
-  if (o.formatos.has('3mf') && o.porPlacas) {
-    const placas = placasDe(piezas);
-    if (placas.size > 1)
-      for (const [g, ps] of placas)
-        await add(`placas/${name}-placa-${g}.3mf`, to3mf(spreadPieces(ps), { ...o.colores, zone: o.zona }));
+  if (o.formatos.has('3mf')) {
+    // Con placas (termoformado): un 3MF de PROYECTO de Bambu, con las mallas en
+    // una placa, la tuerca y el clip en otra y cada molde en la suya. Si no, el
+    // 3MF estándar con los colores pintados.
+    const placas = o.porPlacas ? placasDe(piezas) : new Map<string, Piece[]>();
+    await add(
+      `${name}.3mf`,
+      placas.size > 1 ? toBambu3mf(placas, { ...o.colores, zone: o.zona }) : to3mf(forExport, { ...o.colores, zone: o.zona }),
+    );
   }
   if (o.formatos.has('obj')) await add(`${name}.obj`, toObj(forExport.map((p) => ({ name: p.label, mesh: p.mesh }))));
   if (o.formatos.has('svg') && silueta) await add(`${name}.svg`, toSvg(silueta.loops));

@@ -107,7 +107,7 @@ export function Descarga(d: DescargaProps) {
           <label className="toggle">
             <input type="checkbox" checked={d.porPlacas} onChange={(e) => d.setPorPlacas(e.target.checked)} />
             <span />
-            Un 3MF por placa (planchas, tuerca y pinza, cada molde)
+            Proyecto de Bambu con placas (mallas · tuerca y clip · cada molde). Si Bambu no lo abre bien, quítalo
           </label>
         )}
 

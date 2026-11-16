@@ -432,7 +432,8 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       nombre: dlName,
       porDefecto,
       separar: separate,
-      porPlacas: paraLaminador ? false : porPlacas,
+      // Solo el Termoformado 2: el de siempre sigue con su 3MF estándar, que ya funciona.
+      porPlacas: params.product === 'thermoform2' && porPlacas,
       soloPiezas: placasDe(marked).size > 1 ? soloPiezas : 'todas',
       colores: { bg: bgColor, trace: traceColor, text: textColor },
       // Sin «todo de un color», las zonas pintadas a mano viajan al archivo.
@@ -715,7 +716,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
           variasPiezas={pieces.length > 1}
           separar={separate}
           setSeparar={setSeparate}
-          hayPlacas={placasDe(marked).size > 1}
+          hayPlacas={params.product === 'thermoform2' && placasDe(marked).size > 1}
           porPlacas={porPlacas}
           setPorPlacas={setPorPlacas}
           soloPiezas={soloPiezas}

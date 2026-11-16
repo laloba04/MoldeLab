@@ -95,6 +95,27 @@ if (con && sin) {
 
 // Las partes: cerradas y bien colocadas en su placa.
 const plan = planBambu(grupos, { ...colores, zone: undefined });
+{
+  // Cada trozo de color (borde, enrejado, nombre) encima de su pieza, no desplazado.
+  const caja = (verts: string[]) => {
+    const xs = verts.map((v) => +v.split(' ')[0]);
+    const ys = verts.map((v) => +v.split(' ')[1]);
+    return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  };
+  let fuera = 0;
+  let conTrozos = 0;
+  for (const pl of plan.placas)
+    for (const o of pl.objetos) {
+      if (o.partes.length < 2) continue;
+      conTrozos++;
+      const [a0, a1, b0, b1] = caja(o.partes[0].verts);
+      for (const pt of o.partes.slice(1)) {
+        const [x0, x1, y0, y1] = caja(pt.verts);
+        if (x0 < a0 - 0.5 || x1 > a1 + 0.5 || y0 < b0 - 0.5 || y1 > b1 + 0.5) fuera++;
+      }
+    }
+  check('los trozos de color van encima de su pieza (no desplazados en la placa)', conTrozos > 0 && fuera === 0, `${fuera} fuera de ${conTrozos} piezas con trozos`);
+}
 let abiertas = 0;
 for (const pl of plan.placas)
   for (const o of pl.objetos)

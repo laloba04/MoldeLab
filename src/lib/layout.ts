@@ -29,6 +29,7 @@ function move(p: Piece, dx: number, dz: number): Piece {
     ...p,
     mesh: translate(p.mesh, dx, 0, dz),
     overlay: p.overlay ? translate(p.overlay, dx, 0, dz) : undefined,
+    overlayParts: p.overlayParts?.map((m) => translate(m, dx, 0, dz)),
     textMesh: p.textMesh ? translate(p.textMesh, dx, 0, dz) : undefined,
   };
 }

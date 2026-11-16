@@ -124,7 +124,43 @@ function corteEn(outer: Pt[], cx: number, cy: number, dx: number, dy: number): P
 /** Lo ancho del clip (a lo largo del borde). */
 const ANCHO_CLIP = 5;
 
+/**
+ * Los ajustes de laminado de cada pieza, como los guarda el kit original en su
+ * proyecto de Bambu: van dentro del archivo, objeto a objeto, y Bambu los usa
+ * sin tocar nada.
+ * - Mallas, si la malla la hace el laminador: sin capas arriba ni abajo y el
+ *   relleno en giroide es la propia malla.
+ * - Moldes: capas de 0,28 mm y 10 % de relleno (lo que dicen sus etiquetas).
+ * - Tuerca y clip: macizos por fuera y con borde de adherencia (son pequeños).
+ */
+export function ajustesLaminado(id: string, p: Params): Record<string, string> | undefined {
+  if (id === 'sheet' || id === 'sheet-back') {
+    if (!p.formLatticeBySlicer) return undefined;
+    const d = `${Math.round(p.formSlicerDensity)}%`;
+    return {
+      top_shell_layers: '0', bottom_shell_layers: '0', wall_loops: '3',
+      sparse_infill_pattern: 'gyroid', sparse_infill_density: d, skeleton_infill_density: d, skin_infill_density: d,
+      infill_wall_overlap: '45%', sparse_infill_anchor: '1000', sparse_infill_anchor_max: '1000', wall_generator: 'arachne',
+    };
+  }
+  if (id.startsWith('mold-'))
+    return {
+      layer_height: '0.28', top_shell_layers: '5', bottom_shell_layers: '3', wall_loops: '3',
+      sparse_infill_density: '10%', skeleton_infill_density: '10%', skin_infill_density: '10%', wall_generator: 'arachne',
+    };
+  if (id === 'cap' || id.startsWith('clip'))
+    return { top_shell_layers: '4', bottom_shell_layers: '3', brim_type: 'outer_only', brim_object_gap: '0.2', wall_generator: 'arachne' };
+  return undefined;
+}
+
 export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[]): Piece[] {
+  return construir(loops, detail, p, textLoops).map((pc) => {
+    const a = ajustesLaminado(pc.id, p);
+    return a ? { ...pc, ajustesLaminado: a } : pc;
+  });
+}
+
+function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[]): Piece[] {
   if (!(loops.length ? loops : detail).length) return [];
 
   // --- La forma (igual que el termoformado de siempre) ------------------------

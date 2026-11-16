@@ -99,6 +99,8 @@ export interface PlanBambu {
     objetos: {
       id: number;
       nombre: string;
+      /** Ajustes de laminado propios del objeto. */
+      ajustes?: Record<string, string>;
       /** Dónde va en la escena de Bambu (centro de su caja, apoyado en la cama). */
       x: number;
       y: number;
@@ -153,6 +155,7 @@ export function planBambu(grupos: Map<string, Piece[]>, c: ColoresBambu): PlanBa
       objetos.push({
         id: objId,
         nombre: pc.label,
+        ajustes: pc.ajustesLaminado,
         x: ox + CAMA / 2 + mx,
         y: oy + CAMA / 2 + (my - cyFila),
         partes: partes.map((pt) => ({ id: siguienteId++, nombre: pt.nombre, filamento: filamento(pt.color), ...soldar(pt.pos, -mx, -my, -z0) })),
@@ -188,6 +191,7 @@ export function toBambu3mf(grupos: Map<string, Piece[]>, c: ColoresBambu, ajuste
       build.push(`<item objectid="${o.id}" transform="1 0 0 0 1 0 0 0 1 ${q(o.x)} ${q(o.y)} 0" printable="1"/>`);
       config.push(
         `<object id="${o.id}"><metadata key="name" value="${xml(o.nombre)}"/><metadata key="extruder" value="${o.partes[0]?.filamento ?? 1}"/>` +
+          Object.entries(o.ajustes ?? {}).map(([k, v]) => `<metadata key="${xml(k)}" value="${xml(v)}"/>`).join('') +
           o.partes
             .map(
               (pt) =>

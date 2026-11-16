@@ -82,6 +82,7 @@ function sirve(f: Field, p: Params, campos: Field[], hayImagen: boolean): boolea
   if (p.product === 'thermoform2') {
     if (['formScrewDia', 'threadPitch', 'neckLength', 'capClearance', 'ringOuter', 'ringInner', 'formSideClips'].includes(f)) return p.formJoin === 'rosca';
     if (['holePattern', 'holeSpacing', 'holeWall'].includes(f)) return !p.formLatticeBySlicer;
+    if (f === 'formSlicerDensity') return p.formLatticeBySlicer;
     // Lo del nombre, solo si hay nombre o imagen; lo del diseño de la imagen, solo con imagen.
     if (f === 'formDesignHeight') return hayImagen;
   }

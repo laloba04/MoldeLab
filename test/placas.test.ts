@@ -135,6 +135,30 @@ const fuera = plan.placas.flatMap((pl, k) => pl.objetos.filter((o) => {
 }));
 check('cada pieza cae dentro de su placa (cama de 256)', fuera.length === 0, fuera.map((o) => o.nombre).join(', '));
 check('los filamentos salen en orden y sin repetir', new Set(plan.filamentos).size === plan.filamentos.length, plan.filamentos.join(' '));
+// Ajustes de laminado dentro del proyecto, objeto a objeto (como el kit original).
+{
+  const { byId } = await import('../src/lib/catalog');
+  const hacer = async (malla: boolean) => {
+    const pz = buildProduct(
+      { loops, detail: detalle, widthMm: 40, heightMm: 40 },
+      { ...DEFAULTS, product: 'thermoform2', ...byId('thermoform2')!.inicial, formLatticeBySlicer: malla, formSlicerDensity: 30 } as never,
+    );
+    const r = await armarArchivo(pz, null, { ...base, porPlacas: true, leerPerfil: leerFalso });
+    const z = unzipSync(new Uint8Array(await r!.blob.arrayBuffer()));
+    const cfg = new TextDecoder().decode(z['Metadata/model_settings.config']);
+    return { pz, objetos: cfg.match(/<object id.*?<\/object>/g) ?? [] };
+  };
+  const conMalla = await hacer(true);
+  const sinMalla = await hacer(false);
+  const planchas = conMalla.objetos.filter((o) => /top_shell_layers" value="0"/.test(o));
+  const nPlanchas = conMalla.pz.filter((p) => p.id === 'sheet' || p.id === 'sheet-back').length;
+  check('malla del laminador: cada plancha lleva 0 capas arriba y abajo y giroide al 30 %', nPlanchas >= 2 && planchas.length === nPlanchas && planchas.every((o) => /bottom_shell_layers" value="0"/.test(o) && /sparse_infill_pattern" value="gyroid"/.test(o) && /sparse_infill_density" value="30%"/.test(o)), `${planchas.length}/${nPlanchas}`);
+  check('sin malla del laminador, las planchas no llevan esos ajustes', !sinMalla.objetos.some((o) => /top_shell_layers" value="0"/.test(o)));
+  const nMoldes = conMalla.pz.filter((p) => p.id.startsWith('mold-')).length;
+  check('los moldes van a 0,28 mm y 10 % de relleno', nMoldes > 0 && conMalla.objetos.filter((o) => /layer_height" value="0.28"/.test(o) && /sparse_infill_density" value="10%"/.test(o)).length === nMoldes);
+  check('la tuerca y el clip con borde de adherencia', conMalla.objetos.filter((o) => /brim_type" value="outer_only"/.test(o)).length >= 2);
+}
+
 if (failures) {
   console.log(`\n${failures} fallo(s).`);
   process.exitCode = 1;

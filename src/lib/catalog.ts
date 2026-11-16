@@ -148,8 +148,8 @@ const THERMOFORM2_GROUPS: FieldGroup[] = [
   },
   {
     label: 'Plancha y malla',
-    hint: 'La plancha calada. Si la malla la hace el laminador, la plancha sale maciza: en Bambu, 0 capas arriba y abajo y el relleno que quieras.',
-    fields: ['formLatticeBySlicer', 'holePattern', 'holeSpacing', 'holeWall', 'sheetThickness'],
+    hint: 'La plancha calada. Si la malla la hace el laminador, la plancha sale maciza y el proyecto de Bambu ya lleva 0 capas arriba y abajo y el relleno en giroide (en otros laminadores, ponlo a mano).',
+    fields: ['formLatticeBySlicer', 'formSlicerDensity', 'holePattern', 'holeSpacing', 'holeWall', 'sheetThickness'],
   },
   {
     label: 'Borde y unión',

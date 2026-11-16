@@ -102,6 +102,8 @@ export interface Piece {
   tint?: string;
   /** Color propio de cada trozo de `overlayParts`, si lo tiene (Termoformado 2). */
   partTints?: (string | undefined)[];
+  /** Ajustes de laminado propios de la pieza (van a su objeto en el proyecto de Bambu). */
+  ajustesLaminado?: Record<string, string>;
   /**
    * La pieza se imprime plana pero se abomba después (termoformado). Con esto
    * el visor puede enseñarla ya abombada, que es como se va a ver; el archivo
@@ -480,6 +482,7 @@ export interface Params {
   formRimInnerPlate: boolean;
   /** Termoformado 2: la malla la hace el laminador (la plancha sale maciza). */
   formLatticeBySlicer: boolean;
+  formSlicerDensity: number;
   /** Termoformado 2: cuánto sobresale el dibujo de la imagen sobre la plancha (0 = a ras). */
   formDesignHeight: number;
   /** Termoformado 2: modo sencillo (solo diseño, forma y colores). */
@@ -724,6 +727,7 @@ export const DEFAULTS: Params = {
   formScrewDia: 9,
   formRimInnerPlate: true,
   formLatticeBySlicer: false,
+  formSlicerDensity: 25,
   formDesignHeight: 0,
   formSimple: false,
   inicialDe: '',
@@ -1034,6 +1038,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   formScrewDia: { label: 'Diámetro de la rosca', unit: 'mm', min: 6, max: 12, step: 0.5 },
   formRimInnerPlate: { toggle: true, label: 'Mitad de dentro del borde del color de la malla' },
   formLatticeBySlicer: { toggle: true, label: 'La malla la hace el laminador (plancha maciza)' },
+  formSlicerDensity: { label: 'Densidad de la malla (laminador)', unit: '%', min: 10, max: 50, step: 5 },
   formDesignHeight: { label: 'Altura del dibujo sobre la plancha', unit: 'mm', min: 0, max: 2, step: 0.1 },
   formSimple: { toggle: true, label: 'Modo sencillo' },
   inicialDe: { text: true, label: '' },

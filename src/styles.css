@@ -1693,20 +1693,3 @@ body {
   opacity: 0.35;
   cursor: default;
 }
-
-
-/* Novedades: enlace a otra web (Taller 3D · termoformado) */
-.enlace-taller {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid currentColor;
-  border-radius: 10px;
-  color: inherit;
-  text-decoration: none;
-  opacity: 0.9;
-}
-.enlace-taller:hover { opacity: 1; }
-.enlace-taller span { font-size: 12px; opacity: 0.75; }

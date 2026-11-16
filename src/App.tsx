@@ -510,19 +510,6 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
           </a>
         </header>
 
-        {novedades && (
-          <a
-            className="enlace-taller"
-            href="https://taller3d-e15.pages.dev/#termoformado"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Se abre Taller 3D, otra web aparte"
-          >
-            <strong>Termoformado en Taller 3D ↗</strong>
-            <span>Mallas con tu dibujo o texto, moldes macho y hembra, rosca y clip. Otra web: se abre en una pestaña nueva.</span>
-          </a>
-        )}
-
         <button className="upload" onClick={elegirImagen}>
           <ImageIcon size={16} />
           {img ? 'Cambiar imagen' : 'Subir imagen'}

@@ -107,7 +107,7 @@ export function Descarga(d: DescargaProps) {
           <label className="toggle">
             <input type="checkbox" checked={d.porPlacas} onChange={(e) => d.setPorPlacas(e.target.checked)} />
             <span />
-            Proyecto de Bambu con placas (en pruebas: todavía no lo abre bien Bambu)
+            Proyecto de Bambu con placas (cada pieza en su placa, para la A1)
           </label>
         )}
 

@@ -10,7 +10,7 @@
  */
 
 import type { Loop, Params, Piece, Pt, Silhouette } from '../types';
-import { binarize, cleanupMask, fillEnclosed, pad, type Mask } from './image';
+import { binarize, cleanupMask, cortarEntreColores, fillEnclosed, gruposDeColor, pad, type Mask } from './image';
 import { traceContours } from './contours';
 import { area, dedupe, orient, pointInPolygon, resample, simplify, smooth } from './polygon';
 import { boxOf, shiftLoops } from './shapes';
@@ -50,13 +50,22 @@ function loopsFromMask(
     loops.push({ pts, hole: false });
   }
 
-  // Anidamiento: un lazo dentro de un número impar de otros es un agujero.
+  // Anidamiento: un lazo dentro de un número impar de otros es un agujero. Se
+  // mira en varios puntos del lazo y gana la mayoría: con uno solo, si caía
+  // justo donde dos contornos casi se tocan (una raya fina entre dos colores),
+  // una mancha salía como agujero y desaparecía.
   for (const l of loops) {
-    let depth = 0;
-    for (const other of loops) {
-      if (other !== l && pointInPolygon(l.pts[0], other.pts)) depth++;
+    const n = Math.min(7, l.pts.length);
+    let impares = 0;
+    for (let k = 0; k < n; k++) {
+      const pt = l.pts[Math.floor((k * l.pts.length) / n)];
+      let depth = 0;
+      for (const other of loops) {
+        if (other !== l && pointInPolygon(pt, other.pts)) depth++;
+      }
+      if (depth % 2 === 1) impares++;
     }
-    l.hole = depth % 2 === 1;
+    l.hole = impares * 2 > n;
     l.pts = orient(l.pts, !l.hole); // islas CCW, agujeros CW
   }
 
@@ -87,7 +96,30 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
   );
 
   const solidMask = fillEnclosed(p.cleanup > 0 ? cleanupMask(solidBin, p.cleanup) : solidBin);
-  const detailMask = p.cleanup > 0 ? cleanupMask(detailBin, p.cleanup) : detailBin;
+  let detailMask = p.cleanup > 0 ? cleanupMask(detailBin, p.cleanup) : detailBin;
+
+  // Con los colores claros como dibujo, cada color sale como trozo propio:
+  //  - lo blanco ENCERRADO por el dibujo (la tripa blanca de un osito) también
+  //    es dibujo: es un color más, no el fondo;
+  //  - entre dos colores que se tocan sin línea negra en medio se deja una raya
+  //    finísima, para que no salgan pegados en un solo trozo de un solo color.
+  // También entre la línea y los colores: si no, un marco negro alrededor de
+  // dos colores los seguiría uniendo por los extremos.
+  const ancho = Math.max(2, Math.round(0.3 / mmPerPx));
+  let lineaOscura: (g: number) => boolean = () => false;
+  let gruposColor: ReturnType<typeof gruposDeColor> | undefined;
+  if (p.colorAsInk) {
+    detailMask = fillEnclosed(detailMask);
+    gruposColor = gruposDeColor(img, detailMask);
+    const lum = (c: number[]) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    const umbral = p.useDetailThreshold ? p.detailThreshold : p.threshold;
+    // La línea: los grupos oscuros y sin color (negro, gris oscuro).
+    lineaOscura = (g) => {
+      const c = gruposColor!.colores[g];
+      return lum(c) < umbral && Math.max(...c) - Math.min(...c) < 40;
+    };
+    detailMask = cortarEntreColores(detailMask, gruposColor.grupo, ancho);
+  }
 
   const all = loopsFromMask(solidMask, p, mmPerPx, 0);
 
@@ -120,7 +152,15 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
   // pelo —la plantilla, el calado— no nota ninguna diferencia.
   if (p.colorAsInk) {
     const lineBin = binarize(img, p.useDetailThreshold ? p.detailThreshold : p.threshold, p.invert, 'luz');
-    const lineMask = p.cleanup > 0 ? cleanupMask(lineBin, p.cleanup) : lineBin;
+    let lineMask = p.cleanup > 0 ? cleanupMask(lineBin, p.cleanup) : lineBin;
+    // Un color oscuro (rojo fuerte, marrón) es oscuro como la línea pero no es
+    // línea: se separa del negro para que salga de su color.
+    if (gruposColor) {
+      const g = gruposColor;
+      const oscuroConColor = new Uint8Array(lineMask.data.length);
+      for (let i = 0; i < oscuroConColor.length; i++) oscuroConColor[i] = lineMask.data[i] && g.grupo[i] >= 0 && !lineaOscura(g.grupo[i]) ? 1 : 0;
+      lineMask = { ...lineMask, data: lineMask.data.map((v, i) => (oscuroConColor[i] ? 0 : v)) };
+    }
     for (const l of loopsFromMask(lineMask, p, mmPerPx, minArea * 0.02, 0.5)) {
       detail.push({ ...l, line: true });
     }

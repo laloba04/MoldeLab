@@ -132,6 +132,8 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   // en la imagen. Se enciende solo al subir una imagen con color; lo pintado a
   // mano manda sobre ellos.
   const [coloresImagen, setColoresImagen] = useState(false);
+  // Los colores detectados que se han cambiado a mano: color de la imagen → el elegido.
+  const [cambiosColor, setCambiosColor] = useState<Record<string, string>>({});
   // Color con el que se pinta al tocar la pieza. Sin él, tocar no hace nada y el
   // ratón sigue sirviendo solo para girar el modelo.
   const [brush, setBrush] = useState<number | null>(null);
@@ -162,6 +164,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       // trozo coge su color de la imagen. En blanco y negro, como siempre.
       const conColor = esColorida(data);
       setColoresImagen(conColor);
+      setCambiosColor({});
       if (conColor) setParams((prev) => (prev.colorAsInk ? prev : { ...prev, colorAsInk: true }));
       setPreview(URL.createObjectURL(file));
     } catch {
@@ -414,9 +417,10 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     (pieceId: string, zone: string): string | undefined => {
       const n = zoneInk[`${pieceId}#${zone}`];
       if (n !== undefined) return palette[n];
-      return deImagen[`${pieceId}#${zone}`];
+      const d = deImagen[`${pieceId}#${zone}`];
+      return d && (cambiosColor[d] ?? d);
     },
-    [zoneInk, palette, deImagen],
+    [zoneInk, palette, deImagen, cambiosColor],
   );
   const paint = useCallback(
     (pieceId: string, zone: string) => {
@@ -693,6 +697,8 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
               coloresImagen={coloresImagen}
               setColoresImagen={setColoresImagen}
               detectados={[...new Set(Object.values(deImagen))]}
+              cambiosColor={cambiosColor}
+              cambiarDetectado={(de, a) => setCambiosColor((c) => ({ ...c, [de]: a }))}
               quitarPintadas={() => {
                 setZoneInk({});
                 setBrush(null);

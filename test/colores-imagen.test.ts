@@ -94,6 +94,54 @@ for (const id of ['thermoform2', 'relief-plate', 'keychain-relief', 'coaster'] a
 }
 
 {
+  // Imagen difícil: cuerpo marrón con contorno negro, tripa BLANCA encerrada,
+  // corazón rojo OSCURO sin contorno, y un verde y un amarillo PEGADOS sin línea
+  // entre medias (dentro de un marco negro). Tienen que salir los seis.
+  const W = 500, H = 420;
+  const data = new Uint8ClampedArray(W * H * 4).fill(255);
+  const put = (x: number, y: number, c: number[]) => {
+    const k = (y * W + x) * 4;
+    [data[k], data[k + 1], data[k + 2]] = c;
+  };
+  const elipse = (x0: number, y0: number, x1: number, y1: number, relleno: number[], borde: number) => {
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = (x1 - x0) / 2, ry = (y1 - y0) / 2;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const d = Math.hypot((x - cx) / rx, (y - cy) / ry);
+        if (d <= 1) put(x, y, borde && d > 1 - borde / Math.min(rx, ry) ? [0, 0, 0] : relleno);
+      }
+  };
+  elipse(40, 40, 300, 380, [200, 150, 100], 9);
+  elipse(100, 170, 240, 330, [255, 255, 255], 7);
+  elipse(140, 90, 200, 150, [150, 20, 30], 0);
+  for (let y = 60; y <= 360; y++)
+    for (let x = 320; x <= 470; x++)
+      put(x, y, x < 330 || x > 460 || y < 70 || y > 350 ? [0, 0, 0] : y < 210 ? [90, 190, 90] : [250, 220, 60]);
+  const dificil = { width: W, height: H, data, colorSpace: 'srgb' } as ImageData;
+  const seis = ['#c89664', '#ffffff', '#96141e', '#5abe5a', '#fadc3c', '#000000'];
+  for (const id of ['thermoform2', 'coaster', 'relief-plate'] as ProductId[]) {
+    const p = P(id);
+    const sil = vectorize(dificil, p, null);
+    const piezas = buildProduct(sil, p);
+    const z = coloresDeZonas(piezas, sil, dificil);
+    const salen = new Set(Object.values(z));
+    const faltan = seis.filter((c) => !salen.has(c));
+    check(`${id}: salen los seis colores (blanco encerrado, rojo oscuro, verde y amarillo pegados)`, faltan.length === 0, faltan.length ? `faltan ${faltan.join(' ')}` : '');
+    // Y cada uno en su sitio: el rojo arriba en el cuerpo, el blanco debajo.
+    const sitio = (c: string) => {
+      for (const pz of piezas)
+        for (let i = 0; i < (pz.overlayParts?.length ?? 0); i++)
+          if (z[`${pz.id}#p${i}`] === c) {
+            const ys = pz.overlayParts![i].positions.filter((_, k) => k % 3 === 1);
+            return (Math.min(...ys) + Math.max(...ys)) / 2;
+          }
+      return NaN;
+    };
+    check(`${id}: el corazón rojo va encima de la tripa blanca, y el verde encima del amarillo`, sitio('#96141e') > sitio('#ffffff') && sitio('#5abe5a') > sitio('#fadc3c'));
+  }
+}
+
+{
   // Ningún producto se rompe ni se inventa colores raros.
   let rotos = 0;
   const raros = new Set<string>();

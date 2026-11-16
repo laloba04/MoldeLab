@@ -269,3 +269,86 @@ export function pad(m: Mask, border = 2): Mask {
   }
   return { data: out, w, h };
 }
+
+/**
+ * Cada píxel del dibujo, con su grupo de color (−1 = fuera del dibujo).
+ *
+ * Los grupos salen de la propia imagen: tonos más cerca que `mismo` son el mismo
+ * color, y un grupo con muy pocos píxeles (el borde suavizado entre dos colores)
+ * no cuenta; esos píxeles van al grupo más parecido.
+ */
+export function gruposDeColor(img: ImageData, m: Mask, mismo = 40): { grupo: Int16Array; colores: [number, number, number][] } {
+  const { w, h } = m;
+  const d = img.data;
+  const rgb = (i: number): [number, number, number] => {
+    const a = d[i * 4 + 3] / 255;
+    return [d[i * 4] * a + 255 * (1 - a), d[i * 4 + 1] * a + 255 * (1 - a), d[i * 4 + 2] * a + 255 * (1 - a)];
+  };
+  const dist2 = (a: number[], b: number[]) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+  // Muestra para encontrar los colores.
+  const tinta: number[] = [];
+  for (let i = 0; i < w * h; i++) if (m.data[i]) tinta.push(i);
+  const paso = Math.max(1, Math.floor(tinta.length / 60000));
+  const grupos: { c: [number, number, number]; n: number; s: [number, number, number] }[] = [];
+  for (let k = 0; k < tinta.length; k += paso) {
+    const c = rgb(tinta[k]);
+    let g = grupos.find((x) => dist2(x.c, c) < mismo * mismo);
+    if (!g) grupos.push((g = { c, n: 0, s: [0, 0, 0] }));
+    g.n++;
+    g.s[0] += c[0];
+    g.s[1] += c[1];
+    g.s[2] += c[2];
+  }
+  const total = Math.max(1, Math.ceil(tinta.length / paso));
+  const colores = grupos
+    .filter((g) => g.n / total >= 0.004)
+    .map((g) => [g.s[0] / g.n, g.s[1] / g.n, g.s[2] / g.n] as [number, number, number]);
+  const grupo = new Int16Array(w * h).fill(-1);
+  if (!colores.length) return { grupo, colores };
+  for (const i of tinta) {
+    const c = rgb(i);
+    let mejor = 0, md = Infinity;
+    for (let k = 0; k < colores.length; k++) {
+      const dd = dist2(colores[k], c);
+      if (dd < md) { md = dd; mejor = k; }
+    }
+    grupo[i] = mejor;
+  }
+  return { grupo, colores };
+}
+
+/**
+ * Corta la máscara entre colores distintos: quita una raya de `ancho` píxeles
+ * donde se tocan dos grupos (y ninguno es de los `sinCorte`, p. ej. la línea
+ * negra, que ya separa por sí misma). Así cada color sale como trozo propio.
+ */
+export function cortarEntreColores(m: Mask, grupo: Int16Array, ancho: number, sinCorte: (g: number) => boolean = () => false): Mask {
+  const { w, h, data } = m;
+  const borde = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const a = grupo[i];
+      if (a < 0 || !data[i] || sinCorte(a)) continue;
+      for (const j of [x + 1 < w ? i + 1 : -1, y + 1 < h ? i + w : -1]) {
+        if (j < 0 || !data[j]) continue;
+        const b = grupo[j];
+        if (b >= 0 && b !== a && !sinCorte(b)) {
+          borde[i] = 1;
+          borde[j] = 1;
+        }
+      }
+    }
+  const r = Math.max(0, Math.round((ancho - 2) / 2));
+  const out = new Uint8Array(data);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (!borde[y * w + x]) continue;
+      for (let dy = -r; dy <= r; dy++)
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && ny >= 0 && nx < w && ny < h) out[ny * w + nx] = 0;
+        }
+    }
+  return { data: out, w, h };
+}

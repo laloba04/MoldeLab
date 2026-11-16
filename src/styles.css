@@ -1729,3 +1729,25 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.35);
   vertical-align: -0.1em;
 }
+
+.swatch-pila {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.swatch-color {
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+.detectados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}

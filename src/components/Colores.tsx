@@ -26,6 +26,9 @@ export interface ColoresProps {
   setColoresImagen: (v: boolean) => void;
   /** Los colores que se han sacado de la imagen, sin repetir. */
   detectados: string[];
+  /** Los detectados cambiados a mano: color de la imagen → el elegido. */
+  cambiosColor: Record<string, string>;
+  cambiarDetectado: (de: string, a: string) => void;
   quitarPintadas: () => void;
   hasTrace: boolean;
   hideTrace: boolean;
@@ -84,11 +87,20 @@ export function Colores(c: ColoresProps) {
             <p className="hint">
               {c.detectados.length ? (
                 <>
-                  Cada trozo del dibujo con su color de la imagen:{' '}
-                  {c.detectados.map((col) => (
-                    <span key={col} className="swatch-mini" title={col} style={{ background: col }} />
-                  ))}
-                  . Lo que pintes a mano manda.
+                  Cada trozo del dibujo con su color de la imagen. Toca un color para cambiarlo
+                  (cambian todos los trozos de ese color); lo que pintes a mano manda.
+                  <span className="detectados">
+                    {c.detectados.map((col) => (
+                      <input
+                        key={col}
+                        type="color"
+                        className="swatch-color"
+                        title={`Color de la imagen ${col}: toca para cambiarlo`}
+                        value={c.cambiosColor[col] ?? col}
+                        onChange={(e) => c.cambiarDetectado(col, e.target.value)}
+                      />
+                    ))}
+                  </span>
                 </>
               ) : (
                 'No se ha encontrado ningún trozo del dibujo con color en la imagen.'
@@ -106,17 +118,28 @@ export function Colores(c: ColoresProps) {
           </p>
           <div className="paint-swatches">
             {c.palette.map((col, i) => (
-              <button
-                key={i}
-                type="button"
-                className={`swatch${c.brush === i ? ' on' : ''}`}
-                style={{ background: col }}
-                title={`Pintar con el color ${i + 1}`}
-                aria-pressed={c.brush === i}
-                onClick={() => c.setBrush((b) => (b === i ? null : i))}
-              >
-                {i + 1}
-              </button>
+              <span key={i} className="swatch-pila">
+                <button
+                  type="button"
+                  className={`swatch${c.brush === i ? ' on' : ''}`}
+                  style={{ background: col }}
+                  title={`Pintar con el color ${i + 1}`}
+                  aria-pressed={c.brush === i}
+                  onClick={() => c.setBrush((b) => (b === i ? null : i))}
+                >
+                  {i + 1}
+                </button>
+                {/* Cada color del pincel se puede cambiar aquí mismo (en los
+                    productos por piezas no hay otro sitio donde cambiarlo). */}
+                <input
+                  type="color"
+                  className="swatch-color"
+                  aria-label={`Cambiar el color ${i + 1}`}
+                  title={`Cambiar el color ${i + 1}`}
+                  value={col}
+                  onChange={(e) => c.setColor(i, e.target.value)}
+                />
+              </span>
             ))}
             <button type="button" className="mini" disabled={!c.hayPintadas} onClick={c.quitarPintadas}>
               Quitar

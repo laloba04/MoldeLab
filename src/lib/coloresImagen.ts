@@ -15,6 +15,7 @@
  */
 
 import type { Piece, Pt, Silhouette } from '../types';
+import { fillEnclosed } from './image';
 
 type RGB = [number, number, number];
 
@@ -22,7 +23,7 @@ const hex = ([r, g, b]: RGB) => '#' + [r, g, b].map((v) => Math.round(v).toStrin
 const dist = (a: RGB, b: RGB) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
 /** Tonos más cerca que esto son el mismo color. */
-const MISMO = 34;
+const MISMO = 30;
 
 /**
  * ¿La imagen tiene color de verdad? Cuenta los píxeles visibles que no son casi
@@ -105,15 +106,23 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
   const m = sil.muestreo;
   if (!m || !sil.detail.length) return {};
 
+  // Dónde hay dibujo en la imagen: lo que no es papel (ni transparente) y lo
+  // que queda encerrado dentro (la tripa blanca de un osito sí; el papel no).
+  const W = img.width, H = img.height;
+  const tinta = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const k = i * 4;
+    tinta[i] = img.data[k + 3] >= 128 && Math.min(img.data[k], img.data[k + 1], img.data[k + 2]) <= 235 ? 1 : 0;
+  }
+  const dibujo = fillEnclosed({ data: tinta, w: W, h: H }).data;
+
+  /** Color de la imagen en un punto (mm), o nada si cae fuera del dibujo. */
   const pixel = ([x, y]: Pt): RGB | null => {
     const px = Math.floor((x + m.cx) / m.mmPerPx);
     const py = Math.floor(-(y + m.cy) / m.mmPerPx);
-    if (px < 0 || py < 0 || px >= img.width || py >= img.height) return null;
-    const k = (py * img.width + px) * 4;
-    if (img.data[k + 3] < 128) return null;
-    const c: RGB = [img.data[k], img.data[k + 1], img.data[k + 2]];
-    // Fondo blanco: no es dibujo.
-    return Math.min(...c) > 235 ? null : c;
+    if (px < 0 || py < 0 || px >= W || py >= H || !dibujo[py * W + px]) return null;
+    const k = (py * W + px) * 4;
+    return [img.data[k], img.data[k + 1], img.data[k + 2]];
   };
 
   // Las manchas del dibujo (en mm), las más grandes primero.
@@ -122,8 +131,10 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
     .map((l) => cajaDe(l.pts))
     .filter((b) => b.w > 0.5 && b.h > 0.5)
     .sort((a, b) => b.w * b.h - a.w * a.h)
-    .slice(0, 40);
+    .slice(0, 30);
   if (!islas.length) return {};
+  const cajaDibujo = cajaDe(sil.detail.flatMap((l) => l.pts));
+  islas.push(cajaDibujo);
 
   const crudos: { clave: string; c: RGB }[] = [];
   for (const pz of piezas) {
@@ -131,39 +142,65 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
     const trozos = partes
       .map((pm, i) => ({ i, pm }))
       .filter(({ i, pm }) => esDeImagen(pz, i) && pm.positions.length)
-      .map(({ i, pm }) => ({ i, caja: cajaDe(verticesXY(pm.positions)), pts: puntosArriba(pm.positions) }))
+      .map(({ i, pm }) => ({ i, caja: cajaDe(verticesXY(pm.positions)), pts: puntosArriba(pm.positions, 40) }))
       .filter((t) => t.pts.length && t.caja.w > 0 && t.caja.h > 0);
     if (!trozos.length) continue;
-    const todos = trozos.flatMap((t) => t.pts);
-    const prueba = todos.filter((_, k) => k % Math.max(1, Math.floor(todos.length / 300)) === 0);
+    const cajaTrozos = cajaDe(trozos.flatMap((t) => [[t.caja.x0, t.caja.y0], [t.caja.x1, t.caja.y1]] as Pt[]));
 
     type Encaje = (p: Pt) => Pt;
-    const encaje = (t: (typeof trozos)[number], d: (typeof islas)[number], espejo: boolean): Encaje | null => {
-      const sx = d.w / t.caja.w, sy = d.h / t.caja.h;
+    // Derecho, en espejo, volteado o girado media vuelta.
+    const encaje = (c: ReturnType<typeof cajaDe>, d: ReturnType<typeof cajaDe>, [ex, ey]: [number, number]): Encaje | null => {
+      const sx = d.w / c.w, sy = d.h / c.h;
       if (Math.abs(sx / sy - 1) > 0.15) return null;
       const s = Math.sqrt(sx * sy);
-      return ([x, y]) => [d.cx + (espejo ? -1 : 1) * (x - t.caja.cx) * s, d.cy + (y - t.caja.cy) * s];
+      return ([x, y]) => [d.cx + ex * (x - c.cx) * s, d.cy + ey * (y - c.cy) * s];
     };
-    const tinta = (f: Encaje, pts: Pt[]) => pts.filter((p) => pixel(f(p))).length;
+    /**
+     * Nota de un encaje: cuántos puntos de cada trozo coinciden con el color
+     * mayoritario de su trozo. Bien encajado, cada trozo cae entero en un color;
+     * mal encajado, los trozos caen mezclando colores (o fuera de la imagen).
+     */
+    const nota = (f: Encaje) => {
+      let n = 0;
+      for (const t of trozos) {
+        const cuenta = new Map<string, number>();
+        for (const p of t.pts) {
+          const c = pixel(f(p));
+          if (!c) continue;
+          const k = c.map((v) => v >> 5).join(',');
+          cuenta.set(k, (cuenta.get(k) ?? 0) + 1);
+        }
+        let max = 0;
+        for (const v of cuenta.values()) if (v > max) max = v;
+        n += max;
+      }
+      return n;
+    };
 
     let mejor: Encaje | null = null;
-    let nota = 0;
+    let puntos = 0;
+    const candidatos: [ReturnType<typeof cajaDe>, ReturnType<typeof cajaDe>][] = [[cajaTrozos, cajaDibujo]];
     const grandes = [...trozos].sort((a, b) => b.caja.w * b.caja.h - a.caja.w * a.caja.h).slice(0, 6);
-    for (const t of grandes)
-      for (const d of islas)
-        for (const espejo of [false, true]) {
-          const f = encaje(t, d, espejo);
-          if (!f) continue;
-          const n = tinta(f, prueba);
-          if (n > nota) { nota = n; mejor = f; }
-        }
-    if (!mejor || nota < prueba.length * 0.5) continue;
+    for (const t of grandes) for (const d of islas) candidatos.push([t.caja, d]);
+    for (const [c, d] of candidatos)
+      for (const giro of [[1, 1], [-1, 1], [1, -1], [-1, -1]] as [number, number][]) {
+        const f = encaje(c, d, giro);
+        if (!f) continue;
+        const n = nota(f);
+        if (n > puntos) { puntos = n; mejor = f; }
+      }
+    const total = trozos.reduce((t, x) => t + x.pts.length, 0);
+    if (!mejor || puntos < total * 0.5) continue;
 
     for (const t of trozos) {
-      const cs = t.pts.map((p) => pixel(mejor!(p))).filter((c): c is RGB => !!c);
-      if (cs.length < t.pts.length * 0.6) continue;
+      const sitios = t.pts.map((p) => mejor!(p));
+      const cs = sitios.map((p) => pixel(p)).filter((c): c is RGB => !!c);
       const c = colorMayoritario(cs);
-      if (c) crudos.push({ clave: `${pz.id}#p${t.i}`, c });
+      if (!c) continue;
+      // Que casi todo el trozo sea de ese color.
+      const iguales = cs.filter((x) => dist(x, c) < MISMO).length;
+      if (iguales < t.pts.length * 0.55) continue;
+      crudos.push({ clave: `${pz.id}#p${t.i}`, c });
     }
   }
 

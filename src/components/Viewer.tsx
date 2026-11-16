@@ -392,7 +392,7 @@ function PieceMesh({
           userData={{ zona: `p${i}` }}
         >
           <meshStandardMaterial
-            color={pintado(`p${i}`) ?? (oneColor ? bgColor : traceColor)}
+            color={pintado(`p${i}`) ?? (oneColor ? bgColor : (piece.partTints?.[i] ?? traceColor))}
             metalness={0.15}
             roughness={0.5}
             side={THREE.DoubleSide}

@@ -4,11 +4,13 @@ import {
   CATEGORIES,
   FIELD_META,
   TRACE_FIELDS,
+  type ElementoTermo,
   type Field,
   type Params,
   type ProductId,
 } from '../types';
 import { byId, productosDe, searchProducts } from '../lib/catalog';
+import { Elementos } from './Elementos';
 
 interface Props {
   p: Params;
@@ -76,7 +78,13 @@ function sirve(f: Field, p: Params, campos: Field[], hayImagen: boolean): boolea
   if (['formIconSide', 'formIconLattice', 'formIconSize', 'formIconX', 'formIconY'].includes(f)) return p.formIcon !== 'none';
   if (f === 'formBackText') return p.formBack;
   if (f === 'formMagnets' || f === 'formMagnetDia' || f === 'formMagnetH' || f === 'formMagnetClear') return p.formJoin === 'imanes';
-  if (f === 'clipClearance') return p.formJoin !== 'imanes' || !!p.formSideClips;
+  if (f === 'clipClearance') return p.formJoin !== 'imanes';
+  if (p.product === 'thermoform2') {
+    if (['formScrewDia', 'threadPitch', 'neckLength', 'capClearance', 'ringOuter', 'ringInner', 'formSideClips'].includes(f)) return p.formJoin === 'rosca';
+    if (['holePattern', 'holeSpacing', 'holeWall'].includes(f)) return !p.formLatticeBySlicer;
+    // Lo del nombre, solo si hay nombre o imagen; lo del diseño de la imagen, solo con imagen.
+    if (f === 'formDesignHeight') return hayImagen;
+  }
   if (['formSplitMolds', 'formEvenOut', 'formClearance', 'formStepClearance', 'formWall', 'formFloor', 'formMaleBase'].includes(f) && p.product.startsWith('thermoform'))
     return p.formMold;
   // Lo que se corre cada fila solo cuenta colocando en diagonal.
@@ -102,6 +110,10 @@ function Control({
 }) {
   const meta = FIELD_META[field];
   if (!meta) return null;
+
+  if ('elements' in meta) {
+    return <Elementos valor={(p[field] as unknown as ElementoTermo[]) ?? []} poner={(v) => set(field, v as never)} />;
+  }
 
   if ('text' in meta) {
     const value = (p[field] as unknown as string) ?? '';
@@ -346,7 +358,7 @@ export function Controls({ p, set, reset, view = 'all', novedades = false, hayIm
         </h3>
         <p className="hint">{current.hint}</p>
         {current.groups
-          ? current.groups.map((g) => {
+          ? current.groups.filter((g) => !(p.product === 'thermoform2' && p.formSimple && !g.simple)).map((g) => {
               const campos = g.fields.filter((f) => sirve(f, p, current.fields, hayImagen));
               // Un apartado sin nada que tocar ahora mismo no se enseña.
               if (!campos.length) return null;

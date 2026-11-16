@@ -47,7 +47,7 @@ export interface OpcionesArchivo {
  */
 export function placaDe(id: string): string | null {
   if (id === 'sheet' || id === 'sheet-back') return 'planchas';
-  if (id === 'cap' || id === 'clip') return 'tuerca-y-pinza';
+  if (id === 'cap' || id.startsWith('clip')) return 'tuerca-y-pinza';
   if (id.startsWith('mold-')) return id.replace('mold-down', 'molde-abajo').replace('mold-up', 'molde-arriba');
   return null;
 }

@@ -1698,3 +1698,24 @@ body {
 .modal .seg { display: flex; gap: 4px; margin: 8px 0; }
 .modal .seg button { flex: 1; padding: 6px 8px; border-radius: 8px; border: 1px solid currentColor; background: transparent; color: inherit; opacity: 0.6; cursor: pointer; }
 .modal .seg button.on { opacity: 1; font-weight: 600; }
+
+/* Termoformado 2: textos e iconos por cara */
+.elems { display: flex; flex-direction: column; gap: 10px; }
+.elems-cuenta { margin: 0; font-size: 12px; opacity: 0.75; }
+.elems-add { display: flex; flex-direction: column; gap: 6px; }
+.elems-add > div { display: flex; align-items: center; gap: 6px; }
+.elems-add small { width: 48px; opacity: 0.7; }
+.elems-add button, .elem-head button, .elem .seg button, .elem-iconos button {
+  border: 1px dashed currentColor; background: transparent; color: inherit; border-radius: 8px;
+  padding: 5px 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; font: inherit; font-size: 12px;
+}
+.elem { border: 1px solid currentColor; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.elem-head { display: flex; align-items: center; gap: 4px; }
+.elem-head button { border-style: none; padding: 3px; }
+.elem-tipo { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 6px; background: rgba(255, 140, 60, 0.18); }
+.elem-nombre { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.elem .seg { display: flex; gap: 4px; }
+.elem .seg button { flex: 1; justify-content: center; border-style: solid; opacity: 0.6; }
+.elem .seg button.on, .elem-iconos button.on { opacity: 1; font-weight: 600; border-style: solid; }
+.elem-iconos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.elem-iconos button { justify-content: center; border-style: solid; opacity: 0.65; }

@@ -15,6 +15,7 @@ import { buildCutter } from './generators/cutter';
 import { stampParts, stampPlate } from './generators/stamp';
 import { buildEjector } from './generators/ejector';
 import { buildThermoform } from './generators/thermoform';
+import { buildThermoform2 } from './generators/thermoform2';
 import { buildRoller } from './generators/rodillo';
 import {
   buildBox,
@@ -126,58 +127,52 @@ const THERMOFORM_GROUPS: FieldGroup[] = [
  */
 const THERMOFORM2_GROUPS: FieldGroup[] = [
   {
+    label: 'Diseño',
+    hint: 'Textos e iconos en cada cara, y la imagen y el nombre delante. Van a ras, dentro de la malla.',
+    fields: ['formElements', 'formDesignHeight', 'textFont', 'textBold', 'textSpacing', 'formTextOutline', 'textScale', 'textRot', 'textX', 'textY'],
+    open: true,
+    simple: true,
+  },
+  {
     label: 'Forma',
-    hint: 'Silueta, tamaño y el borde liso alrededor.',
-    fields: [...SIZE, 'formSizeBy', 'formFixedH', 'moldShape', 'cornerRadius', 'border'],
+    hint: 'Contorno, tamaño y margen alrededor del diseño.',
+    fields: ['formSimple', 'moldShape', 'cornerRadius', 'formSizeBy', ...SIZE, 'formFixedH', 'border', 'formEvenOut'],
+    open: true,
+    simple: true,
+  },
+  {
+    label: 'Abombado',
+    hint: 'Lo hondo de cada mitad y cómo sube la pared.',
+    fields: ['formHeight', 'formProfile'],
     open: true,
   },
   {
-    label: 'Texto',
-    hint: 'Letra y colocación del nombre.',
-    fields: ['textFont', 'textBold', 'textSpacing', 'formTextOutline', 'textScale', 'textRot', 'textX', 'textY', 'formBackText'],
-    open: true,
+    label: 'Plancha y malla',
+    hint: 'La plancha calada. Si la malla la hace el laminador, la plancha sale maciza: en Bambu, 0 capas arriba y abajo y el relleno que quieras.',
+    fields: ['formLatticeBySlicer', 'holePattern', 'holeSpacing', 'holeWall', 'sheetThickness'],
   },
   {
-    label: 'Icono',
-    hint: 'Un icono en relieve en la cara de delante o la de detrás.',
-    fields: ['formIcon', 'formIconSide', 'formIconLattice', 'formIconSize', 'formIconX', 'formIconY'],
-  },
-  {
-    label: 'Colores',
-    hint: 'De qué color sale cada parte en el 3MF.',
-    fields: ['formColorPlate', 'formColorRim', 'formColorNut', 'formColorMold'],
-  },
-  {
-    label: 'Plancha',
-    hint: 'Lo que se abomba y el grosor de la lámina.',
-    fields: ['formHeight', 'formProfile', 'sheetThickness', 'formBack', 'formRimWidth', 'formRimHeight'],
-    open: true,
-  },
-  {
-    label: 'Agujeros',
-    hint: 'El calado de panal que deja pasar la luz.',
-    fields: ['holePattern', 'holeSpacing', 'holeWall', 'holesOnDesign'],
-  },
-  {
-    label: 'Cuello y tuerca',
-    hint: 'La rosca que cierra la bola y la anilla para colgarla.',
-    fields: ['neckRadius', 'neckLength', 'threadPitch', 'capClearance', 'formJoin', 'clipClearance', 'formSideClips', 'formMagnets', 'formMagnetDia', 'formMagnetH', 'formMagnetClear', 'ringOuter', 'ringInner'],
+    label: 'Borde y unión',
+    hint: 'El borde alto que junta las dos mitades y cómo se cierran.',
+    fields: ['formRimWidth', 'formRimHeight', 'formBack', 'formJoin', 'formScrewDia', 'threadPitch', 'neckLength', 'capClearance', 'clipClearance', 'formSideClips', 'formMagnets', 'formMagnetDia', 'formMagnetH', 'formMagnetClear', 'ringOuter', 'ringInner'],
   },
   {
     label: 'Moldes',
-    hint: 'Las dos mitades para prensar la plancha.',
-    fields: ['formMold', 'formSplitMolds', 'formEvenOut', 'formClearance', 'formStepClearance', 'formWall', 'formFloor', 'formMaleBase'],
+    hint: 'Abajo la cavidad; arriba la cúpula con la ranura del borde.',
+    fields: ['formMold', 'formSplitMolds', 'formWall', 'formFloor', 'formMaleBase', 'formClearance', 'formStepClearance'],
   },
   {
-    label: 'Relieve del dibujo',
-    hint: 'Cuánto sobresale el dibujo y su grosor de línea.',
-    fields: ['reliefHeight', 'reliefTaper', 'strokeWidth'],
+    label: 'Colores',
+    hint: 'De qué color sale cada parte.',
+    fields: ['formColorPlate', 'formColorRim', 'formRimInnerPlate', 'formColorNut', 'formColorMold'],
+    simple: true,
   },
 ];
 
 /** Lo que solo usa el Termoformado 2. En el de siempre se queda en su valor de fábrica. */
-const SOLO_TERMO2 = THERMOFORM2_GROUPS.flatMap((g) => g.fields).filter(
-  (f) => !THERMOFORM_GROUPS.some((g) => g.fields.includes(f)),
+const CLASICO = new Set<string>(THERMOFORM_GROUPS.flatMap((g) => g.fields));
+const SOLO_TERMO2 = (Object.keys(DEFAULTS) as (keyof Params)[]).filter(
+  (f) => !CLASICO.has(f) && (f.startsWith('form') || ['threadPitch', 'clipClearance', 'textBold', 'textSpacing'].includes(f)),
 );
 const clasico = (p: Params): Params => {
   const q = { ...p } as Record<string, unknown>;
@@ -502,6 +497,17 @@ export const PRODUCTS: Entry[] = [
     imageAndText: true,
     groups: THERMOFORM_GROUPS,
     fields: THERMOFORM_GROUPS.flatMap((g) => g.fields),
+    // Al volver del Termoformado 2, lo compartido vuelve a lo de siempre.
+    inicial: {
+      targetWidthMm: DEFAULTS.targetWidthMm,
+      cornerRadius: DEFAULTS.cornerRadius,
+      border: DEFAULTS.border,
+      formHeight: DEFAULTS.formHeight,
+      sheetThickness: DEFAULTS.sheetThickness,
+      neckLength: DEFAULTS.neckLength,
+      capClearance: DEFAULTS.capClearance,
+      formClearance: DEFAULTS.formClearance,
+    },
     build: (s, p) => buildThermoform(s.loops, s.detail, clasico(p), s.textLoops),
   },
   {
@@ -514,7 +520,32 @@ export const PRODUCTS: Entry[] = [
     imageAndText: true,
     groups: THERMOFORM2_GROUPS,
     fields: THERMOFORM2_GROUPS.flatMap((g) => g.fields),
-    build: (s, p) => buildThermoform(s.loops, s.detail, p, s.textLoops),
+    // Las medidas con las que funciona: borde de 1,8 × 4, hondo 16, rosca de 9…
+    inicial: {
+      targetWidthMm: 90,
+      moldShape: 'circle',
+      cornerRadius: 4,
+      border: 4,
+      formHeight: 16,
+      formRimWidth: 1.8,
+      formRimHeight: 4,
+      sheetThickness: 0.6,
+      formScrewDia: 9,
+      threadPitch: 2,
+      neckLength: 5.5,
+      capClearance: 0.2,
+      clipClearance: 0.15,
+      formWall: 6,
+      formFloor: 1.1,
+      formMaleBase: 3,
+      formClearance: 0.1,
+      formStepClearance: 0.2,
+      formColorPlate: '#e94b6a',
+      formColorRim: '#1f1f24',
+      formColorNut: '#1f1f24',
+      formColorMold: '#9aa0a8',
+    },
+    build: (s, p) => buildThermoform2(s.loops, s.detail, p, s.textLoops),
   },
   {
     id: 'roller',

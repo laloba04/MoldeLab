@@ -100,6 +100,8 @@ export interface Piece {
   /** Color propio de la pieza, por encima del color de fondo elegido. Lo usan
    *  los productos por capas, donde cada capa va de un color distinto. */
   tint?: string;
+  /** Color propio de cada trozo de `overlayParts`, si lo tiene (Termoformado 2). */
+  partTints?: (string | undefined)[];
   /**
    * La pieza se imprime plana pero se abomba después (termoformado). Con esto
    * el visor puede enseñarla ya abombada, que es como se va a ver; el archivo
@@ -240,6 +242,26 @@ export type MoldShape =
   | 'tree';
 
 /** Qué controles enseña cada producto. La UI se dibuja sola desde aquí. */
+/** Un texto o un icono del Termoformado 2, en una de las dos caras. */
+export interface ElementoTermo {
+  id: string;
+  tipo: 'texto' | 'icono';
+  cara: 'delante' | 'detras';
+  texto: string;
+  icono: string;
+  /** Sitio en % de media cúpula (−100 … 100), giro en grados, tamaño en % del ancho. */
+  x: number;
+  y: number;
+  rot: number;
+  tam: number;
+  /** Lo que sobresale de la plancha (0 = a ras). */
+  alto: number;
+  enrejado: boolean;
+  negrita: boolean;
+  /** '#rrggbb' o 'auto'. */
+  color: string;
+}
+
 export type Field = keyof Params;
 
 export interface Product {
@@ -303,6 +325,8 @@ export interface FieldGroup {
   fields: Field[];
   /** Abierto al entrar. Los de medidas finas empiezan cerrados. */
   open?: boolean;
+  /** Se ve también en el modo sencillo. */
+  simple?: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -417,7 +441,7 @@ export interface Params {
   /** Dejar simétrica del todo una forma que lo es casi (una sola pareja de moldes). */
   formEvenOut: boolean;
   /** Cómo se cierran las dos planchas por abajo y los lados: pinza o imanes. La tuerca va siempre (cuelga de ella). */
-  formJoin: 'pinza' | 'imanes';
+  formJoin: 'rosca' | 'clips' | 'imanes';
   /** Dos pinzas más para los lados. */
   formSideClips: boolean;
   /** Imanes: cuántos, su diámetro, su alto y la holgura del bolsillo. */
@@ -446,6 +470,18 @@ export interface Params {
   formColorRim: string;
   formColorNut: string;
   formColorMold: string;
+  /** Termoformado 2: los textos e iconos de cada cara. */
+  formElements: ElementoTermo[];
+  /** Termoformado 2: diámetro de la rosca (por fuera del filete). */
+  formScrewDia: number;
+  /** Termoformado 2: la mitad de dentro del borde, del color de la malla. */
+  formRimInnerPlate: boolean;
+  /** Termoformado 2: la malla la hace el laminador (la plancha sale maciza). */
+  formLatticeBySlicer: boolean;
+  /** Termoformado 2: cuánto sobresale el dibujo de la imagen sobre la plancha (0 = a ras). */
+  formDesignHeight: number;
+  /** Termoformado 2: modo sencillo (solo diseño, forma y colores). */
+  formSimple: boolean;
 
   /**
    * Largo del marcapáginas, en milímetros.
@@ -659,7 +695,7 @@ export const DEFAULTS: Params = {
   formStepClearance: 0.25,
   formSplitMolds: true,
   formEvenOut: true,
-  formJoin: 'pinza',
+  formJoin: 'rosca',
   formSideClips: false,
   formMagnets: 4,
   formMagnetDia: 6,
@@ -680,6 +716,12 @@ export const DEFAULTS: Params = {
   formColorRim: 'auto',
   formColorNut: 'auto',
   formColorMold: 'auto',
+  formElements: [],
+  formScrewDia: 9,
+  formRimInnerPlate: true,
+  formLatticeBySlicer: false,
+  formDesignHeight: 0,
+  formSimple: false,
   cutoutMode: 'lines',
   cutLineWidth: 2,
   cutBridges: 6,
@@ -791,6 +833,7 @@ export type FieldMeta =
   | { label: string; unit?: string; min: number; max: number; step: number }
   | { toggle: true; label: string }
   | { text: true; label: string }
+  | { elements: true; label: string }
   | {
       select: true;
       label: string;
@@ -895,9 +938,10 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   formEvenOut: { toggle: true, label: 'Igualar una forma casi simétrica' },
   formJoin: {
     select: true,
-    label: 'Cierre de abajo',
+    label: 'Unión de las dos mitades',
     options: [
-      { value: 'pinza', label: 'Pinza' },
+      { value: 'rosca', label: 'Rosca (arriba) + clip (abajo)' },
+      { value: 'clips', label: 'Clips' },
       { value: 'imanes', label: 'Imanes' },
     ],
   },
@@ -981,6 +1025,12 @@ export const FIELD_META: Record<Field, FieldMeta> = {
       { value: '#e0a526', label: 'Dorado' },
       { value: '#8a5cd0', label: 'Lila' },
     ] },
+  formElements: { elements: true, label: 'Diseño' },
+  formScrewDia: { label: 'Diámetro de la rosca', unit: 'mm', min: 6, max: 12, step: 0.5 },
+  formRimInnerPlate: { toggle: true, label: 'Mitad de dentro del borde del color de la malla' },
+  formLatticeBySlicer: { toggle: true, label: 'La malla la hace el laminador (plancha maciza)' },
+  formDesignHeight: { label: 'Altura del dibujo sobre la plancha', unit: 'mm', min: 0, max: 2, step: 0.1 },
+  formSimple: { toggle: true, label: 'Modo sencillo' },
   formColorMold: { select: true, label: 'Color de los moldes', options: [
       { value: 'auto', label: 'Como siempre' },
       { value: '#e94b6a', label: 'Rosa' },

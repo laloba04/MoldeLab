@@ -65,6 +65,8 @@ export interface Dome {
   u: Float32Array;
   /** Cómo sube la pared. */
   tipo?: PerfilPared;
+  /** Hacia dónde abomba por defecto: +1 arriba, −1 abajo (Termoformado 2: lejos del borde). */
+  signo?: number;
 }
 
 /**
@@ -258,7 +260,7 @@ export function abombar(
   } = {},
 ): Mesh {
   const desde = opciones.desde ?? -Infinity;
-  const signo = opciones.signo ?? 1;
+  const signo = opciones.signo ?? d.signo ?? 1;
   // Depende solo de la posición del punto: dos triángulos que comparten un
   // vértice lo mueven igual, y la malla sigue cerrada.
   const mover = (x: number, y: number, z: number) =>

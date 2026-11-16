@@ -149,7 +149,7 @@ export function to3mf(pieces: Piece[], colors?: ColorOpts): Blob {
       let cursor = total - overlayLen - textLen;
       partes.forEach((m, i) => {
         const fin = cursor + m.positions.length;
-        tramos.push({ from: cursor, to: fin, color: zona(`p${i}`, 1) });
+        tramos.push({ from: cursor, to: fin, color: zona(`p${i}`, pc.partTints?.[i] ? idxOf(pc.partTints[i]) : 1) });
         cursor = fin;
       });
       if (textLen) tramos.push({ from: total - textLen, to: total, color: zona('name', textIdx) });

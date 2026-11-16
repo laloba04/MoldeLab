@@ -41,7 +41,7 @@ const REBORDE_ALTO = 0.6;
  * vertical, y de los cortes, el de arriba. En un círculo es lo alto del círculo;
  * en un corazón, el fondo de la muesca entre los dos lóbulos.
  */
-function bordeArriba(outer: Pt[], x: number): number | null {
+export function bordeArriba(outer: Pt[], x: number): number | null {
   let mejor: number | null = null;
   for (let i = 0, j = outer.length - 1; i < outer.length; j = i++) {
     const [x1, y1] = outer[j];
@@ -55,7 +55,7 @@ function bordeArriba(outer: Pt[], x: number): number | null {
 
 const rev = (pts: Pt[]) => [...pts].reverse() as Pt[];
 
-function solid(regions: Region[], zLo: number, zHi: number): Mesh {
+export function solid(regions: Region[], zLo: number, zHi: number): Mesh {
   const m = emptyMesh();
   for (const r of regions) extrudeRegion(m, r, zLo, zHi);
   return m;
@@ -101,7 +101,7 @@ function celda(patron: HolePattern, cx: number, cy: number, lado: number): Pt[] 
  * cuadrícula en un panal y lo que hace que el calado aguante el estirón por
  * igual en todas las direcciones.
  */
-function calado(patron: HolePattern, zona: Region[], paso: number, pared: number): Region[] {
+export function calado(patron: HolePattern, zona: Region[], paso: number, pared: number): Region[] {
   if (patron === 'none' || !zona.length) return [];
 
   const b = boxOf(zona.map((r) => ({ pts: r.outer, hole: false })));
@@ -166,7 +166,7 @@ function girarX(m: Mesh, dx: number, dy: number, dz: number): Mesh {
  * La tuerca que cierra el adorno por arriba: se enrosca en el cuello y sujeta
  * las dos mitades. Lleva encima el ojal por donde pasa el cordón.
  */
-function tuerca(r: number, alto: number, holgura: number, ojo: number, ojoHueco: number, paso = 2): Mesh {
+export function tuerca(r: number, alto: number, holgura: number, ojo: number, ojoHueco: number, paso = 2): Mesh {
   const techo = 1.5;
   // Un pelo menos que lo que asoma el cuello, para que llegue a apretar.
   const hueco = Math.max(2, alto - 0.5);
@@ -217,7 +217,7 @@ function pinza(grosor: number, reborde: number, holgura = 0.2): Mesh {
  * es la forma primero: el corazón es un corazón, mide lo que diga «Tamaño», y el
  * dibujo o el nombre se encajan dentro.
  */
-function formaDelAdorno(
+export function formaDelAdorno(
   forma: MoldShape,
   cx: number,
   cy: number,
@@ -281,7 +281,7 @@ function formaDelAdorno(
  * altura y el ancho sale de la proporción; con «fijos», se estira a ancho y
  * alto. Con «el ancho» no cambia nada (es como venía saliendo).
  */
-function medir(pts: Pt[], p: Params): Pt[] {
+export function medir(pts: Pt[], p: Params): Pt[] {
   const modo = p.formSizeBy ?? 'ancho';
   if (modo === 'ancho' || pts.length < 3) return pts;
   const b = boxOf([{ pts, hole: false }]);
@@ -296,7 +296,7 @@ function medir(pts: Pt[], p: Params): Pt[] {
  * El reparto es simétrico respecto al cuello, así que una forma simétrica tiene
  * los imanes simétricos. Cada punto se saca `fuera` mm hacia fuera.
  */
-function sitiosEnBorde(pts: Pt[], n: number, fuera: number, arriba: Pt, ventana: number): Pt[] {
+export function sitiosEnBorde(pts: Pt[], n: number, fuera: number, arriba: Pt, ventana: number): Pt[] {
   if (n < 1 || pts.length < 3) return [];
   const sentido = areaDe(pts) > 0 ? 1 : -1;
   const lados: { a: Pt; b: Pt; l: number; t0: number }[] = [];
@@ -364,7 +364,7 @@ function envolver(puntos: Pt[]): Pt[] {
  * esa muesca y se quedaba hundido entre los lóbulos, sin sitio para la tuerca.
  * Este tiene la muesca poco honda —como el de Formify— y el cuello asoma.
  */
-function corazonRedondo(cx: number, cy: number, ancho: number): Pt[] {
+export function corazonRedondo(cx: number, cy: number, ancho: number): Pt[] {
   // Con lado `l`, el corazón mide 1,707·l de ancho (l/√2 + l).
   const l = ancho / (1 / Math.SQRT2 + 1);
   const d = l / Math.SQRT2;
@@ -943,7 +943,7 @@ function asimetria(outer: Pt[]): number {
  * de que sea simétrico: salía con dos parejas de moldes. Enderezado, la
  * diferencia que queda (una oreja algo mayor) se iguala con `casiSimetrica`.
  */
-function enderezar(ls: Loop[]): ((ls: Loop[]) => Loop[]) | null {
+export function enderezar(ls: Loop[]): ((ls: Loop[]) => Loop[]) | null {
   const fuera = ls.filter((l) => !l.hole);
   if (!fuera.length) return null;
   const mayor = fuera.reduce((a, l) => (Math.abs(areaDe(l.pts)) > Math.abs(areaDe(a.pts)) ? l : a)).pts;
@@ -966,7 +966,7 @@ function enderezar(ls: Loop[]): ((ls: Loop[]) => Loop[]) | null {
   return (xs) => xs.map((l) => ({ ...l, pts: girar(l.pts, mejor.g) }));
 }
 
-function casiSimetrica(outer: Pt[]): Pt[] {
+export function casiSimetrica(outer: Pt[]): Pt[] {
   const distinto = asimetria(outer);
   // Hasta un 25 % de área distinta se iguala (ya enderezada, ver
   // `enderezar`): una oreja algo mayor, un brazo más bajo. Una luna difiere más
@@ -983,7 +983,7 @@ function casiSimetrica(outer: Pt[]): Pt[] {
 }
 
 /** Área con signo, para quedarse con el contorno más grande. */
-function areaDe(pts: Pt[]): number {
+export function areaDe(pts: Pt[]): number {
   let a = 0;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
     a += (pts[j][0] - pts[i][0]) * (pts[j][1] + pts[i][1]);

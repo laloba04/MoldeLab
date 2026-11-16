@@ -387,16 +387,9 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     (pieceId: string, zone: string): string | undefined => {
       const n = zoneInk[`${pieceId}#${zone}`];
       if (n !== undefined) return palette[n];
-      // Termoformado: el color elegido para cada parte, si no se ha pintado a mano.
-      if (params.product === 'thermoform2') {
-        const c = (v: string | undefined) => (v && v !== 'auto' ? v : undefined);
-        if (pieceId.startsWith('mold-')) return zone === 'base' ? c(params.formColorMold) : undefined;
-        if (pieceId === 'cap' || pieceId.startsWith('clip')) return zone === 'base' ? c(params.formColorNut) : undefined;
-        if (pieceId === 'sheet' || pieceId === 'sheet-back') return zone === 'base' ? c(params.formColorPlate) : zone === 'p0' ? c(params.formColorRim) : undefined;
-      }
       return undefined;
     },
-    [zoneInk, palette, params.product, params.formColorMold, params.formColorNut, params.formColorPlate, params.formColorRim],
+    [zoneInk, palette],
   );
   const paint = useCallback(
     (pieceId: string, zone: string) => {

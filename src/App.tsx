@@ -141,9 +141,9 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   const [viewMode, setViewMode] = useState<ViewMode>('solid');
   // Mirar la pieza desde abajo: la marca del taller se graba en esa cara.
   const [flipped, setFlipped] = useState(false);
-  // Termoformado: enseñar las planchas ya abombadas. Empieza encendido porque es
-  // lo que se quiere ver; plana es como se imprime, y eso ya lo dice el botón.
-  const [showFormed, setShowFormed] = useState(true);
+  // Termoformado: enseñar las planchas ya abombadas. Empieza PLANO, que es como
+  // se imprimen (lo pidió el taller); el botón «Ver abombada» enseña cómo quedan.
+  const [showFormed, setShowFormed] = useState(false);
 
   const open = useCallback(async (file: File | Blob) => {
     setError(null);

@@ -152,7 +152,9 @@ export function calado(patron: HolePattern, zona: Region[], paso: number, pared:
 function dentroDe(zona: Region[], pt: Pt): boolean {
   for (const r of zona) {
     if (!pointInPolygon(pt, r.outer)) continue;
-    if (r.holes.some((h) => pointInPolygon(pt, h))) return false;
+    // En el hueco de esta región puede haber OTRA región (lo de dentro de un
+    // aro): se sigue mirando, no se da por fuera.
+    if (r.holes.some((h) => pointInPolygon(pt, h))) continue;
     return true;
   }
   return false;

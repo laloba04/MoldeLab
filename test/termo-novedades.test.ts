@@ -140,7 +140,26 @@ const clip = pieza(ps, 'clip')!;
 const mClip = caja(montada(clip));
 check('el clip montado muerde las dos planchas', mClip.z0 < mDel.z0 - t && mClip.z1 > mDel.z0 + t, `clip ${mClip.z0.toFixed(2)}…${mClip.z1.toFixed(2)}, juntura ${mDel.z0.toFixed(2)} ± ${t}`);
 check('y queda abajo, en el borde', mClip.y0 < mDel.y0 + 1 && mClip.y1 < mDel.y0 + 7, `${mClip.y0.toFixed(1)}…${mClip.y1.toFixed(1)}`);
-check('el clip va en una muesca del borde (la malla tiene menos borde abajo)', volumen(pieza(hacer({ formJoin: 'imanes', formMagnets: 2 }), 'sheet')!.mesh) > 0);
+// En el sitio del clip: una ventanita que se ve desde arriba (en la parte de
+// dentro del borde) y la pared de fuera del borde, entera.
+{
+  const q = del.mesh.positions;
+  const xm = (cDel.x0 + cDel.x1) / 2;
+  const rimW = INICIAL.formRimWidth ?? 1.8;
+  let fuera = 0;
+  let dentroAgujero = 0;
+  for (let i = 0; i < q.length; i += 9) {
+    // Centro de cada triángulo.
+    const x = (q[i] + q[i + 3] + q[i + 6]) / 3;
+    const y = (q[i + 1] + q[i + 4] + q[i + 7]) / 3;
+    const z = (q[i + 2] + q[i + 5] + q[i + 8]) / 3;
+    if (Math.abs(x - xm) > 1.5) continue;
+    if (y < cDel.y0 + 0.4 && z > H - 0.3) fuera++;
+    if (y > cDel.y0 + rimW && y < cDel.y0 + rimW + 1 && z < H + 0.01) dentroAgujero++;
+  }
+  check('donde va el clip, la pared de fuera del borde sigue entera', fuera > 0, `${fuera} triángulos`);
+  check('y la ventanita es un agujero de arriba abajo', dentroAgujero === 0, `${dentroAgujero} triángulos dentro del agujero`);
+}
 
 // --- Malla hecha por el laminador -----------------------------------------------
 const maciza = volumen(pieza(hacer({ formLatticeBySlicer: true }), 'sheet')!.mesh);
@@ -213,6 +232,19 @@ check('«solo mallas» trae mallas, tuerca y clip', np.length >= 4 && np.every((
 const z = await armarArchivo(conEl, null, { ...op, formatos: new Set(['3mf' as const]), porPlacas: true });
 const zn = await nombres(z);
 check('3MF por placas: mallas, tuerca y clip, cada molde', ['planchas', 'tuerca-y-pinza', 'molde-abajo', 'molde-arriba'].every((g) => zn.some((n) => n.includes(g))), zn.join(', '));
+
+// --- Un dibujo de contorno deja malla por dentro -----------------------------------
+{
+  const anillo: Loop[] = [
+    { pts: circ(64, 16), hole: false },
+    { pts: [...circ(64, 14)].reverse(), hole: true },
+  ];
+  const disco: Loop[] = [{ pts: circ(64, 16), hole: false }];
+  const vDe = (d: Loop[]) => volumen(pieza(buildProduct({ loops, detail: d, widthMm: 40, heightMm: 40 }, P()), 'sheet')!.mesh);
+  const vAro = vDe(anillo);
+  const vDisco = vDe(disco);
+  check('un dibujo de contorno (aro) deja la malla por dentro', vAro < vDisco - 200, `aro ${vAro.toFixed(0)} / relleno ${vDisco.toFixed(0)} mm³`);
+}
 
 // --- Como en las fotos: malla trenzada y tuerca hexagonal ---------------------------
 check('la malla sale trenzada por defecto', INICIAL.holePattern === 'weave');

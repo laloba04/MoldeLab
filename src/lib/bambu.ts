@@ -208,7 +208,7 @@ export function toBambu3mf(grupos: Map<string, Piece[]>, c: ColoresBambu): Blob 
   const model =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<model unit="millimeter" xml:lang="es-ES" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021">` +
-    `<metadata name="Application">BambuStudio-01.09.00.00</metadata>` +
+    `<metadata name="Application">BambuStudio-02.00.00.95</metadata>` +
     `<metadata name="BambuStudio:3mfVersion">1</metadata>` +
     `<metadata name="Title">MoldeLab</metadata>` +
     `<resources>${recursos.join('')}</resources><build>${build.join('')}</build></model>`;

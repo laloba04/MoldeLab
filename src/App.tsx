@@ -88,7 +88,10 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   const [dlFmts, setDlFmts] = useState<Set<Fmt>>(new Set<Fmt>(['3mf']));
   const [dlName, setDlName] = useState('');
   const [separate, setSeparate] = useState(true);
-  const [porPlacas, setPorPlacas] = useState(true);
+  // Proyecto de Bambu con placas: apagado por defecto hasta que lleve los ajustes
+  // del proyecto (sin ellos Bambu 2.x solo carga la geometría y deja las piezas
+  // fuera de la cama).
+  const [porPlacas, setPorPlacas] = useState(false);
   const [soloPiezas, setSoloPiezas] = useState<'todas' | 'planchas' | 'moldes'>('todas');
   const [slicer, setSlicer] = useState<Slicer>('bambu');
   const [sending, setSending] = useState(false);

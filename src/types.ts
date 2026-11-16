@@ -219,7 +219,7 @@ export type ArtMode = 'inlay' | 'engrave';
 export type LoopSide = 'none' | 'top' | 'right' | 'bottom' | 'left';
 
 /** Dibujo del calado de la plancha de termoformado. */
-export type HolePattern = 'none' | 'hexagon' | 'circle' | 'square' | 'diamond' | 'triangle';
+export type HolePattern = 'none' | 'hexagon' | 'circle' | 'square' | 'diamond' | 'triangle' | 'weave';
 
 /** Formas de contorno para las placas. 'image' sigue la silueta del dibujo. */
 export type MoldShape =
@@ -298,6 +298,8 @@ export interface Product {
    * saldría un jibbitz del tamaño de una galleta.
    */
   inicial?: Partial<Params>;
+  /** Poner `inicial` también al abrir la página con este producto ya elegido (una vez). */
+  inicialAlAbrir?: boolean;
   /**
    * Se genera sin imagen (el copo de nieve): la imagen y el nombre son opcionales
    * y van en el centro, pero sin ellos también sale la pieza.
@@ -482,6 +484,8 @@ export interface Params {
   formDesignHeight: number;
   /** Termoformado 2: modo sencillo (solo diseño, forma y colores). */
   formSimple: boolean;
+  /** De qué producto se pusieron ya los valores iniciales (para ponerlos también al abrir con ese producto). */
+  inicialDe: string;
 
   /**
    * Largo del marcapáginas, en milímetros.
@@ -722,6 +726,7 @@ export const DEFAULTS: Params = {
   formLatticeBySlicer: false,
   formDesignHeight: 0,
   formSimple: false,
+  inicialDe: '',
   cutoutMode: 'lines',
   cutLineWidth: 2,
   cutBridges: 6,
@@ -1031,6 +1036,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   formLatticeBySlicer: { toggle: true, label: 'La malla la hace el laminador (plancha maciza)' },
   formDesignHeight: { label: 'Altura del dibujo sobre la plancha', unit: 'mm', min: 0, max: 2, step: 0.1 },
   formSimple: { toggle: true, label: 'Modo sencillo' },
+  inicialDe: { text: true, label: '' },
   formColorMold: { select: true, label: 'Color de los moldes', options: [
       { value: 'auto', label: 'Como siempre' },
       { value: '#e94b6a', label: 'Rosa' },
@@ -1047,6 +1053,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
     select: true,
     label: 'Calado de la plancha',
     options: [
+      { value: 'weave', label: 'Trenzado (como un cesto)', novedad: true },
       { value: 'hexagon', label: 'Panal (hexágonos)' },
       { value: 'circle', label: 'Círculos' },
       { value: 'square', label: 'Cuadrados' },

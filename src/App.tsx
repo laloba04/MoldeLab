@@ -59,6 +59,15 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     if (primero) setParams((prev) => ({ ...prev, product: primero.id }));
   }, [novedades, params.product, setParams]);
 
+  // Los productos que solo funcionan con sus medidas (el Termoformado 2) las
+  // ponen también al abrir la página con él ya elegido, no solo al cambiar a él.
+  // Una vez: luego manda lo que se toque.
+  useEffect(() => {
+    const prod = byId(params.product);
+    if (!prod.inicialAlAbrir || !prod.inicial || params.inicialDe === params.product) return;
+    setParams((prev) => ({ ...prev, ...prod.inicial, inicialDe: prev.product }));
+  }, [params.product, params.inicialDe, setParams]);
+
   // --- La imagen y lo que sale de ella -----------------------------------------
   const [img, setImg] = useState<ImageData | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -355,10 +364,12 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
 
     // Las piezas que traen color propio (las capas) reciben el que haya elegido
     // el usuario, en orden. Si no ha tocado nada, se quedan con el suyo.
+    // El Termoformado 2 trae los suyos por parte (malla, tuerca, moldes): se respetan.
+    if (params.product === 'thermoform2') return stamped;
     let i = 0;
     return stamped.map((p) => (p.tint ? { ...p, tint: layerColors[i++] ?? p.tint } : p));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pieces, markOn, mark, markStyle, markArc, markSize, fontsReady, layerColors, oneColor]);
+  }, [pieces, markOn, mark, markStyle, markArc, markSize, fontsReady, layerColors, oneColor, params.product]);
 
   const stats = useMemo(
     () => ({

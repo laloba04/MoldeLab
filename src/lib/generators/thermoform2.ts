@@ -1,26 +1,21 @@
 /**
- * Termoformado 2: dos mallas con BORDE ALTO que se juntan por el borde.
+ * Termoformado 2: dos mallas con BORDE ALTO, como el de las fotos.
  *
- * Cómo funciona (y por qué así):
+ * Cómo funciona:
  *
  *   malla    — una plancha calada, plana, con un borde alto (≈ 4 mm) todo
- *              alrededor que mira hacia DENTRO del adorno. Al juntar las dos
- *              mitades, los dos bordes hacen una banda maciza: es lo que da
- *              forma y fuerza al adorno, y donde van la rosca, los clips o los
- *              imanes. El dibujo va A RAS dentro de la malla, como trozos de
- *              otro color: se ve igual por las dos caras.
- *   rosca    — cada mitad lleva media rosca arriba, tumbada en el plano donde
- *              se juntan; la tuerca, enroscada, las sujeta y cuelga el adorno.
- *   clip     — una grapa que abraza la banda por fuera y engancha las dos
- *              mallas por unas ventanitas que llevan junto al borde.
- *   molde ↓  — un bloque con la cavidad (el hueco de la cúpula). La malla
- *              caliente se apoya encima, con el borde hacia arriba.
- *   molde ↑  — se le da la vuelta y aprieta: una cúpula sobre una meseta que
- *              pisa el margen plano, y alrededor una RANURA donde entra el borde
- *              alto, para que no se aplaste ni se tuerza.
- *
- * La cúpula abomba la plancha hacia el lado CONTRARIO al borde: así el borde
- * queda dentro y la cúpula fuera.
+ *              alrededor. El dibujo va A RAS dentro de la malla, en trozos de
+ *              otro color. Las dos mitades se juntan por la cara PLANA; el borde
+ *              y la cúpula quedan por fuera.
+ *   rosca    — cada mitad lleva media rosca arriba; la tuerca (hexagonal) las
+ *              sujeta y cuelga el adorno.
+ *   clip     — una pinza que muerde las dos mallas juntas por una muesca del
+ *              borde (abajo, y si se pide, a los lados).
+ *   molde ↓  — la CAVIDAD, con una ranura alrededor (con holgura) donde entra el
+ *              borde alto y muescas para la rosca: la malla caliente se pone
+ *              boca abajo, con el borde metido en la ranura.
+ *   molde ↑  — la cúpula sobre su base: se le da la vuelta y aprieta la malla
+ *              dentro de la cavidad.
  *
  * Nada de booleanas 3D, como en el resto: regiones 2D extruidas y cúpulas que
  * mueven vértices (ver `dome.ts`).
@@ -46,6 +41,7 @@ import {
   medir,
   sitiosEnBorde,
   solid,
+  pinza,
   tuerca,
 } from './thermoform';
 
@@ -89,18 +85,6 @@ function espejoMalla(m: Mesh, cx: number): Mesh {
   return { positions: out };
 }
 
-/** Media vuelta alrededor del eje Y que pasa por (cx, ·, h/2): x → 2cx − x, z → h − z. Es un giro: no espeja. */
-function girarY(m: Mesh, cx: number, h: number): Mesh {
-  const q = m.positions;
-  const out = new Array<number>(q.length);
-  for (let i = 0; i < q.length; i += 3) {
-    out[i] = 2 * cx - q[i];
-    out[i + 1] = q[i + 1];
-    out[i + 2] = h - q[i + 2];
-  }
-  return { positions: out };
-}
-
 /** Gira unos puntos `grados` alrededor de (cx, cy). */
 function girar(pts: Pt[], cx: number, cy: number, grados: number): Pt[] {
   if (!grados) return pts;
@@ -136,35 +120,8 @@ function corteEn(outer: Pt[], cx: number, cy: number, dx: number, dy: number): P
   return [cx + dx * mejor, cy + dy * mejor];
 }
 
-/**
- * El clip, de perfil: una grapa que abraza la banda por fuera y mete dos
- * ganchos por las ventanitas. Se dibuja en el plano (u = a lo ancho de la
- * banda, v = hacia fuera desde el borde) y se imprime tumbado, extruido a lo
- * ancho del clip. Ver la cabecera.
- */
-function perfilClip(H: number, t: number, rimW: number, holgura: number): Region[] {
-  const a = 1.0; // grosor de las barras del clip
-  const e = holgura;
-  const vVentana = -(rimW + 1.2);
-  const rect = (u0: number, u1: number, v0: number, v1: number): Pt[] => [
-    [u0, v0],
-    [u1, v0],
-    [u1, v1],
-    [u0, v1],
-  ];
-  const piezas: Pt[][] = [
-    rect(-(H + e + a), H + e + a, e, e + a), // el lomo, por fuera del borde
-    rect(H + e, H + e + a, vVentana - 0.5, e + a), // las dos patas, por fuera de las mallas
-    rect(-(H + e + a), -(H + e), vVentana - 0.5, e + a),
-    rect(H - t - 0.8, H + e + a, vVentana - 0.5, vVentana + 0.5), // los ganchos, por las ventanitas
-    rect(-(H + e + a), -(H - t - 0.8), vVentana - 0.5, vVentana + 0.5),
-  ];
-  let r: Region[] = [];
-  for (const p of piezas) r = r.length ? union(r, sanitize([p], [])) : sanitize([p], []);
-  return r;
-}
-
-const ANCHO_CLIP = 5;
+/** El largo de la pinza (ver `pinza` en thermoform.ts). */
+const LARGO_PINZA = 7;
 
 export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[]): Piece[] {
   if (!(loops.length ? loops : detail).length) return [];
@@ -200,8 +157,7 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
 
   // La rosca no puede bajar del plano de la cama: su radio por fuera cabe en el borde.
   const rPedido = Math.max(2, (p.formScrewDia ?? 9) / 2 - FONDO_ROSCA);
-  const rCuello = Math.min(rPedido, H - FONDO_ROSCA - 0.05);
-  const roscaRecortada = rCuello < rPedido - 1e-6;
+  const rCuello = rPedido;
   const paso = Math.max(0.5, p.threadPitch ?? 2);
 
   // El cuello nace de lo alto de la forma; en una muesca (corazón) se rellena.
@@ -242,19 +198,35 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
     }
   }
   const holgClip = Math.max(0, p.clipClearance ?? 0.15);
-  const ventanas = sitiosClip.length
+  // Por donde muerde la pinza se corta el borde (una muesca) y la plancha llega
+  // hasta el contorno: ahí las dos mallas juntas miden dos planchas.
+  const hondoPinza = rimW + 1.6;
+  const muescas = sitiosClip.length
     ? sanitize(
         sitiosClip.map(({ pt, n }) => {
-          const c: Pt = [pt[0] - n[0] * (rimW + 1.2), pt[1] - n[1] * (rimW + 1.2)];
-          const largo = ANCHO_CLIP + 2 * holgClip + 0.3;
-          return n[0] ? roundedRect(c[0], c[1], 1.6, largo, 0) : roundedRect(c[0], c[1], largo, 1.6, 0);
+          const fondo = rimW + 1;
+          const c: Pt = [pt[0] - (n[0] * (fondo - 1)) / 2, pt[1] - (n[1] * (fondo - 1)) / 2];
+          const largo = LARGO_PINZA + 2 * holgClip + 0.4;
+          return n[0] ? roundedRect(c[0], c[1], fondo + 1, largo, 0) : roundedRect(c[0], c[1], largo, fondo + 1, 0);
+        }),
+        [],
+      )
+    : [];
+  // Donde agarra la pinza la plancha va maciza (sin calar).
+  const agarre = sitiosClip.length
+    ? sanitize(
+        sitiosClip.map(({ pt, n }) => {
+          const fondo = hondoPinza + 1;
+          const c: Pt = [pt[0] - (n[0] * fondo) / 2, pt[1] - (n[1] * fondo) / 2];
+          const largo = LARGO_PINZA + 3;
+          return n[0] ? roundedRect(c[0], c[1], fondo, largo, 0) : roundedRect(c[0], c[1], largo, fondo, 0);
         }),
         [],
       )
     : [];
 
-  // Imanes: en orejitas por fuera del borde, con el bolsillo abierto por arriba
-  // (por donde se juntan las mitades): se imprime sin puentes y el imán se pega.
+  // Imanes: en orejitas por fuera del borde, con el bolsillo abierto por la cara
+  // plana (por donde se juntan las mitades): cada imán queda frente al suyo.
   const rIman = Math.max(1, (p.formMagnetDia ?? 6) / 2 + (p.formMagnetClear ?? 0.15));
   const rOreja = rIman + 1.2;
   const hondoIman = Math.min(H - 0.6, (p.formMagnetH ?? 2) + (p.formMagnetClear ?? 0.15));
@@ -332,19 +304,19 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
     const macizos = [...trozos.filter((x) => !x.enrejado).flatMap((x) => x.reg), ...nombreReg];
     let zonaCalado = offsetRegions(dentroS.map((r) => r.outer), [], -0.8);
     if (macizos.length) zonaCalado = subtract(zonaCalado, offsetRegions(macizos.map((r) => r.outer), [], Math.max(0.6, p.holeWall)));
-    if (ventanas.length) zonaCalado = subtract(zonaCalado, offsetRegions(m(ventanas).map((r) => r.outer), [], 1));
+    if (agarre.length) zonaCalado = subtract(zonaCalado, offsetRegions(m(agarre).map((r) => r.outer), [], 0.6));
     // El calado mete una celda si su centro cae dentro, así que una esquina puede
     // pisar un texto: se recortan para dejar siempre pared alrededor de lo macizo.
     let agujeros = p.formLatticeBySlicer ? [] : calado(p.holePattern, zonaCalado, Math.max(1, p.holeSpacing), Math.max(0.3, p.holeWall));
     const pared = Math.max(0.6, p.holeWall);
     const protegido = [
       ...(macizos.length ? offsetRegions(macizos.map((r) => r.outer), [], pared) : []),
-      ...(ventanas.length ? offsetRegions(m(ventanas).map((r) => r.outer), [], 1) : []),
+      ...(agarre.length ? offsetRegions(m(agarre).map((r) => r.outer), [], 0.6) : []),
     ];
     if (agujeros.length && protegido.length) agujeros = limpiar(subtract(agujeros, protegido));
     agujeros = agujeros.length ? limpiar(intersectRegions(agujeros, offsetRegions(dentroS.map((r) => r.outer), [], -pared))) : agujeros;
-    let plancha = dentroS;
-    if (ventanas.length) plancha = subtract(plancha, m(ventanas));
+    // En las muescas la plancha llega hasta el contorno (ahí no hay borde).
+    let plancha = muescas.length ? limpiar(union(dentroS, intersectRegions(m(muescas), sanitize([outerS], [])))) : dentroS;
     const llena = plancha;
     if (agujeros.length) plancha = subtract(plancha, agujeros);
 
@@ -356,29 +328,30 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
     // El borde: la mitad de dentro, si se pide, del color de la malla.
     const anillo = subtract(sanitize([outerS], []), offsetRegions([outerS], [], -rimW));
     const medio = offsetRegions([outerS], [], -rimW / 2);
-    const bordeFuera = p.formRimInnerPlate ? subtract(anillo, medio) : anillo;
-    const bordeDentro = p.formRimInnerPlate ? intersectRegions(anillo, medio) : [];
+    const anilloM = muescas.length ? subtract(anillo, m(muescas)) : anillo;
+    const bordeFuera = limpiar(p.formRimInnerPlate ? subtract(anilloM, medio) : anilloM);
+    const bordeDentro = limpiar(p.formRimInnerPlate ? intersectRegions(anilloM, medio) : []);
 
     // Lo que va con el borde (su color y su alto): relleno de la muesca, orejita de colgar.
     let bordeReg = bordeFuera;
     if (relleno.length) bordeReg = union(bordeReg, subtract(m(relleno), sanitize([outerS], [])));
     if (orejaColgar.length) bordeReg = union(bordeReg, subtract(m(orejaColgar), sanitize([outerS], [])));
     if (orejasIman.length) bordeReg = subtract(bordeReg, m(orejasIman));
+    bordeReg = limpiar(bordeReg);
     const sitiosS = sitiosIman.map(([x, y]) => (detras ? ([2 * cx - x, y] as Pt) : ([x, y] as Pt)));
     const orejas = sitiosS.length
       ? merge(
-          solid(sanitize(sitiosS.map(([x, y]) => circle(x, y, rOreja, 40)), []), 0, H - hondoIman),
           solid(
             sitiosS.map(([x, y]) => ({ outer: circle(x, y, rOreja, 40), holes: [[...circle(x, y, rIman, 40)].reverse()] })),
-            H - hondoIman - 0.01,
-            H,
+            0,
+            hondoIman,
           ),
+          solid(sanitize(sitiosS.map(([x, y]) => circle(x, y, rOreja, 40)), []), hondoIman - 0.01, H),
         )
       : emptyMesh();
-    // Media rosca: girada media vuelta para quedar por debajo del plano donde se juntan.
-    const cuello = conRosca
-      ? girarY(medioCuelloRoscado(cx, yNace, rCuello, largoCuello, detras ? 0 : 0.5, caja.maxY - yNace, paso), cx, H)
-      : emptyMesh();
+    // Media rosca, tumbada sobre la cara plana. La trasera va desfasada media
+    // vuelta: al darle la vuelta para juntarlas, la rosca sigue de una a otra.
+    const cuello = conRosca ? medioCuelloRoscado(cx, yNace, rCuello, largoCuello, detras ? 0.5 : 0, caja.maxY - yNace, paso) : emptyMesh();
 
     const cuerpo = merge(solid(cuerpoReg, 0, t), bordeDentro.length ? solid(bordeDentro, t - 0.01, H) : emptyMesh(), bordeDentro.length ? solid(bordeDentro, 0, t) : emptyMesh());
     const partes: { m: Mesh; color?: string }[] = [
@@ -387,7 +360,7 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
     ].filter((x) => x.m.positions.length);
     const textMesh = nombreReg.length ? solid(nombreReg, 0, t + Math.max(0, p.formDesignHeight ?? 0)) : undefined;
 
-    const domo: Dome = { ...domeOf(cupulaS, D, 140, tipoPared), signo: -1 };
+    const domo: Dome = domeOf(cupulaS, D, 140, tipoPared);
     return { outerS, dentroS, cupulaS, cuerpo, partes, textMesh, domo, llena };
   };
 
@@ -396,6 +369,7 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
 
   // --- Montado (visor) -----------------------------------------------------------
   const aparte = caja.w + 30;
+  const sube = D + H + 1;
   const montajeMolde = (col: number, fila: number) => [1, 0, 0, aparte * col, 0, 1, 0, -(caja.h + 25) * fila, 0, 0, 1, 0];
   const piezas: Piece[] = [];
   const pieza = (id: string, label: string, c: ReturnType<typeof cara>, montaje: number[]) => {
@@ -418,10 +392,9 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
   };
   const notas = [
     conImanes && sitiosIman.length ? `${sitiosIman.length} imanes de ${p.formMagnetDia}×${p.formMagnetH} mm` : '',
-    roscaRecortada ? `rosca de ${((rCuello + FONDO_ROSCA) * 2).toFixed(1)} mm: no cabe más con este borde` : '',
   ].filter(Boolean);
-  pieza('sheet', `Malla delantera${notas.length ? ` (${notas.join('; ')})` : ''}`, delante, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]);
-  if (detras) pieza('sheet-back', 'Malla trasera', detras, [-1, 0, 0, 2 * cx, 0, 1, 0, 0, 0, 0, -1, 2 * H]);
+  pieza('sheet', `Malla delantera${notas.length ? ` (${notas.join('; ')})` : ''}`, delante, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, sube]);
+  if (detras) pieza('sheet-back', 'Malla trasera', detras, [-1, 0, 0, 2 * cx, 0, 1, 0, 0, 0, 0, -1, sube]);
 
   // --- Tuerca y clips --------------------------------------------------------------
   const colorCierre = auto(p.formColorNut);
@@ -432,23 +405,25 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
       id: 'cap',
       label: 'Tuerca (cierra arriba y cuelga)',
       role: 'body',
-      mesh: tuerca(rCuello, altoTuerca, p.capClearance, p.ringOuter, p.ringInner, paso),
+      mesh: tuerca(rCuello, altoTuerca, p.capClearance, p.ringOuter, p.ringInner, paso, true),
       tint: colorCierre,
       noMark: true,
-      montaje: [1, 0, 0, cx, 0, 0, 1, yNace + largoCuello - huecoTuerca, 0, -1, 0, H],
+      montaje: [1, 0, 0, cx, 0, 0, 1, yNace + largoCuello - huecoTuerca, 0, -1, 0, sube],
     });
   }
   if (detras && sitiosClip.length) {
-    const perfil = perfilClip(H, t, rimW, holgClip);
-    const clip = solid(perfil, 0, ANCHO_CLIP);
+    const clip = pinza(t, hondoPinza + 0.4, holgClip);
+    // Ver `pinza`: hondo = reborde − 0,4; el bloque mide hondo + 1,6 y la boca mira a +Y.
+    const fondoP = hondoPinza + 1.6;
+    const d = fondoP / 2 - hondoPinza;
+    const L2 = LARGO_PINZA / 2;
     for (const { pt, lado } of sitiosClip) {
-      const w2 = ANCHO_CLIP / 2;
       const montaje =
         lado === 'abajo'
-          ? [0, 0, 1, pt[0] - w2, 0, -1, 0, pt[1], 1, 0, 0, H]
+          ? [0, 0, 1, pt[0] - L2, 0, 1, 0, pt[1] - d, -1, 0, 0, sube]
           : lado === 'der'
-            ? [0, 1, 0, pt[0], 0, 0, 1, pt[1] - w2, 1, 0, 0, H]
-            : [0, -1, 0, pt[0], 0, 0, -1, pt[1] + w2, 1, 0, 0, H];
+            ? [0, -1, 0, pt[0] + d, 0, 0, 1, pt[1] - L2, -1, 0, 0, sube]
+            : [0, 1, 0, pt[0] - d, 0, 0, -1, pt[1] + L2, -1, 0, 0, sube];
       piezas.push({
         id: lado === 'abajo' ? 'clip' : `clip-${lado}`,
         label: lado === 'abajo' ? 'Clip de abajo' : `Clip del lado (${lado === 'izq' ? 'izquierda' : 'derecha'})`,
@@ -471,35 +446,42 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
   const colorMolde = auto(p.formColorMold);
   const aviso = ' — PETG, capas de 0,28 mm y 10 % de relleno';
 
-  /** El molde de abajo: bloque con la cavidad. La malla se apoya encima con el borde hacia arriba. */
-  const hembra = (c: ReturnType<typeof cara>): Mesh => {
+  /**
+   * El molde de abajo: la cavidad, con la RANURA alrededor donde entra el borde
+   * alto (con su holgura) y muescas por donde bajan la rosca, la orejita y los
+   * imanes. La malla entra boca abajo, así que se hace en las medidas de la malla
+   * y se espeja al final.
+   */
+  const hembra = (c: ReturnType<typeof cara>, detras_: boolean): Mesh => {
+    const m = (rs: Region[]) => (detras_ ? espejoRegs(rs, cx) : rs);
     const bloque = sanitize([mayor(offsetRegions([c.outerS], [], pared)) ?? c.outerS], []);
     const boca = mayor(offsetRegions([c.cupulaS], [], t + holgPlancha)) ?? c.cupulaS;
-    const alto = suelo + D + holgPlancha;
-    return abombar(solid(bloque, 0, alto), domeOf(boca, D + holgPlancha, 140, tipoPared), 3, { desde: alto, signo: -1 });
-  };
-
-  /** El molde de arriba, de pie: base, meseta con la cúpula y la ranura del borde alrededor. */
-  const macho = (c: ReturnType<typeof cara>, detras_: boolean): Mesh => {
-    const huella = sanitize([mayor(offsetRegions([c.outerS], [], holgBorde + 3)) ?? c.outerS], []);
-    const meseta = offsetRegions([c.outerS], [], -(rimW + holgBorde));
-    const fueraRanura = offsetRegions([c.outerS], [], holgBorde);
-    let pared_ = subtract(huella, fueraRanura);
-    // Muescas: por donde asoman la rosca, la orejita, el relleno y las orejitas de los imanes.
-    const m = (rs: Region[]) => (detras_ ? espejoRegs(rs, cx) : rs);
+    const ranura = subtract(offsetRegions([c.outerS], [], holgBorde), offsetRegions([c.outerS], [], -(rimW + holgBorde)));
     const asoma: Region[] = [
-      ...(conRosca ? sanitize([roundedRect(cx, (yNace + yNace + largoCuello + 4) / 2, (rCuello + FONDO_ROSCA + 0.8) * 2, largoCuello + 4, 0)], []) : []),
+      ...(conRosca ? sanitize([roundedRect(cx, yNace + (largoCuello + 1) / 2, (rCuello + FONDO_ROSCA + 0.6) * 2, largoCuello + 1, 0)], []) : []),
       ...relleno,
       ...orejaColgar,
       ...orejasIman,
     ];
-    if (asoma.length) pared_ = subtract(pared_, offsetRegions(m(asoma).map((r) => r.outer), [], 0.6));
-    const zMeseta = baseMacho + (H - t) + holgBorde;
-    return merge(
-      solid(huella, 0, baseMacho),
-      abombar(solid(meseta, baseMacho - 0.01, zMeseta), domeOf(c.cupulaS, D, 140, tipoPared), 3, { desde: zMeseta, signo: 1 }),
-      pared_.length ? solid(pared_, baseMacho - 0.01, zMeseta) : emptyMesh(),
+    const muescasM = asoma.length ? limpiar(subtract(intersectRegions(offsetRegions(m(asoma).map((r) => r.outer), [], 0.5), bloque), ranura)) : [];
+    const hondoRanura = H - t + holgBorde;
+    const hondoMuesca = Math.max(H, rCuello + FONDO_ROSCA) - t + 0.4;
+    const alto = suelo + Math.max(D + holgPlancha, hondoRanura, muescasM.length ? hondoMuesca : 0);
+    const meseta = limpiar(subtract(bloque, muescasM.length ? union(ranura, muescasM) : ranura));
+    return espejoMalla(
+      merge(
+        abombar(solid(meseta, 0, alto), domeOf(boca, D + holgPlancha, 140, tipoPared), 3, { desde: alto, signo: -1 }),
+        solid(limpiar(intersectRegions(ranura, bloque)), 0, alto - hondoRanura),
+        muescasM.length ? solid(muescasM, 0, alto - hondoMuesca) : emptyMesh(),
+      ),
+      cx,
     );
+  };
+
+  /** El molde de arriba, de pie: la cúpula sobre su base. Se le da la vuelta y aprieta. */
+  const macho = (c: ReturnType<typeof cara>): Mesh => {
+    const base_ = sanitize([mayor(offsetRegions([c.outerS], [], -0.3)) ?? c.outerS], []);
+    return abombar(solid(base_, 0, baseMacho), domeOf(c.cupulaS, D, 140, tipoPared), 3, { desde: baseMacho, signo: 1 });
   };
 
   const asimetrica = (() => {
@@ -511,9 +493,8 @@ export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textL
   })();
   const dos = !!detras && asimetrica && p.formSplitMolds !== false;
   const pareja = (c: ReturnType<typeof cara>, detras_: boolean, sufijo: string, idExtra: string, col: number) => {
-    piezas.push({ id: `mold-down${idExtra}`, label: `Molde de abajo (cavidad)${sufijo}${aviso}`, role: 'body', mesh: hembra(c), tint: colorMolde, noMark: true, montaje: montajeMolde(col, 1) });
-    // De pie se imprime en espejo: al darle la vuelta para apretar, casa con la malla.
-    piezas.push({ id: `mold-up${idExtra}`, label: `Molde de arriba (ranura del borde; se le da la vuelta)${sufijo}${aviso}`, role: 'body', mesh: espejoMalla(macho(c, detras_), cx), tint: colorMolde, noMark: true, montaje: montajeMolde(col, 2) });
+    piezas.push({ id: `mold-down${idExtra}`, label: `Molde de abajo (cavidad con ranura para el borde)${sufijo}${aviso}`, role: 'body', mesh: hembra(c, detras_), tint: colorMolde, noMark: true, montaje: montajeMolde(col, 1) });
+    piezas.push({ id: `mold-up${idExtra}`, label: `Molde de arriba (cúpula; se le da la vuelta)${sufijo}${aviso}`, role: 'body', mesh: macho(c), tint: colorMolde, noMark: true, montaje: montajeMolde(col, 2) });
   };
   pareja(delante, false, dos ? ' · delantera' : '', '', 0);
   if (dos && detras) pareja(detras, true, ' · trasera', '-back', 1);

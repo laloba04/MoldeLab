@@ -105,6 +105,25 @@ export function calado(patron: HolePattern, zona: Region[], paso: number, pared:
   if (patron === 'none' || !zona.length) return [];
 
   const b = boxOf(zona.map((r) => ({ pts: r.outer, hole: false })));
+  // Trenzado: como un cesto. Cada casilla lleva dos ranuras, tumbadas o de pie,
+  // y se van alternando como un tablero de damas.
+  if (patron === 'weave') {
+    const c = paso * 2;
+    const largo = c - pared;
+    const ancho = (c - 3 * pared) / 2;
+    const out: Pt[][] = [];
+    for (let j = 0, y = b.minY; y <= b.maxY + c; j++, y += c) {
+      for (let i = 0, x = b.minX; x <= b.maxX + c; i++, x += c) {
+        const tumbada = (i + j) % 2 === 0;
+        for (const s of [-1, 1]) {
+          const d = (s * (ancho + pared)) / 2;
+          const r = tumbada ? roundedRect(x, y + d, largo, ancho, 0) : roundedRect(x + d, y, ancho, largo, 0);
+          if (r.every((pt) => dentroDe(zona, pt))) out.push(r);
+        }
+      }
+    }
+    return out.map((a) => ({ outer: orient(a, true), holes: [] }));
+  }
   const lado = Math.max(0.3, paso - pared);
   // Filas a √3/2 del paso: en un panal de verdad cada fila encaja en los huecos
   // de la anterior, y la pared entre dos celdas mide igual en todas direcciones.
@@ -166,11 +185,11 @@ function girarX(m: Mesh, dx: number, dy: number, dz: number): Mesh {
  * La tuerca que cierra el adorno por arriba: se enrosca en el cuello y sujeta
  * las dos mitades. Lleva encima el ojal por donde pasa el cordón.
  */
-export function tuerca(r: number, alto: number, holgura: number, ojo: number, ojoHueco: number, paso = 2): Mesh {
+export function tuerca(r: number, alto: number, holgura: number, ojo: number, ojoHueco: number, paso = 2, hexagonal = false): Mesh {
   const techo = 1.5;
   // Un pelo menos que lo que asoma el cuello, para que llegue a apretar.
   const hueco = Math.max(2, alto - 0.5);
-  const cuerpo = tuercaRoscada(r, hueco, holgura, 1.6, techo, paso);
+  const cuerpo = tuercaRoscada(r, hueco, holgura, 1.6, techo, paso, hexagonal);
 
   // El ojal: un aro de pie encima del techo, con el agujero horizontal. Se
   // monta tumbado y se pone de pie con el giro.
@@ -190,7 +209,7 @@ export function tuerca(r: number, alto: number, holgura: number, ojo: number, oj
  * La ranura mide lo que las dos planchas juntas más un pelo, y no más honda que
  * el borde plano: si llegara a la cúpula, la aplastaría.
  */
-function pinza(grosor: number, reborde: number, holgura = 0.2): Mesh {
+export function pinza(grosor: number, reborde: number, holgura = 0.2): Mesh {
   const ranura = grosor * 2 + holgura;
   const hondo = Math.max(1, reborde - 0.4);
   const pared = 1.6;

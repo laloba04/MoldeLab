@@ -101,21 +101,17 @@ const H = t + (INICIAL.formRimHeight ?? 4);
 const del = pieza(ps, 'sheet')!;
 const cDel = caja(del.mesh.positions);
 check('la malla no baja de la cama', cDel.z0 > -1e-6, `${cDel.z0.toFixed(3)}`);
-check('el borde (y la media rosca) llegan justo al plano donde se juntan', Math.abs(cDel.z1 - H) < 0.02, `${cDel.z1.toFixed(2)} mm, borde ${H.toFixed(2)}`);
+check('el borde mide lo que dicen las fotos (y la media rosca no lo pasa)', Math.abs(cDel.z1 - H) < 0.02, `${cDel.z1.toFixed(2)} mm, borde ${H.toFixed(2)}`);
 check('mide 90 de ancho, como en las fotos', Math.abs(cDel.w - 90) < 1, `${cDel.w.toFixed(1)} mm`);
 
-// Montadas, las dos mallas se tocan en el plano del borde.
+// Montadas, las dos mallas se juntan por la cara plana y los bordes quedan fuera.
 const atr = pieza(ps, 'sheet-back')!;
 const mDel = caja(montada(del));
 const mAtr = caja(montada(atr));
-check('montadas, la trasera empieza donde acaba la delantera', Math.abs(mAtr.z0 - mDel.z1) < 0.02, `${mDel.z1.toFixed(2)} / ${mAtr.z0.toFixed(2)}`);
-check('y la banda mide dos bordes', Math.abs(mAtr.z1 - mDel.z0 - 2 * H) < 0.05, `${(mAtr.z1 - mDel.z0).toFixed(2)} mm`);
-
-// La rosca de 9 cabe: el filete no pasa del borde.
-const rCrest = (INICIAL.formScrewDia ?? 9) / 2;
-check('la rosca de 9 mm cabe en un borde de 4', rCrest <= H + 1e-6, `${rCrest} ≤ ${H.toFixed(2)}`);
-const grande = pieza(hacer({ formScrewDia: 12 }), 'sheet')!;
-check('una rosca demasiado gorda se recorta y se avisa', /no cabe más/.test(grande.label) && caja(grande.mesh.positions).z0 > -1e-6, grande.label);
+check('montadas, las dos mallas se tocan por la cara plana', Math.abs(mAtr.z1 - mDel.z0) < 0.02, `${mAtr.z1.toFixed(2)} / ${mDel.z0.toFixed(2)}`);
+check('y los dos bordes quedan por fuera', Math.abs(mDel.z1 - mAtr.z0 - 2 * H) < 0.05, `${(mDel.z1 - mAtr.z0).toFixed(2)} mm`);
+const gorda = hacer({ formScrewDia: 11 });
+check('una rosca más gorda también sale cerrada y sin bajar de la cama', abiertasDe(gorda) === 0 && caja(pieza(gorda, 'sheet')!.mesh.positions).z0 > -1e-6);
 void FONDO_ROSCA;
 
 // --- Uniones ------------------------------------------------------------------
@@ -139,11 +135,12 @@ const vCon = volumen(pieza(hacer({ formLatticeBySlicer: true }), 'sheet')!.mesh)
 const vSin = volumen(pieza(hacer({ formLatticeBySlicer: true, formJoin: 'imanes', formMagnets: 2 }), 'sheet')!.mesh);
 check('con clip, la malla lleva su ventanita', vCon > 0 && vSin > 0, `${vCon.toFixed(0)} / ${vSin.toFixed(0)} mm³`);
 
-// El clip, montado, abraza la banda: más ancho que las dos mallas juntas.
+// El clip, montado, muerde las dos planchas juntas, abajo.
 const clip = pieza(ps, 'clip')!;
 const mClip = caja(montada(clip));
-check('el clip montado abraza la banda por fuera', mClip.z0 < mDel.z0 && mClip.z1 > mAtr.z1, `clip ${mClip.z0.toFixed(1)}…${mClip.z1.toFixed(1)}, banda ${mDel.z0.toFixed(1)}…${mAtr.z1.toFixed(1)}`);
-check('y queda abajo, en el borde', mClip.y0 < mDel.y0 + 1 && mClip.y1 < mDel.y0 + 6, `${mClip.y0.toFixed(1)}…${mClip.y1.toFixed(1)}`);
+check('el clip montado muerde las dos planchas', mClip.z0 < mDel.z0 - t && mClip.z1 > mDel.z0 + t, `clip ${mClip.z0.toFixed(2)}…${mClip.z1.toFixed(2)}, juntura ${mDel.z0.toFixed(2)} ± ${t}`);
+check('y queda abajo, en el borde', mClip.y0 < mDel.y0 + 1 && mClip.y1 < mDel.y0 + 7, `${mClip.y0.toFixed(1)}…${mClip.y1.toFixed(1)}`);
+check('el clip va en una muesca del borde (la malla tiene menos borde abajo)', volumen(pieza(hacer({ formJoin: 'imanes', formMagnets: 2 }), 'sheet')!.mesh) > 0);
 
 // --- Malla hecha por el laminador -----------------------------------------------
 const maciza = volumen(pieza(hacer({ formLatticeBySlicer: true }), 'sheet')!.mesh);
@@ -154,13 +151,16 @@ check('con «la malla la hace el laminador», la plancha sale maciza', maciza > 
 const D = INICIAL.formHeight ?? 16;
 const abajo = caja(pieza(ps, 'mold-down')!.mesh.positions);
 const arriba = caja(pieza(ps, 'mold-up')!.mesh.positions);
-const altoAbajo = (INICIAL.formFloor ?? 1.1) + D + (INICIAL.formClearance ?? 0.1);
+const altoAbajo = (INICIAL.formFloor ?? 1.1) + Math.max(D + (INICIAL.formClearance ?? 0.1), H - t + (INICIAL.formStepClearance ?? 0.2));
 check('el molde de abajo mide suelo + hondo + holgura', Math.abs(abajo.z1 - altoAbajo) < 0.05, `${abajo.z1.toFixed(2)} / ${altoAbajo.toFixed(2)}`);
 check('y es más ancho que la malla (pared de 6)', abajo.w > cDel.w + 11, `${abajo.w.toFixed(1)}`);
-const altoArriba = (INICIAL.formMaleBase ?? 3) + (H - t) + (INICIAL.formStepClearance ?? 0.2) + D;
-check('el de arriba: base + ranura del borde + cúpula', Math.abs(arriba.z1 - altoArriba) < 0.1, `${arriba.z1.toFixed(2)} / ${altoArriba.toFixed(2)}`);
-const ranuraHonda = caja(pieza(hacer({ formRimHeight: 6 }), 'mold-up')!.mesh.positions);
-check('un borde más alto hace la ranura más honda', ranuraHonda.z1 > arriba.z1 + 1.9, `${arriba.z1.toFixed(1)} → ${ranuraHonda.z1.toFixed(1)}`);
+const altoArriba = (INICIAL.formMaleBase ?? 3) + D;
+check('el de arriba: la cúpula sobre su base', Math.abs(arriba.z1 - altoArriba) < 0.1, `${arriba.z1.toFixed(2)} / ${altoArriba.toFixed(2)}`);
+const vHembra = volumen(pieza(ps, 'mold-down')!.mesh);
+const vHembraHonda = volumen(pieza(hacer({ formRimHeight: 6 }), 'mold-down')!.mesh);
+check('la ranura del borde está en el molde de la cavidad (borde más alto, ranura más honda)', vHembraHonda < vHembra - 50, `${vHembra.toFixed(0)} → ${vHembraHonda.toFixed(0)} mm³`);
+const vMacho = volumen(pieza(ps, 'mold-up')!.mesh);
+check('el de la cúpula no cambia con el borde (no lleva ranura)', Math.abs(volumen(pieza(hacer({ formRimHeight: 6 }), 'mold-up')!.mesh) - vMacho) < 1);
 check('los moldes avisan del PETG', /PETG/.test(pieza(ps, 'mold-down')!.label));
 for (const [n, ov] of [['más pared', { formWall: 9 }], ['más suelo', { formFloor: 3 }], ['más base', { formMaleBase: 5 }], ['perfil cojín', { formProfile: 'cojin' }], ['perfil redondo', { formProfile: 'redondo' }]] as const) {
   check(`${n}: moldes cerrados`, abiertasDe(hacer(ov as Partial<Params>).filter((x) => x.id.startsWith('mold'))) === 0);
@@ -213,6 +213,15 @@ check('«solo mallas» trae mallas, tuerca y clip', np.length >= 4 && np.every((
 const z = await armarArchivo(conEl, null, { ...op, formatos: new Set(['3mf' as const]), porPlacas: true });
 const zn = await nombres(z);
 check('3MF por placas: mallas, tuerca y clip, cada molde', ['planchas', 'tuerca-y-pinza', 'molde-abajo', 'molde-arriba'].every((g) => zn.some((n) => n.includes(g))), zn.join(', '));
+
+// --- Como en las fotos: malla trenzada y tuerca hexagonal ---------------------------
+check('la malla sale trenzada por defecto', INICIAL.holePattern === 'weave');
+const tren = hacer({ moldShape: 'bear' });
+check('malla trenzada: todo cerrado', abiertasDe(tren) === 0, `${abiertasDe(tren)}`);
+check('la malla trenzada tiene agujeros', volumen(pieza(tren, 'sheet')!.mesh) < volumen(pieza(hacer({ moldShape: 'bear', formLatticeBySlicer: true }), 'sheet')!.mesh) * 0.9);
+const nut = caja(pieza(ps, 'cap')!.mesh.positions);
+check('la tuerca es hexagonal (más ancha de esquina a esquina que de lado a lado)', nut.w / nut.h > 1.08 || nut.h / nut.w > 1.08, `${nut.w.toFixed(2)} × ${nut.h.toFixed(2)}`);
+check('y cerrada', aristasAbiertas(pieza(ps, 'cap')!.mesh) === 0);
 
 // --- Modo sencillo ------------------------------------------------------------
 const grupos = byId('thermoform2').groups ?? [];

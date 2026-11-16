@@ -78,7 +78,48 @@ export function cap(m: Mesh, outerCcw: Pt[], holesCw: Pt[][], z: number, up: boo
     for (const [x, y] of hole) flat.push(x, y);
   }
 
-  const idx = earcut(flat, holeIdx.length ? holeIdx : undefined, 2);
+  const huecos = holeIdx.length ? holeIdx : undefined;
+  // Con muchos agujeros con lados en la misma recta (una malla de ranuras),
+  // earcut a veces enlaza unos agujeros con otros por encima del lado de un
+  // tercero, y la tapa sale con aristas que no casan con las paredes: la pieza
+  // queda abierta aunque el área cuadre. Se comprueba que cada lado del contorno
+  // y de los agujeros esté en la tapa; si falta alguno, se reintenta con las
+  // coordenadas giradas (cambia por dónde enlaza) y se queda el que case. Los
+  // índices valen igual: solo cambian las coordenadas que ve earcut.
+  const n = flat.length / 2;
+  const lados: [number, number][] = [];
+  const anillos = [0, ...holeIdx, n];
+  for (let r = 0; r + 1 < anillos.length; r++) {
+    const a0 = anillos[r];
+    const a1 = anillos[r + 1];
+    for (let i = a0; i < a1; i++) lados.push([i, i + 1 < a1 ? i + 1 : a0]);
+  }
+  const fallos = (t: number[]): number => {
+    const en = new Set<number>();
+    for (let i = 0; i < t.length; i += 3)
+      for (let e = 0; e < 3; e++) {
+        const a = t[i + e];
+        const b = t[i + ((e + 1) % 3)];
+        en.add(Math.min(a, b) * n + Math.max(a, b));
+      }
+    let f = 0;
+    for (const [a, b] of lados) if (!en.has(Math.min(a, b) * n + Math.max(a, b))) f++;
+    return f;
+  };
+  let idx = earcut(flat, huecos, 2);
+  let mal = fallos(idx);
+  for (let k = 1; mal > 0 && k <= 12; k++) {
+    const a = k * 0.37;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    const girado = flat.map((v, i) => (i % 2 ? flat[i - 1] * sn + v * c : v * c - flat[i + 1] * sn));
+    const otro = earcut(girado, huecos, 2);
+    const mOtro = fallos(otro);
+    if (mOtro < mal) {
+      idx = otro;
+      mal = mOtro;
+    }
+  }
   const at = (i: number) => [flat[i * 2], flat[i * 2 + 1], z];
 
   // earcut devuelve triángulos CCW en XY, que es justo la normal +Z.

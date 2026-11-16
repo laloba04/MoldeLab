@@ -138,7 +138,7 @@ export function medioCuelloRoscado(
  * que se imprima de pie sin soportes; los flancos del filete a 45° se sostienen
  * solos.
  */
-export function tuercaRoscada(r: number, alto: number, holgura: number, pared: number, techo: number, paso = PASO_ROSCA): Mesh {
+export function tuercaRoscada(r: number, alto: number, holgura: number, pared: number, techo: number, paso = PASO_ROSCA, hexagonal = false): Mesh {
   const m = emptyMesh();
   const nT = 72;
   const nZ = Math.max(4, Math.round((alto / paso) * 16));
@@ -155,7 +155,10 @@ export function tuercaRoscada(r: number, alto: number, holgura: number, pared: n
   };
   const O = (i: number, z: number): number[] => {
     const theta = (i / nT) * 2 * Math.PI;
-    return [exterior * Math.cos(theta), exterior * Math.sin(theta), z];
+    // Hexagonal: la pared de fuera es un hexágono cuyos lados están a `exterior`
+    // del eje (72 pasos de ángulo: las esquinas caen justo en un vértice).
+    const rr = hexagonal ? exterior / Math.cos(((((theta * 180) / Math.PI) % 60) - 30) * (Math.PI / 180)) : exterior;
+    return [rr * Math.cos(theta), rr * Math.sin(theta), z];
   };
   const sig = (i: number) => (i + 1) % nT;
 

@@ -235,6 +235,7 @@ export function Controls({ p, set, reset, view = 'all', novedades = false, hayIm
     const inicial = byId(id).inicial;
     if (inicial && id !== p.product) {
       for (const [k, v] of Object.entries(inicial)) set(k as keyof Params, v as never);
+      set('inicialDe', id);
     }
     setQuery('');
   };

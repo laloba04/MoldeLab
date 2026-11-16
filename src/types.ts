@@ -415,6 +415,15 @@ export interface Params {
   formSplitMolds: boolean;
   /** Dejar simétrica del todo una forma que lo es casi (una sola pareja de moldes). */
   formEvenOut: boolean;
+  /** Cómo se cierran las dos planchas por abajo y los lados: pinza o imanes. La tuerca va siempre (cuelga de ella). */
+  formJoin: 'pinza' | 'imanes';
+  /** Dos pinzas más para los lados. */
+  formSideClips: boolean;
+  /** Imanes: cuántos, su diámetro, su alto y la holgura del bolsillo. */
+  formMagnets: number;
+  formMagnetDia: number;
+  formMagnetH: number;
+  formMagnetClear: number;
 
   /**
    * Largo del marcapáginas, en milímetros.
@@ -628,6 +637,12 @@ export const DEFAULTS: Params = {
   formStepClearance: 0.25,
   formSplitMolds: true,
   formEvenOut: true,
+  formJoin: 'pinza',
+  formSideClips: false,
+  formMagnets: 4,
+  formMagnetDia: 6,
+  formMagnetH: 2,
+  formMagnetClear: 0.15,
   cutoutMode: 'lines',
   cutLineWidth: 2,
   cutBridges: 6,
@@ -840,6 +855,19 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   formStepClearance: { label: 'Holgura de la plancha en el escalón', unit: 'mm', min: 0, max: 1, step: 0.05 },
   formSplitMolds: { toggle: true, label: 'Moldes aparte para delante y detrás (forma asimétrica)' },
   formEvenOut: { toggle: true, label: 'Igualar una forma casi simétrica' },
+  formJoin: {
+    select: true,
+    label: 'Cierre de abajo',
+    options: [
+      { value: 'pinza', label: 'Pinza' },
+      { value: 'imanes', label: 'Imanes' },
+    ],
+  },
+  formSideClips: { toggle: true, label: 'Pinzas también en los lados' },
+  formMagnets: { label: 'Imanes', unit: '', min: 2, max: 8, step: 1 },
+  formMagnetDia: { label: 'Diámetro del imán', unit: 'mm', min: 3, max: 12, step: 0.5 },
+  formMagnetH: { label: 'Alto del imán', unit: 'mm', min: 1, max: 5, step: 0.5 },
+  formMagnetClear: { label: 'Holgura del imán', unit: 'mm', min: 0, max: 0.5, step: 0.05 },
   holePattern: {
     select: true,
     label: 'Calado de la plancha',

@@ -104,7 +104,7 @@ const THERMOFORM_GROUPS: FieldGroup[] = [
   {
     label: 'Cuello y tuerca',
     hint: 'La rosca que cierra la bola y la anilla para colgarla.',
-    fields: ['neckRadius', 'neckLength', 'threadPitch', 'capClearance', 'clipClearance', 'ringOuter', 'ringInner'],
+    fields: ['neckRadius', 'neckLength', 'threadPitch', 'capClearance', 'formJoin', 'clipClearance', 'formSideClips', 'formMagnets', 'formMagnetDia', 'formMagnetH', 'formMagnetClear', 'ringOuter', 'ringInner'],
   },
   {
     label: 'Moldes',

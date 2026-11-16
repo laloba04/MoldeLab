@@ -96,6 +96,21 @@ const moldes = (ps: Piece[]) => ps.filter((x) => x.id.startsWith('mold-')).lengt
 check('forma asimétrica: dos parejas de moldes', moldes(asim({})) === 4, `${moldes(asim({}))}`);
 check('sin «moldes aparte»: una pareja', moldes(asim({ formSplitMolds: false })) === 2, `${moldes(asim({ formSplitMolds: false }))}`);
 
+// Imanes y pinzas laterales.
+for (const forma of ['circle', 'heart', 'cloud'] as const) {
+  const im = hacer({ formJoin: 'imanes', moldShape: forma });
+  const abiertas = im.reduce((t, x) => t + aristasAbiertas(x.mesh), 0);
+  const del = pieza(im, 'sheet')!;
+  check(`imanes (${forma}): sin pinza de abajo, 4 imanes y todo cerrado`, !pieza(im, 'clip') && /4 imanes/.test(del.label) && abiertas === 0, `${del.label}, ${abiertas} aristas abiertas`);
+  const cI = caja(del.mesh), c0 = caja(pieza(hacer({ moldShape: forma }), 'sheet')!.mesh);
+  check(`imanes (${forma}): las orejitas asoman por el borde`, cI.w + cI.h > c0.w + c0.h + 3, `${(c0.w + c0.h).toFixed(1)} → ${(cI.w + cI.h).toFixed(1)}`);
+}
+const placaSin = pieza(hacer({ moldShape: 'heart' }), 'sheet')!.plate!.regions;
+const placaCon = pieza(hacer({ moldShape: 'heart', formJoin: 'imanes' }), 'sheet')!.plate!.regions;
+check('las orejitas de los imanes van unidas a la plancha (no sueltas)', placaCon.length === placaSin.length, `${placaSin.length} → ${placaCon.length} trozos`);
+const lados = hacer({ formSideClips: true });
+check('pinzas laterales: abajo + dos lados', ['clip', 'clip-izq', 'clip-der'].every((id) => !!pieza(lados, id)));
+
 const ps = hacer();
 const op = { formatos: new Set(['stl' as const]), nombre: 'p', porDefecto: 'x', separar: true, colores: { bg: '#fff', trace: '#000', text: '#f00' } };
 const soloMoldes = await armarArchivo(ps, null, { ...op, soloPiezas: 'moldes' });

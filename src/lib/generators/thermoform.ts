@@ -23,7 +23,7 @@
 
 import type { HolePattern, Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
 import { emptyMesh, cap, extrudeRegion, loft, merge } from '../mesh';
-import { offsetRegions, sanitize, subtract, union, type Region } from '../clipper';
+import { intersectRegions, offsetRegions, sanitize, subtract, union, type Region } from '../clipper';
 import { boxOf, circle, egg, heart, polygon, roundedRect, star } from '../shapes';
 import { orient, pointInPolygon } from '../polygon';
 import { fitDetailToBase, regionsOf, reliefSolids } from './catalog-parts';
@@ -289,6 +289,49 @@ function medir(pts: Pt[], p: Params): Pt[] {
 }
 
 /**
+ * Sitios para los imanes: `n` puntos repartidos por igual por el contorno,
+ * dejando libre una ventana de `ventana` mm alrededor de `arriba` (el cuello).
+ * El reparto es simétrico respecto al cuello, así que una forma simétrica tiene
+ * los imanes simétricos. Cada punto se saca `fuera` mm hacia fuera.
+ */
+function sitiosEnBorde(pts: Pt[], n: number, fuera: number, arriba: Pt, ventana: number): Pt[] {
+  if (n < 1 || pts.length < 3) return [];
+  const sentido = areaDe(pts) > 0 ? 1 : -1;
+  const lados: { a: Pt; b: Pt; l: number; t0: number }[] = [];
+  let total = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    lados.push({ a, b, l, t0: total });
+    total += l;
+  }
+  // Dónde cae el cuello en el recorrido: el punto del contorno más cerca de `arriba`.
+  let tArriba = 0;
+  let mejor = Infinity;
+  for (const { a, b, l, t0 } of lados) {
+    const u = l ? Math.max(0, Math.min(1, ((arriba[0] - a[0]) * (b[0] - a[0]) + (arriba[1] - a[1]) * (b[1] - a[1])) / (l * l))) : 0;
+    const d = Math.hypot(a[0] + (b[0] - a[0]) * u - arriba[0], a[1] + (b[1] - a[1]) * u - arriba[1]);
+    if (d < mejor) {
+      mejor = d;
+      tArriba = t0 + u * l;
+    }
+  }
+  const util = Math.max(1, total - ventana);
+  const out: Pt[] = [];
+  for (let k = 0; k < n; k++) {
+    const t = (tArriba + ventana / 2 + ((k + 0.5) * util) / n) % total;
+    const lado = lados.find((x) => x.t0 + x.l >= t) ?? lados[lados.length - 1];
+    const { a, b, l, t0 } = lado;
+    const u = l ? (t - t0) / l : 0;
+    const nx = (sentido * (b[1] - a[1])) / (l || 1);
+    const ny = (sentido * -(b[0] - a[0])) / (l || 1);
+    out.push([a[0] + (b[0] - a[0]) * u + nx * fuera, a[1] + (b[1] - a[1]) * u + ny * fuera]);
+  }
+  return out;
+}
+
+/**
  * La envolvente convexa de unos puntos: la goma elástica que los rodea.
  * Cadena monótona de Andrew, en sentido antihorario.
  */
@@ -527,7 +570,33 @@ export function buildThermoform(
   const sinDibujo =
     p.holesOnDesign || !zonaDibujo.length ? util : subtract(util, zonaDibujo);
   const agujeros = calado(p.holePattern, sinDibujo, Math.max(1, p.holeSpacing), Math.max(0.3, p.holeWall));
-  const planchaReg = agujeros.length ? subtract(plano, agujeros) : plano;
+  const planchaLlena = agujeros.length ? subtract(plano, agujeros) : plano;
+
+  // --- Imanes ------------------------------------------------------------------
+  //
+  // Cada imán va en una orejita redonda pegada al borde, por fuera de la forma:
+  // el borde plano mide 2–3 mm y un imán de 6 no cabe en él. El bolsillo se abre
+  // por la cara plana (la que va contra la otra plancha) y el techo se tiende
+  // como un puente. Las de la trasera salen en espejo con la plancha, así que al
+  // juntarlas cada imán queda frente al suyo. Lejos del cuello, que ahí va la tuerca.
+  const conImanes = p.formBack && p.formJoin === 'imanes';
+  const rIman = Math.max(1, (p.formMagnetDia ?? 6) / 2 + (p.formMagnetClear ?? 0.15));
+  const rOreja = rIman + 1.2;
+  const altoOreja = Math.max(grosor + 0.4, (p.formMagnetH ?? 2) + (p.formMagnetClear ?? 0.15) + 0.6);
+  // El centro del imán un pelo por fuera del borde y la orejita solapando 1,6 mm la plancha.
+  const sitiosIman = conImanes ? sitiosEnBorde(outer, Math.round(p.formMagnets ?? 4), rOreja - 1.6, [cx, caja.maxY], 2 * (rCuello + rOreja + 4)) : [];
+  const orejas = sitiosIman.length ? sanitize(sitiosIman.map(([x, y]) => circle(x, y, rOreja, 40)), []) : [];
+  const bolsillos = sitiosIman.length ? sanitize(sitiosIman.map(([x, y]) => circle(x, y, rIman, 40)), []) : [];
+  const conOrejas = orejas.length ? union(planchaLlena, orejas) : planchaLlena;
+  const planchaReg = bolsillos.length ? subtract(conOrejas, bolsillos) : conOrejas;
+  // El aro alrededor del imán y, encima, el techo del bolsillo.
+  const techoIman = 0.6;
+  const orejasAltas = sitiosIman.length
+    ? merge(
+        solid(sitiosIman.map(([x, y]) => ({ outer: circle(x, y, rOreja, 40), holes: [rev(circle(x, y, rIman, 40))] })), grosor - 0.01, altoOreja - techoIman),
+        solid(orejas, altoOreja - techoIman - 0.01, altoOreja),
+      )
+    : emptyMesh();
 
   // El medio cuello nace del borde de arriba, centrado. Va FUERA de la cúpula:
   // lo de dentro se abomba, y un cuello torcido no se puede tapar.
@@ -558,7 +627,7 @@ export function buildThermoform(
   const anillo = subtract(plano, offsetRegions([outer], [], -reborde));
   const rebordeMalla = anillo.length && rebordeAlto > 0 ? solid(anillo, grosor - 0.01, grosor + rebordeAlto) : emptyMesh();
 
-  const cuerpo = prensar(merge(solid(planchaReg, 0, grosor), cuello));
+  const cuerpo = prensar(merge(solid(planchaReg, 0, grosor), cuello, orejasAltas));
   const partes = [rebordeMalla, ...relieve].filter((m) => m.positions.length).map(prensar);
   const capaNombre = relieveNombre ? prensar(relieveNombre) : undefined;
   const overlay = merge(...partes);
@@ -576,7 +645,7 @@ export function buildThermoform(
     ? prensarTrasera(solid(espejoRegs(anillo), grosor - 0.01, grosor + Math.max(0.01, rebordeAlto)))
     : emptyMesh();
   const trasera = merge(
-    prensarTrasera(merge(solid(espejoRegs(planchaReg), 0, grosor), cuelloTrasera)),
+    prensarTrasera(merge(solid(espejoRegs(planchaReg), 0, grosor), cuelloTrasera, orejasAltas.positions.length ? espejoMalla(orejasAltas) : emptyMesh())),
     rebordeTrasera,
   );
 
@@ -589,7 +658,7 @@ export function buildThermoform(
   if (delantera.positions.length) {
     piezas.push({
       id: 'sheet',
-      label: 'Plancha delantera',
+      label: sitiosIman.length ? `Plancha delantera (${sitiosIman.length} imanes de ${p.formMagnetDia}×${p.formMagnetH} mm)` : 'Plancha delantera',
       role: 'icing',
       mesh: delantera,
       plate: placa,
@@ -643,14 +712,27 @@ export function buildThermoform(
     // La pinza, mordiendo los dos bordes juntos por abajo (ver `pinza`).
     const hondo = Math.max(1, reborde - 0.4);
     const fondo = hondo + 1.6;
-    piezas.push({
-      id: 'clip',
-      label: 'Pinza (cierra por abajo)',
-      role: 'body',
-      mesh: pinza(grosor, reborde, p.clipClearance ?? 0.2),
-      noMark: true,
-      montaje: [0, 0, 1, cx - 3.5, 0, 1, 0, caja.minY - (fondo / 2 - hondo), -1, 0, 0, sube],
-    });
+    const mallaPinza = pinza(grosor, reborde, p.clipClearance ?? 0.2);
+    if (!conImanes)
+      piezas.push({
+        id: 'clip',
+        label: 'Pinza (cierra por abajo)',
+        role: 'body',
+        mesh: mallaPinza,
+        noMark: true,
+        montaje: [0, 0, 1, cx - 3.5, 0, 1, 0, caja.minY - (fondo / 2 - hondo), -1, 0, 0, sube],
+      });
+    // Las de los lados, mordiendo el borde a media altura (en el visor van a un lado).
+    if (p.formSideClips)
+      for (const [lado, sx] of [['izquierda', -1], ['derecha', 1]] as const)
+        piezas.push({
+          id: `clip-${lado === 'izquierda' ? 'izq' : 'der'}`,
+          label: `Pinza del lado (${lado})`,
+          role: 'body',
+          mesh: mallaPinza,
+          noMark: true,
+          montaje: [0, 1, 0, cx + sx * (caja.w / 2 + fondo / 2 - hondo), 0, 0, 1, cy, sx, 0, 0, sube],
+        });
   }
 
   // --- Los dos moldes --------------------------------------------------------
@@ -716,7 +798,7 @@ export function buildThermoform(
   const ranura = roundedRect(cx, yNace + ranuraLargo / 2, rCrestas * 2, ranuraLargo, 0);
   // La plancha se apoya entera en el escalón, relleno de la muesca incluido.
   const escalon = union(
-    offsetRegions([outer], [], Math.max(0.01, p.formStepClearance ?? 0.25)),
+    orejas.length ? union(offsetRegions([outer], [], Math.max(0.01, p.formStepClearance ?? 0.25)), offsetRegions(orejas.map((r) => r.outer), [], 0.4)) : offsetRegions([outer], [], Math.max(0.01, p.formStepClearance ?? 0.25)),
     union(offsetRegions([relleno], [], Math.max(0.01, p.formStepClearance ?? 0.25)), sanitize([ranura], [])),
   );
 
@@ -728,8 +810,24 @@ export function buildThermoform(
   // —la misma deformación, hacia abajo—, y encima el anillo del escalón.
   const domoBoca = domeOf(boca, alto + hueco);
   const borde = suelo + alto + hueco;
+  // Las orejitas de los imanes entran en el cuenco con la plancha boca abajo:
+  // se les abre un hueco hondo en la pared. Se abren en su sitio y en su espejo,
+  // así el mismo cuenco vale para la delantera y la trasera.
+  const huecoOrejas = orejas.length
+    ? offsetRegions(
+        [...orejas.map((r) => r.outer), ...espejoRegs(orejas).map((r) => r.outer)],
+        [],
+        0.4,
+      )
+    : [];
+  const zOrejas = Math.max(0.8, borde - (altoOreja - grosor) - 0.4);
+  const bloqueSinOrejas = huecoOrejas.length ? subtract(bloque, huecoOrejas) : bloque;
+  const fondoOrejas = huecoOrejas.length
+    ? solid(intersectRegions(bloque, huecoOrejas), 0, zOrejas)
+    : emptyMesh();
   const hembra = merge(
-    abombar(solid(bloque, 0, borde), domoBoca, 3, { desde: borde, signo: -1 }),
+    abombar(solid(bloqueSinOrejas, 0, borde), domoBoca, 3, { desde: borde, signo: -1 }),
+    fondoOrejas,
     solid(subtract(bloque, escalon), borde - 0.01, borde + grosor),
   );
 

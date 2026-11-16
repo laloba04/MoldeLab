@@ -73,6 +73,8 @@ function sirve(f: Field, p: Params, campos: Field[], hayImagen: boolean): boolea
   }
   // El alto fijo solo con «ancho y alto fijos»; los ajustes de molde, solo con molde.
   if (f === 'formFixedH') return p.formSizeBy === 'fijo';
+  if (f === 'formMagnets' || f === 'formMagnetDia' || f === 'formMagnetH' || f === 'formMagnetClear') return p.formJoin === 'imanes';
+  if (f === 'clipClearance') return p.formJoin !== 'imanes' || !!p.formSideClips;
   if (['formSplitMolds', 'formEvenOut', 'formClearance', 'formStepClearance', 'formWall', 'formFloor', 'formMaleBase'].includes(f) && p.product === 'thermoform')
     return p.formMold;
   // Lo que se corre cada fila solo cuenta colocando en diagonal.

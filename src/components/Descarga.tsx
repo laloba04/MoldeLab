@@ -13,6 +13,10 @@ export interface DescargaProps {
   variasPiezas: boolean;
   separar: boolean;
   setSeparar: (v: boolean) => void;
+  /** Termoformado: un 3MF por placa en la carpeta «placas». */
+  hayPlacas: boolean;
+  porPlacas: boolean;
+  setPorPlacas: (v: boolean) => void;
   slicer: Slicer;
   setSlicer: (v: Slicer) => void;
   enviando: boolean;
@@ -78,6 +82,14 @@ export function Descarga(d: DescargaProps) {
             <input type="checkbox" checked={d.separar} onChange={(e) => d.setSeparar(e.target.checked)} />
             <span />
             Separar las piezas en la cama
+          </label>
+        )}
+
+        {d.hayPlacas && d.formatos.has('3mf') && (
+          <label className="toggle">
+            <input type="checkbox" checked={d.porPlacas} onChange={(e) => d.setPorPlacas(e.target.checked)} />
+            <span />
+            Un 3MF por placa (planchas, tuerca y pinza, cada molde)
           </label>
         )}
 

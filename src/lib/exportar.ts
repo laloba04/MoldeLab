@@ -31,6 +31,33 @@ export interface OpcionesArchivo {
   colores: { bg: string; trace: string; text: string };
   /** Color pintado a mano de cada zona (o nada, con «todo de un color»). */
   zona?: (pieceId: string, zone: string) => string | undefined;
+  /**
+   * Termoformado: además del archivo con todo, una carpeta `placas/` con un 3MF
+   * por placa de impresión, para laminar sin recolocar nada.
+   */
+  porPlacas?: boolean;
+}
+
+/**
+ * A qué placa va cada pieza del termoformado: las planchas juntas, la tuerca y
+ * la pinza juntas, y cada molde en la suya (son grandes y de otro material).
+ * Las piezas de otros productos no tienen placa.
+ */
+export function placaDe(id: string): string | null {
+  if (id === 'sheet' || id === 'sheet-back') return 'planchas';
+  if (id === 'cap' || id === 'clip') return 'tuerca-y-pinza';
+  if (id.startsWith('mold-')) return id.replace('mold-down', 'molde-abajo').replace('mold-up', 'molde-arriba');
+  return null;
+}
+
+/** Las piezas agrupadas por placa, en orden. Vacío si el producto no las tiene. */
+export function placasDe(piezas: Piece[]): Map<string, Piece[]> {
+  const grupos = new Map<string, Piece[]>();
+  for (const pc of piezas) {
+    const g = placaDe(pc.id);
+    if (g) grupos.set(g, [...(grupos.get(g) ?? []), pc]);
+  }
+  return grupos;
 }
 
 /** Arma el archivo. `null` si no hay nada que guardar. */
@@ -49,6 +76,12 @@ export async function armarArchivo(
   };
 
   if (o.formatos.has('3mf')) await add(`${name}.3mf`, to3mf(forExport, { ...o.colores, zone: o.zona }));
+  if (o.formatos.has('3mf') && o.porPlacas) {
+    const placas = placasDe(piezas);
+    if (placas.size > 1)
+      for (const [g, ps] of placas)
+        await add(`placas/${name}-placa-${g}.3mf`, to3mf(spreadPieces(ps), { ...o.colores, zone: o.zona }));
+  }
   if (o.formatos.has('obj')) await add(`${name}.obj`, toObj(forExport.map((p) => ({ name: p.label, mesh: p.mesh }))));
   if (o.formatos.has('svg') && silueta) await add(`${name}.svg`, toSvg(silueta.loops));
   if (o.formatos.has('stl')) {

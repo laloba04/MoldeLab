@@ -11,7 +11,7 @@ import { FONT_STYLES, fontCss, type FontStyle } from './lib/font';
 import { triangleCount } from './lib/mesh';
 import { TEMPLATES, templatePreview, templateToBlob, type Template } from './lib/templates';
 import { openInSlicer, SLICERS, uploadForSlicer, type Slicer } from './lib/cloud';
-import { armarArchivo, medidas, type Fmt } from './lib/exportar';
+import { armarArchivo, medidas, placasDe, type Fmt } from './lib/exportar';
 import { tiradorAnilla, tiradorTexto } from './lib/tiradores';
 import { loadSession, saveSession } from './lib/session';
 import { watchForUpdates } from './lib/version';
@@ -79,6 +79,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   const [dlFmts, setDlFmts] = useState<Set<Fmt>>(new Set<Fmt>(['3mf']));
   const [dlName, setDlName] = useState('');
   const [separate, setSeparate] = useState(true);
+  const [porPlacas, setPorPlacas] = useState(true);
   const [slicer, setSlicer] = useState<Slicer>('bambu');
   const [sending, setSending] = useState(false);
 
@@ -414,6 +415,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       nombre: dlName,
       porDefecto,
       separar: separate,
+      porPlacas,
       colores: { bg: bgColor, trace: traceColor, text: textColor },
       // Sin «todo de un color», las zonas pintadas a mano viajan al archivo.
       zona: oneColor ? undefined : colorOf,
@@ -695,6 +697,9 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
           variasPiezas={pieces.length > 1}
           separar={separate}
           setSeparar={setSeparate}
+          hayPlacas={placasDe(marked).size > 1}
+          porPlacas={porPlacas}
+          setPorPlacas={setPorPlacas}
           slicer={slicer}
           setSlicer={setSlicer}
           enviando={sending}

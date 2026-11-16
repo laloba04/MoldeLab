@@ -4,6 +4,7 @@
  */
 
 import { unzipSync } from 'fflate';
+const strToU8Vacio = new TextEncoder().encode('{}');
 import { buildProduct } from '../src/lib/catalog';
 import { armarArchivo, placaDe, placasDe } from '../src/lib/exportar';
 import { planBambu } from '../src/lib/bambu';
@@ -36,7 +37,26 @@ check('una pieza de otro producto no tiene placa', placaDe('base') === null);
 const colores = { bg: '#ffffff', trace: '#000000', text: '#ff0000' };
 const base = { formatos: new Set(['3mf' as const]), nombre: 'prueba', porDefecto: 'x', separar: true, colores };
 
-const con = await armarArchivo(piezas, null, { ...base, porPlacas: true });
+// Perfiles de mentira (los de verdad se bajan de Bambu al descargar): una
+// cadena con herencia e inclusión, como la de Bambu, para probar el aplanado.
+const falsos: Record<string, Record<string, unknown>> = {
+  'machine/fdm_machine_common': { name: 'fdm_machine_common', printable_height: '250', nozzle_diameter: ['0.4'] },
+  'machine/Bambu Lab A1 0.4 nozzle': { name: 'Bambu Lab A1 0.4 nozzle', inherits: 'fdm_machine_common', include: ['Bambu Lab A1 0.4 nozzle template machine_start_gcode'], printable_area: ['0x0', '256x0', '256x256', '0x256'], printable_height: '256', setting_id: 'GM030' },
+  'machine/Bambu Lab A1 0.4 nozzle template machine_start_gcode': { name: 'x', machine_start_gcode: 'G28 ; prueba' },
+  'process/0.20mm Standard @BBL A1': { name: '0.20mm Standard @BBL A1', layer_height: '0.2', compatible_printers: ['Bambu Lab A1 0.4 nozzle'] },
+  'filament/Bambu PLA Basic @BBL A1': { name: 'Bambu PLA Basic @BBL A1', filament_type: ['PLA'], nozzle_temperature: ['220'] },
+};
+const leerFalso = async (t: string, n: string) => {
+  const p = falsos[`${t}/${n}`];
+  if (!p) throw new Error(`falta ${t}/${n}`);
+  return p;
+};
+const con = await armarArchivo(piezas, null, { ...base, porPlacas: true, leerPerfil: leerFalso });
+const sinPerfiles = await armarArchivo(piezas, null, { ...base, porPlacas: true, leerPerfil: async () => { throw new Error('sin red'); } });
+if (sinPerfiles) {
+  const zz = unzipSync(new Uint8Array(await sinPerfiles.blob.arrayBuffer()));
+  check('sin poder bajar los perfiles, sale el 3MF estándar (que sí abre)', !Object.keys(zz).some((k) => k.startsWith('Metadata/')));
+}
 const sin = await armarArchivo(piezas, null, { ...base, porPlacas: false });
 check('sin placas sale un solo 3MF estándar', !!sin && sin.outName === 'prueba.3mf');
 check('con placas sale también UN solo .3mf (no un ZIP)', !!con && con.outName === 'prueba.3mf');
@@ -58,6 +78,13 @@ if (con && sin) {
   check('cada parte existe como objeto', componentes.every((c) => objetos.has(c)));
   check('cada parte tiene su filamento', [...cfg.matchAll(/<part id/g)].length === componentes.length && /key="extruder" value="\d+"/.test(cfg));
   check('dice que es de Bambu Studio (si no, no lee las placas)', /BambuStudio/.test(modelo));
+  check('dice la versión del taller (2.9.1.70), no una antigua', /BambuStudio-02\.09\.01\.70/.test(modelo));
+  const ajustes = JSON.parse(new TextDecoder().decode(z['Metadata/project_settings.config'] ?? strToU8Vacio));
+  check('lleva los ajustes del proyecto con la A1', ajustes.printer_settings_id === 'Bambu Lab A1 0.4 nozzle' && ajustes.print_settings_id === '0.20mm Standard @BBL A1');
+  check('con el G-code de inicio y la cama del perfil (aplanando herencia e inclusiones)', ajustes.machine_start_gcode === 'G28 ; prueba' && ajustes.printable_height === '256' && ajustes.nozzle_diameter?.[0] === '0.4');
+  const nFil = (cfg.match(/key="extruder" value="(\d+)"/g) ?? []).map((x) => Number(/(\d+)"$/.exec(x)![1])).reduce((a, b) => Math.max(a, b), 0);
+  check('un filamento por color, con su color', ajustes.filament_colour.length === nFil && ajustes.filament_settings_id.length === nFil && ajustes.filament_type.length === nFil, `${nFil} filamentos`);
+  check('sin datos internos del perfil (herencia, ids, compatibles)', !('inherits' in ajustes) && !('setting_id' in ajustes) && !('compatible_printers' in ajustes));
 }
 
 // Las partes: cerradas y bien colocadas en su placa.

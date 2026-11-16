@@ -10,7 +10,8 @@ import type { Piece, Silhouette } from '../types';
 import { toStl } from './stl';
 import { toObj, toSvg, zipFiles } from './formats';
 import { to3mf } from './threemf';
-import { toBambu3mf } from './bambu';
+import { planBambu, toBambu3mf } from './bambu';
+import { ajustesProyecto, leerDeBambu, type Leer } from './bambuPerfiles';
 import { dropToBed, spreadPieces } from './layout';
 
 export type Fmt = '3mf' | 'stl' | 'obj' | 'svg';
@@ -37,6 +38,8 @@ export interface OpcionesArchivo {
    * y clip, cada molde). Sin esto, 3MF estándar con todo en una placa.
    */
   porPlacas?: boolean;
+  /** Para los tests: de dónde leer los perfiles de Bambu (por defecto, su repositorio). */
+  leerPerfil?: Leer;
   /** Termoformado: bajar todo, solo las planchas (con tuerca y pinza) o solo los moldes. */
   soloPiezas?: 'todas' | 'planchas' | 'moldes';
 }
@@ -85,10 +88,20 @@ export async function armarArchivo(
     // una placa, la tuerca y el clip en otra y cada molde en la suya. Si no, el
     // 3MF estándar con los colores pintados.
     const placas = o.porPlacas ? placasDe(piezas) : new Map<string, Piece[]>();
-    await add(
-      `${name}.3mf`,
-      placas.size > 1 ? toBambu3mf(placas, { ...o.colores, zone: o.zona }) : to3mf(forExport, { ...o.colores, zone: o.zona }),
-    );
+    let hecho = false;
+    if (placas.size > 1) {
+      // Los ajustes del proyecto (A1) se bajan de los perfiles oficiales de Bambu.
+      // Sin ellos Bambu ignora las placas: si no se pueden bajar, 3MF estándar.
+      try {
+        const colores = planBambu(placas, { ...o.colores, zone: o.zona }).filamentos;
+        const json = await ajustesProyecto(o.leerPerfil ?? leerDeBambu, colores);
+        await add(`${name}.3mf`, toBambu3mf(placas, { ...o.colores, zone: o.zona }, () => json));
+        hecho = true;
+      } catch (e) {
+        console.warn('Sin ajustes de Bambu; sale el 3MF estándar.', e);
+      }
+    }
+    if (!hecho) await add(`${name}.3mf`, to3mf(forExport, { ...o.colores, zone: o.zona }));
   }
   if (o.formatos.has('obj')) await add(`${name}.obj`, toObj(forExport.map((p) => ({ name: p.label, mesh: p.mesh }))));
   if (o.formatos.has('svg') && silueta) await add(`${name}.svg`, toSvg(silueta.loops));

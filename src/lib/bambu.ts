@@ -18,6 +18,7 @@
 import { zipSync, strToU8 } from 'fflate';
 import type { Piece } from '../types';
 import { spreadPieces } from './layout';
+import { VERSION_BAMBU } from './bambuPerfiles';
 
 const CAMA = 256;
 const PASO_PLACA = CAMA * 1.2;
@@ -163,7 +164,7 @@ export function planBambu(grupos: Map<string, Piece[]>, c: ColoresBambu): PlanBa
 }
 
 /** El archivo: un solo .3mf de proyecto con sus placas. */
-export function toBambu3mf(grupos: Map<string, Piece[]>, c: ColoresBambu): Blob {
+export function toBambu3mf(grupos: Map<string, Piece[]>, c: ColoresBambu, ajustes?: (filamentos: string[]) => string): Blob {
   const plan = planBambu(grupos, c);
   const recursos: string[] = [];
   const build: string[] = [];
@@ -201,18 +202,18 @@ export function toBambu3mf(grupos: Map<string, Piece[]>, c: ColoresBambu): Blob 
       );
     }
     placasCfg.push(
-      `<plate><metadata key="plater_id" value="${k + 1}"/><metadata key="plater_name" value="${xml(nombrePlaca(placa.nombre))}"/><metadata key="locked" value="false"/>${instancias.join('')}</plate>`,
+      `<plate><metadata key="plater_id" value="${k + 1}"/><metadata key="plater_name" value="${xml(nombrePlaca(placa.nombre))}"/><metadata key="locked" value="false"/><metadata key="filament_map_mode" value="Auto For Flush"/>${instancias.join('')}</plate>`,
     );
   });
 
   const model =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<model unit="millimeter" xml:lang="es-ES" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021">` +
-    `<metadata name="Application">BambuStudio-02.00.00.95</metadata>` +
+    `<metadata name="Application">BambuStudio-${VERSION_BAMBU}</metadata>` +
     `<metadata name="BambuStudio:3mfVersion">1</metadata>` +
     `<metadata name="Title">MoldeLab</metadata>` +
     `<resources>${recursos.join('')}</resources><build>${build.join('')}</build></model>`;
-  const ajustes = `<?xml version="1.0" encoding="UTF-8"?><config>${config.join('')}${placasCfg.join('')}</config>`;
+  const ajustesXml = `<?xml version="1.0" encoding="UTF-8"?><config>${config.join('')}${placasCfg.join('')}</config>`;
   const contentTypes =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
@@ -230,7 +231,12 @@ export function toBambu3mf(grupos: Map<string, Piece[]>, c: ColoresBambu): Blob 
       '[Content_Types].xml': strToU8(contentTypes),
       '_rels/.rels': strToU8(rels),
       '3D/3dmodel.model': strToU8(model),
-      'Metadata/model_settings.config': strToU8(ajustes),
+      'Metadata/model_settings.config': strToU8(ajustesXml),
+      // Como los guarda Bambu: quién y con qué versión.
+      'Metadata/slice_info.config': strToU8(
+        `<?xml version="1.0" encoding="UTF-8"?><config><header><header_item key="X-BBL-Client-Type" value="slicer"/><header_item key="X-BBL-Client-Version" value="${VERSION_BAMBU}"/></header></config>`,
+      ),
+      ...(ajustes ? { 'Metadata/project_settings.config': strToU8(ajustes(plan.filamentos)) } : {}),
     },
     { level: 6 },
   );

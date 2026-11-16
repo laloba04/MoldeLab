@@ -75,7 +75,8 @@ const loops: Loop[] = [{ pts: circ(64, 20), hole: false }];
 const detalle: Loop[] = [{ pts: [[-12, -4], [12, -4], [12, 4], [-12, 4]] as Pt[], hole: false }];
 const sil = { loops, detail: detalle, widthMm: 40, heightMm: 40 };
 const INICIAL = byId('thermoform2').inicial ?? {};
-const P = (extra: Partial<Params> = {}): Params => ({ ...DEFAULTS, product: 'thermoform2', ...INICIAL, ...extra });
+// Los tests de la malla dibujada la piden a propósito (por defecto la hace el laminador).
+const P = (extra: Partial<Params> = {}): Params => ({ ...DEFAULTS, product: 'thermoform2', ...INICIAL, formLatticeBySlicer: false, ...extra });
 const hacer = (extra: Partial<Params> = {}): Piece[] => buildProduct(sil, P(extra));
 const pieza = (ps: Piece[], id: string) => ps.find((x) => x.id === id);
 const abiertasDe = (ps: Piece[]) => ps.reduce((t, x) => t + aristasAbiertas(x.mesh), 0);
@@ -249,6 +250,8 @@ check('al abrir en Bambu: un .3mf con 4 placas (mallas, tuerca y clip, cada mold
 
 // --- Como en las fotos: malla trenzada y tuerca hexagonal ---------------------------
 check('la malla sale trenzada por defecto', INICIAL.holePattern === 'weave');
+check('por defecto la malla la hace el laminador (como el kit), al 25 %', INICIAL.formLatticeBySlicer === true && INICIAL.formSlicerDensity === 25);
+check('y por defecto la plancha sale maciza', volumen(pieza(buildProduct(sil, { ...DEFAULTS, product: 'thermoform2', ...INICIAL } as Params), 'sheet')!.mesh) > volumen(pieza(hacer(), 'sheet')!.mesh) * 1.2);
 const tren = hacer({ moldShape: 'bear' });
 check('malla trenzada: todo cerrado', abiertasDe(tren) === 0, `${abiertasDe(tren)}`);
 check('la malla trenzada tiene agujeros', volumen(pieza(tren, 'sheet')!.mesh) < volumen(pieza(hacer({ moldShape: 'bear', formLatticeBySlicer: true }), 'sheet')!.mesh) * 0.9);

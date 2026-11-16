@@ -545,6 +545,9 @@ export const PRODUCTS: Entry[] = [
       formColorNut: '#1f1f24',
       formColorMold: '#9aa0a8',
       holePattern: 'weave',
+      // Como el kit de las fotos: la malla la hace Bambu (0 capas arriba y abajo, giroide).
+      formLatticeBySlicer: true,
+      formSlicerDensity: 25,
       holeSpacing: 4,
       holeWall: 0.8,
       formProfile: 'suave',

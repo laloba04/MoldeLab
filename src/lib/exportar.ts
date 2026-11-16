@@ -36,6 +36,8 @@ export interface OpcionesArchivo {
    * por placa de impresión, para laminar sin recolocar nada.
    */
   porPlacas?: boolean;
+  /** Termoformado: bajar todo, solo las planchas (con tuerca y pinza) o solo los moldes. */
+  soloPiezas?: 'todas' | 'planchas' | 'moldes';
 }
 
 /**
@@ -66,6 +68,8 @@ export async function armarArchivo(
   silueta: Silhouette | null,
   o: OpcionesArchivo,
 ): Promise<{ blob: Blob; outName: string } | null> {
+  if (o.soloPiezas === 'planchas') piezas = piezas.filter((pc) => !pc.id.startsWith('mold-'));
+  else if (o.soloPiezas === 'moldes') piezas = piezas.filter((pc) => pc.id.startsWith('mold-'));
   if (!piezas.length || !o.formatos.size) return null;
   const name = (o.nombre.trim() || o.porDefecto).replace(/[^\w-]+/g, '_').slice(0, 40) || 'moldelab';
   const forExport = o.separar ? spreadPieces(piezas) : dropToBed(piezas);

@@ -71,6 +71,10 @@ function sirve(f: Field, p: Params, campos: Field[], hayImagen: boolean): boolea
   if ((f === 'textScale' || f === 'textX' || f === 'textY') && campos.includes('textX')) {
     return hayImagen;
   }
+  // El alto fijo solo con «ancho y alto fijos»; los ajustes de molde, solo con molde.
+  if (f === 'formFixedH') return p.formSizeBy === 'fijo';
+  if (['formSplitMolds', 'formEvenOut', 'formClearance', 'formStepClearance', 'formWall', 'formFloor', 'formMaleBase'].includes(f) && p.product === 'thermoform')
+    return p.formMold;
   // Lo que se corre cada fila solo cuenta colocando en diagonal.
   if (f === 'rollerShift') return p.rollerLayout === 'diagonal';
   // Con solo el mango no hay dibujo que colocar.

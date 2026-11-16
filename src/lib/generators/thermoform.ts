@@ -29,6 +29,7 @@ import { orient, pointInPolygon } from '../polygon';
 import { fitDetailToBase, regionsOf, reliefSolids } from './catalog-parts';
 import { abombar, domeOf } from '../dome';
 import { FONDO_ROSCA, medioCuelloRoscado, tuercaRoscada } from './rosca';
+import { esFigura, figura, PROPORCION } from '../figuras';
 
 /** Lo que el reborde de la plancha sobresale por encima de ella. */
 const REBORDE_ALTO = 0.6;
@@ -163,11 +164,11 @@ function girarX(m: Mesh, dx: number, dy: number, dz: number): Mesh {
  * La tuerca que cierra el adorno por arriba: se enrosca en el cuello y sujeta
  * las dos mitades. Lleva encima el ojal por donde pasa el cordón.
  */
-function tuerca(r: number, alto: number, holgura: number, ojo: number, ojoHueco: number): Mesh {
+function tuerca(r: number, alto: number, holgura: number, ojo: number, ojoHueco: number, paso = 2): Mesh {
   const techo = 1.5;
   // Un pelo menos que lo que asoma el cuello, para que llegue a apretar.
   const hueco = Math.max(2, alto - 0.5);
-  const cuerpo = tuercaRoscada(r, hueco, holgura, 1.6, techo);
+  const cuerpo = tuercaRoscada(r, hueco, holgura, 1.6, techo, paso);
 
   // El ojal: un aro de pie encima del techo, con el agujero horizontal. Se
   // monta tumbado y se pone de pie con el giro.
@@ -187,8 +188,8 @@ function tuerca(r: number, alto: number, holgura: number, ojo: number, ojoHueco:
  * La ranura mide lo que las dos planchas juntas más un pelo, y no más honda que
  * el borde plano: si llegara a la cúpula, la aplastaría.
  */
-function pinza(grosor: number, reborde: number): Mesh {
-  const ranura = grosor * 2 + 0.2;
+function pinza(grosor: number, reborde: number, holgura = 0.2): Mesh {
+  const ranura = grosor * 2 + holgura;
   const hondo = Math.max(1, reborde - 0.4);
   const pared = 1.6;
   const ancho = ranura + pared * 2;
@@ -223,6 +224,7 @@ function formaDelAdorno(
   silueta: Loop[],
 ): Pt[] {
   const a = Math.max(10, ancho);
+  if (esFigura(forma)) return figura(forma, cx, cy, a, a * PROPORCION[forma]);
   switch (forma) {
     case 'heart':
       return corazonRedondo(cx, cy, a);
@@ -270,6 +272,20 @@ function formaDelAdorno(
     default:
       return circle(cx, cy, a / 2, 96);
   }
+}
+
+/**
+ * El tamaño de la forma según «El tamaño mide»: con «el alto», el Tamaño es la
+ * altura y el ancho sale de la proporción; con «fijos», se estira a ancho y
+ * alto. Con «el ancho» no cambia nada (es como venía saliendo).
+ */
+function medir(pts: Pt[], p: Params): Pt[] {
+  const modo = p.formSizeBy ?? 'ancho';
+  if (modo === 'ancho' || pts.length < 3) return pts;
+  const b = boxOf([{ pts, hole: false }]);
+  const sy = (modo === 'alto' ? p.targetWidthMm : p.formFixedH) / Math.max(b.h, 1e-6);
+  const sx = modo === 'alto' ? sy : p.targetWidthMm / Math.max(b.w, 1e-6);
+  return pts.map(([x, y]) => [b.cx + (x - b.cx) * sx, b.cy + (y - b.cy) * sy] as Pt);
 }
 
 /**
@@ -367,7 +383,7 @@ export function buildThermoform(
   const principal = base.reduce((a, r) =>
     Math.abs(areaDe(r.outer)) > Math.abs(areaDe(a.outer)) ? r : a,
   );
-  const outer = casiSimetrica(principal.outer);
+  const outer = medir(p.formEvenOut === false ? principal.outer : casiSimetrica(principal.outer), p);
   const caja = boxOf([{ pts: outer, hole: false }]);
   const cx = caja.cx;
   const cy = caja.cy;
@@ -405,7 +421,8 @@ export function buildThermoform(
   //
   // Y donde está el relleno de la muesca tampoco. Solo ahí, con un margen: un
   // corte más largo dejaba una zanja plana por la cúpula.
-  const reborde = Math.max(2.5, p.holeWall * 3);
+  const reborde = Math.max(1.5, p.formRimWidth ?? 2.5);
+  const rebordeAlto = Math.max(0, p.formRimHeight ?? REBORDE_ALTO);
   const sitioCuello = offsetRegions([relleno], [], 1.5);
   const cupulaOuter =
     subtract(offsetRegions([outer], [], -reborde), sitioCuello).reduce<Pt[] | null>(
@@ -521,8 +538,9 @@ export function buildThermoform(
   // Rosca SOLO en lo que asoma, que es donde se enrosca la tuerca. El tramo que
   // cruza la muesca va liso: roscado entero salía un tornillo larguísimo.
   const liso = caja.maxY - yNace; // lo que va metido en el relleno
-  const cuello = medioCuelloRoscado(cx, yNace, rCuello, largoCuello, 0, liso);
-  const cuelloTrasera = medioCuelloRoscado(cx, yNace, rCuello, largoCuello, 0.5, liso);
+  const paso = Math.max(0.5, p.threadPitch ?? 2);
+  const cuello = medioCuelloRoscado(cx, yNace, rCuello, largoCuello, 0, liso, paso);
+  const cuelloTrasera = medioCuelloRoscado(cx, yNace, rCuello, largoCuello, 0.5, liso, paso);
 
   const relieve = reliefSolids(dibujo, p, grosor - 0.01, p.reliefHeight, [outer]);
   const relieveNombre = nombre.length
@@ -538,7 +556,7 @@ export function buildThermoform(
   // fuerte justo donde se agarra al prensar. Es una zona aparte, así que se
   // puede pintar de otro color, como en la de Formify.
   const anillo = subtract(plano, offsetRegions([outer], [], -reborde));
-  const rebordeMalla = anillo.length ? solid(anillo, grosor - 0.01, grosor + REBORDE_ALTO) : emptyMesh();
+  const rebordeMalla = anillo.length && rebordeAlto > 0 ? solid(anillo, grosor - 0.01, grosor + rebordeAlto) : emptyMesh();
 
   const cuerpo = prensar(merge(solid(planchaReg, 0, grosor), cuello));
   const partes = [rebordeMalla, ...relieve].filter((m) => m.positions.length).map(prensar);
@@ -555,7 +573,7 @@ export function buildThermoform(
   // una rosca la cambiaría de a derechas a a izquierdas.
   const prensarTrasera = (m: Mesh): Mesh => (p.formMold ? m : abombar(m, domoTrasera));
   const rebordeTrasera = anillo.length
-    ? prensarTrasera(solid(espejoRegs(anillo), grosor - 0.01, grosor + REBORDE_ALTO))
+    ? prensarTrasera(solid(espejoRegs(anillo), grosor - 0.01, grosor + Math.max(0.01, rebordeAlto)))
     : emptyMesh();
   const trasera = merge(
     prensarTrasera(merge(solid(espejoRegs(planchaReg), 0, grosor), cuelloTrasera)),
@@ -610,7 +628,7 @@ export function buildThermoform(
   // El tapón: solo tiene sentido si hay dos mitades que unir.
   if (p.formBack) {
     const altoTuerca = Math.max(3, p.neckLength);
-    const t = tuerca(rCuello, altoTuerca, p.capClearance, p.ringOuter, p.ringInner);
+    const t = tuerca(rCuello, altoTuerca, p.capClearance, p.ringOuter, p.ringInner, paso);
     // Montada: de pie sobre la punta del cuello, con el eje a lo largo de Y.
     const huecoTuerca = Math.max(2, altoTuerca - 0.5);
     const yPunta = yNace + largoCuello;
@@ -629,7 +647,7 @@ export function buildThermoform(
       id: 'clip',
       label: 'Pinza (cierra por abajo)',
       role: 'body',
-      mesh: pinza(grosor, reborde),
+      mesh: pinza(grosor, reborde, p.clipClearance ?? 0.2),
       noMark: true,
       montaje: [0, 0, 1, cx - 3.5, 0, 1, 0, caja.minY - (fondo / 2 - hondo), -1, 0, 0, sube],
     });
@@ -653,9 +671,9 @@ export function buildThermoform(
   // dibujo hacia el cuenco, y si el hueco solo midiera la plancha, el nombre
   // —que va levantado— se aplastaría contra la pared al prensar.
   const hueco =
-    grosor + Math.max(REBORDE_ALTO, p.reliefHeight * 2.2) + Math.max(0, p.formClearance);
-  const pared = 4;
-  const suelo = 3;
+    grosor + Math.max(rebordeAlto, p.reliefHeight * 2.2) + Math.max(0, p.formClearance);
+  const pared = Math.max(1, p.formWall ?? 4);
+  const suelo = Math.max(0.5, p.formFloor ?? 3);
 
   const mayor = (rs: Region[], f: Pt[]): Pt[] =>
     rs.reduce<Pt[] | null>(
@@ -672,7 +690,7 @@ export function buildThermoform(
   // Lisa: es un bloque plano al que se le deforma solo la cara de arriba, con
   // la misma cúpula que abomba la plancha. Apilando losas salía a escalones.
   const pestanaOuter = mayor(offsetRegions([outer], [], -0.4), outer);
-  const pestana = 2.5;
+  const pestana = Math.max(0.8, p.formMaleBase ?? 2.5);
   const macho = abombar(solid(sanitize([pestanaOuter], []), 0, pestana), domo, 3, {
     desde: pestana,
   });
@@ -698,8 +716,8 @@ export function buildThermoform(
   const ranura = roundedRect(cx, yNace + ranuraLargo / 2, rCrestas * 2, ranuraLargo, 0);
   // La plancha se apoya entera en el escalón, relleno de la muesca incluido.
   const escalon = union(
-    offsetRegions([outer], [], 0.25),
-    union(offsetRegions([relleno], [], 0.25), sanitize([ranura], [])),
+    offsetRegions([outer], [], Math.max(0.01, p.formStepClearance ?? 0.25)),
+    union(offsetRegions([relleno], [], Math.max(0.01, p.formStepClearance ?? 0.25)), sanitize([ranura], [])),
   );
 
   // El hueco es la cúpula agrandada lo que mide la plancha más la holgura, y
@@ -729,7 +747,7 @@ export function buildThermoform(
       piezas.push({ id: `mold-up${idExtra}`, label: `Molde de arriba (cúpula, se le da la vuelta)${sufijo}`, role: 'body', mesh: cupula, noMark: true, montaje: montajeMolde(col, 1) });
     }
   };
-  const dosParejas = asimetrica && p.formBack;
+  const dosParejas = asimetrica && p.formBack && p.formSplitMolds !== false;
   pareja(dosParejas ? ' · delantera' : '', espejoMalla(hembra), macho);
   if (dosParejas) pareja(' · trasera', hembra, espejoMalla(macho), '-back', 2);
   return piezas;

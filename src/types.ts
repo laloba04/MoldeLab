@@ -229,7 +229,14 @@ export type MoldShape =
   | 'triangle'
   | 'diamond'
   | 'star'
-  | 'egg';
+  | 'egg'
+  | 'cloud'
+  | 'shield'
+  | 'bubble'
+  | 'ghost'
+  | 'pumpkin'
+  | 'bear'
+  | 'tree';
 
 /** Qué controles enseña cada producto. La UI se dibuja sola desde aquí. */
 export type Field = keyof Params;
@@ -384,6 +391,30 @@ export interface Params {
   neckLength: number;
   /** Holgura entre la rosca del cuello y la de la tuerca. Más, entra más suelta. */
   capClearance: number;
+  /** Qué medida manda el «Tamaño»: el ancho, el alto, o ancho y alto fijos (estira la forma). */
+  formSizeBy: 'ancho' | 'alto' | 'fijo';
+  /** Alto de la forma cuando el tamaño es fijo. */
+  formFixedH: number;
+  /** Ancho del borde plano de la plancha (lo que se apoya en el escalón del molde). */
+  formRimWidth: number;
+  /** Lo que el borde sobresale por encima de la plancha. */
+  formRimHeight: number;
+  /** Paso de la rosca del cuello y la tuerca. */
+  threadPitch: number;
+  /** Holgura de la pinza de abajo sobre las dos planchas juntas. */
+  clipClearance: number;
+  /** Pared del molde de abajo (el cuenco) alrededor de la plancha. */
+  formWall: number;
+  /** Suelo del cuenco por debajo del hueco. */
+  formFloor: number;
+  /** Grosor de la base del molde de arriba (la cúpula). */
+  formMaleBase: number;
+  /** Holgura de la plancha en el escalón del cuenco. */
+  formStepClearance: number;
+  /** Con una forma asimétrica y plancha trasera: una pareja de moldes para cada cara. */
+  formSplitMolds: boolean;
+  /** Dejar simétrica del todo una forma que lo es casi (una sola pareja de moldes). */
+  formEvenOut: boolean;
 
   /**
    * Largo del marcapáginas, en milímetros.
@@ -585,6 +616,18 @@ export const DEFAULTS: Params = {
   neckLength: 5,
   // Holgura de una rosca impresa: con menos, la tuerca no entra; con más, baila.
   capClearance: 0.3,
+  formSizeBy: 'ancho',
+  formFixedH: 70,
+  formRimWidth: 2.5,
+  formRimHeight: 0.6,
+  threadPitch: 2,
+  clipClearance: 0.2,
+  formWall: 4,
+  formFloor: 3,
+  formMaleBase: 2.5,
+  formStepClearance: 0.25,
+  formSplitMolds: true,
+  formEvenOut: true,
   cutoutMode: 'lines',
   cutLineWidth: 2,
   cutBridges: 6,
@@ -756,6 +799,13 @@ export const FIELD_META: Record<Field, FieldMeta> = {
       { value: 'diamond', label: 'Rombo', novedad: true },
       { value: 'star', label: 'Estrella', novedad: true },
       { value: 'egg', label: 'Huevo', novedad: true },
+      { value: 'cloud', label: 'Nube', novedad: true },
+      { value: 'shield', label: 'Escudo', novedad: true },
+      { value: 'bubble', label: 'Bocadillo', novedad: true },
+      { value: 'ghost', label: 'Fantasma', novedad: true },
+      { value: 'pumpkin', label: 'Calabaza', novedad: true },
+      { value: 'bear', label: 'Osito', novedad: true },
+      { value: 'tree', label: 'Árbol', novedad: true },
     ],
   },
 
@@ -770,6 +820,26 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   neckRadius: { label: 'Grosor del cuello', unit: 'mm', min: 2, max: 8, step: 0.5 },
   neckLength: { label: 'Largo del cuello', unit: 'mm', min: 3, max: 15, step: 0.5 },
   capClearance: { label: 'Holgura de la rosca', unit: 'mm', min: 0.1, max: 0.6, step: 0.05 },
+  formSizeBy: {
+    select: true,
+    label: 'El tamaño mide',
+    options: [
+      { value: 'ancho', label: 'El ancho' },
+      { value: 'alto', label: 'El alto' },
+      { value: 'fijo', label: 'Ancho y alto fijos' },
+    ],
+  },
+  formFixedH: { label: 'Alto', unit: 'mm', min: 15, max: 250, step: 1 },
+  formRimWidth: { label: 'Ancho del borde', unit: 'mm', min: 1.5, max: 8, step: 0.1 },
+  formRimHeight: { label: 'Alto del borde', unit: 'mm', min: 0, max: 4, step: 0.1 },
+  threadPitch: { label: 'Paso de la rosca', unit: 'mm', min: 1, max: 4, step: 0.25 },
+  clipClearance: { label: 'Holgura de la pinza', unit: 'mm', min: 0, max: 0.8, step: 0.05 },
+  formWall: { label: 'Pared del molde de abajo', unit: 'mm', min: 2, max: 12, step: 0.5 },
+  formFloor: { label: 'Suelo del molde de abajo', unit: 'mm', min: 0.8, max: 10, step: 0.1 },
+  formMaleBase: { label: 'Base del molde de arriba', unit: 'mm', min: 1, max: 8, step: 0.5 },
+  formStepClearance: { label: 'Holgura de la plancha en el escalón', unit: 'mm', min: 0, max: 1, step: 0.05 },
+  formSplitMolds: { toggle: true, label: 'Moldes aparte para delante y detrás (forma asimétrica)' },
+  formEvenOut: { toggle: true, label: 'Igualar una forma casi simétrica' },
   holePattern: {
     select: true,
     label: 'Calado de la plancha',

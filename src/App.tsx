@@ -80,6 +80,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   const [dlName, setDlName] = useState('');
   const [separate, setSeparate] = useState(true);
   const [porPlacas, setPorPlacas] = useState(true);
+  const [soloPiezas, setSoloPiezas] = useState<'todas' | 'planchas' | 'moldes'>('todas');
   const [slicer, setSlicer] = useState<Slicer>('bambu');
   const [sending, setSending] = useState(false);
 
@@ -416,6 +417,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       porDefecto,
       separar: separate,
       porPlacas,
+      soloPiezas: placasDe(marked).size > 1 ? soloPiezas : 'todas',
       colores: { bg: bgColor, trace: traceColor, text: textColor },
       // Sin «todo de un color», las zonas pintadas a mano viajan al archivo.
       zona: oneColor ? undefined : colorOf,
@@ -700,6 +702,8 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
           hayPlacas={placasDe(marked).size > 1}
           porPlacas={porPlacas}
           setPorPlacas={setPorPlacas}
+          soloPiezas={soloPiezas}
+          setSoloPiezas={setSoloPiezas}
           slicer={slicer}
           setSlicer={setSlicer}
           enviando={sending}

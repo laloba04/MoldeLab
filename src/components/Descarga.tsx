@@ -17,6 +17,8 @@ export interface DescargaProps {
   hayPlacas: boolean;
   porPlacas: boolean;
   setPorPlacas: (v: boolean) => void;
+  soloPiezas: 'todas' | 'planchas' | 'moldes';
+  setSoloPiezas: (v: 'todas' | 'planchas' | 'moldes') => void;
   slicer: Slicer;
   setSlicer: (v: Slicer) => void;
   enviando: boolean;
@@ -83,6 +85,22 @@ export function Descarga(d: DescargaProps) {
             <span />
             Separar las piezas en la cama
           </label>
+        )}
+
+        {d.hayPlacas && (
+          <div className="seg">
+            {(
+              [
+                ['todas', 'Todo'],
+                ['planchas', 'Solo planchas'],
+                ['moldes', 'Solo moldes'],
+              ] as const
+            ).map(([v, l]) => (
+              <button key={v} type="button" className={d.soloPiezas === v ? 'on' : ''} onClick={() => d.setSoloPiezas(v)}>
+                {l}
+              </button>
+            ))}
+          </div>
         )}
 
         {d.hayPlacas && d.formatos.has('3mf') && (

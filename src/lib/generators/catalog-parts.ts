@@ -8,6 +8,7 @@
  */
 
 import type { Loop, Mesh, MoldShape, Params, Piece, Pt } from '../../types';
+import { esFigura, figura } from '../figuras';
 import { emptyMesh, extrudeRegion, merge } from '../mesh';
 import { intersect, offsetRegions, overlaps, sanitize, subtract, union, type Region } from '../clipper';
 import { dedupe, pointInPolygon, resample, signedArea, simplify, smooth } from '../polygon';
@@ -829,6 +830,8 @@ export function moldBase(loops: Loop[], p: Params, shape: MoldShape): Region[] {
   const box = boxOf(loops);
   const w = box.w + p.border * 2;
   const h = box.h + p.border * 2;
+  // Las figuras (nube, osito…) tienen entrantes: se agrandan para que el dibujo quepa en su cuerpo.
+  if (esFigura(shape)) return sanitize([figura(shape, box.cx, box.cy, w * 1.45, h * 1.45)], []);
   switch (shape) {
     case 'image':
       // La placa es la propia silueta, engordada por el marco.

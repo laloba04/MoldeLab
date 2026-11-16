@@ -1693,3 +1693,8 @@ body {
   opacity: 0.35;
   cursor: default;
 }
+
+/* Descargar (termoformado): todo / solo planchas / solo moldes */
+.modal .seg { display: flex; gap: 4px; margin: 8px 0; }
+.modal .seg button { flex: 1; padding: 6px 8px; border-radius: 8px; border: 1px solid currentColor; background: transparent; color: inherit; opacity: 0.6; cursor: pointer; }
+.modal .seg button.on { opacity: 1; font-weight: 600; }

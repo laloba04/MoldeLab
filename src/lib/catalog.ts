@@ -81,7 +81,7 @@ const THERMOFORM_GROUPS: FieldGroup[] = [
   {
     label: 'Forma',
     hint: 'Silueta, tamaño y el borde liso alrededor.',
-    fields: [...SIZE, 'moldShape', 'cornerRadius', 'border'],
+    fields: [...SIZE, 'formSizeBy', 'formFixedH', 'moldShape', 'cornerRadius', 'border'],
     open: true,
   },
   {
@@ -93,7 +93,7 @@ const THERMOFORM_GROUPS: FieldGroup[] = [
   {
     label: 'Plancha',
     hint: 'Lo que se abomba y el grosor de la lámina.',
-    fields: ['formHeight', 'sheetThickness', 'formBack'],
+    fields: ['formHeight', 'sheetThickness', 'formBack', 'formRimWidth', 'formRimHeight'],
     open: true,
   },
   {
@@ -104,12 +104,12 @@ const THERMOFORM_GROUPS: FieldGroup[] = [
   {
     label: 'Cuello y tuerca',
     hint: 'La rosca que cierra la bola y la anilla para colgarla.',
-    fields: ['neckRadius', 'neckLength', 'capClearance', 'ringOuter', 'ringInner'],
+    fields: ['neckRadius', 'neckLength', 'threadPitch', 'capClearance', 'clipClearance', 'ringOuter', 'ringInner'],
   },
   {
     label: 'Moldes',
     hint: 'Las dos mitades para prensar la plancha.',
-    fields: ['formMold', 'formClearance'],
+    fields: ['formMold', 'formSplitMolds', 'formEvenOut', 'formClearance', 'formStepClearance', 'formWall', 'formFloor', 'formMaleBase'],
   },
   {
     label: 'Relieve del dibujo',

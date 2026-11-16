@@ -50,13 +50,14 @@ export function radioCuello(
   theta: number,
   fase: number,
   liso = 0,
+  paso = PASO_ROSCA,
 ): number {
   // Los primeros `liso` milímetros van sin rosca —es el tramo que cruza la
   // muesca, donde la tuerca no llega— y la rosca entra suave en un milímetro,
   // no de golpe. La entrada depende solo de s, así que es igual en las dos
   // mitades y casan.
   const entra = Math.min(1, Math.max(0, s - liso));
-  return r + FONDO_ROSCA * entra * filete(s / PASO_ROSCA + theta / (2 * Math.PI) + fase);
+  return r + FONDO_ROSCA * entra * filete(s / paso + theta / (2 * Math.PI) + fase);
 }
 
 /**
@@ -76,15 +77,16 @@ export function medioCuelloRoscado(
   fase: number,
   /** Tramo del principio que va liso, sin rosca. */
   liso = 0,
+  paso = PASO_ROSCA,
 ): Mesh {
   const m = emptyMesh();
   const nT = 36; // pasos de ángulo en media vuelta
-  const nS = Math.max(4, Math.round((largo / PASO_ROSCA) * 16));
+  const nS = Math.max(4, Math.round((largo / paso) * 16));
 
   const P = (i: number, j: number): number[] => {
     const theta = (i / nT) * Math.PI;
     const s = (j / nS) * largo;
-    const rho = radioCuello(r, s, theta, fase, liso);
+    const rho = radioCuello(r, s, theta, fase, liso, paso);
     // En los bordes la altura es CERO exacta, no sen(π) ≈ 1e-16: así casan con
     // la cara plana de abajo.
     const z = i === 0 || i === nT ? 0 : rho * Math.sin(theta);
@@ -136,10 +138,10 @@ export function medioCuelloRoscado(
  * que se imprima de pie sin soportes; los flancos del filete a 45° se sostienen
  * solos.
  */
-export function tuercaRoscada(r: number, alto: number, holgura: number, pared: number, techo: number): Mesh {
+export function tuercaRoscada(r: number, alto: number, holgura: number, pared: number, techo: number, paso = PASO_ROSCA): Mesh {
   const m = emptyMesh();
   const nT = 72;
-  const nZ = Math.max(4, Math.round((alto / PASO_ROSCA) * 16));
+  const nZ = Math.max(4, Math.round((alto / paso) * 16));
   const exterior = r + FONDO_ROSCA + holgura + pared;
   const total = alto + techo;
 
@@ -148,7 +150,7 @@ export function tuercaRoscada(r: number, alto: number, holgura: number, pared: n
   const B = (i: number, j: number): number[] => {
     const theta = (i / nT) * 2 * Math.PI;
     const z = (j / nZ) * alto;
-    const rho = r + FONDO_ROSCA * filete(z / PASO_ROSCA - theta / (2 * Math.PI)) + holgura;
+    const rho = r + FONDO_ROSCA * filete(z / paso - theta / (2 * Math.PI)) + holgura;
     return [rho * Math.cos(theta), rho * Math.sin(theta), z];
   };
   const O = (i: number, z: number): number[] => {

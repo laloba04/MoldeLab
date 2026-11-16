@@ -423,13 +423,16 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   // --- Archivos ----------------------------------------------------------------
 
   const porDefecto = `moldelab-${params.product}`;
-  const buildFile = () =>
+  // `paraLaminador`: un solo .3mf, sin carpeta de placas ni otros formatos. Al
+  // laminador hay que mandarle un 3MF; un ZIP no lo sabe abrir («formato de
+  // archivo desconocido» en Bambu).
+  const buildFile = (paraLaminador = false) =>
     armarArchivo(marked, silhouette, {
-      formatos: dlFmts,
+      formatos: paraLaminador ? new Set<Fmt>(['3mf']) : dlFmts,
       nombre: dlName,
       porDefecto,
       separar: separate,
-      porPlacas,
+      porPlacas: paraLaminador ? false : porPlacas,
       soloPiezas: placasDe(marked).size > 1 ? soloPiezas : 'todas',
       colores: { bg: bgColor, trace: traceColor, text: textColor },
       // Sin «todo de un color», las zonas pintadas a mano viajan al archivo.
@@ -446,7 +449,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
    * el laminador se lo descarga él solo. Ver `lib/cloud.ts` para el porqué.
    */
   const sendToSlicer = async () => {
-    const built = await buildFile();
+    const built = await buildFile(true);
     if (!built) return;
     setSending(true);
     setError(null);

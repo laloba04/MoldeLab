@@ -50,10 +50,18 @@ const loops: Loop[] = [{ pts: circ(64, 20), hole: false }];
 const detalle: Loop[] = [{ pts: [[-12, -4], [12, -4], [12, 4], [-12, 4]] as Pt[], hole: false }];
 const sil = { loops, detail: detalle, widthMm: 40, heightMm: 40 };
 const hacer = (extra: Partial<Params> = {}): Piece[] =>
-  buildProduct(sil, { ...DEFAULTS, product: 'thermoform', moldShape: 'circle', ...extra });
+  buildProduct(sil, { ...DEFAULTS, product: 'thermoform2', moldShape: 'circle', ...extra });
 const pieza = (ps: Piece[], id: string) => ps.find((x) => x.id === id);
 
-console.log('MoldeLab — ajustes nuevos del termoformado\n');
+console.log('MoldeLab — Termoformado 2\n');
+
+// El de siempre no cambia aunque se toquen ajustes del 2.
+{
+  const base1 = buildProduct(sil, { ...DEFAULTS, product: 'thermoform', moldShape: 'circle' });
+  const tocado = buildProduct(sil, { ...DEFAULTS, product: 'thermoform', moldShape: 'circle', formJoin: 'imanes', formIcon: 'heart', formWall: 9, formProfile: 'cojin' });
+  const igual = base1.length === tocado.length && base1.every((x, i) => x.id === tocado[i].id && x.mesh.positions.length === tocado[i].mesh.positions.length);
+  check('el Termoformado de siempre sale igual aunque se toquen ajustes del 2', igual, `${base1.length} / ${tocado.length} piezas`);
+}
 
 for (const f of FIGURAS) {
   const ps = hacer({ moldShape: f });
@@ -91,7 +99,7 @@ for (const [n, ov] of [['paso de rosca 3', { threadPitch: 3 }], ['pinza holgada'
 
 // Una forma asimétrica (una media luna hecha de dibujo) da dos parejas; sin «aparte», una.
 const luna: Loop[] = [{ pts: [...circ(48, 20).filter(([x]) => x > -5), [-5, 15], [-5, -15]] as Pt[], hole: false }];
-const asim = (extra: Partial<Params>) => buildProduct({ loops: luna, detail: luna, widthMm: 25, heightMm: 40 }, { ...DEFAULTS, product: 'thermoform', moldShape: 'image', formEvenOut: false, ...extra });
+const asim = (extra: Partial<Params>) => buildProduct({ loops: luna, detail: luna, widthMm: 25, heightMm: 40 }, { ...DEFAULTS, product: 'thermoform2', moldShape: 'image', formEvenOut: false, ...extra });
 const moldes = (ps: Piece[]) => ps.filter((x) => x.id.startsWith('mold-')).length;
 check('forma asimétrica: dos parejas de moldes', moldes(asim({})) === 4, `${moldes(asim({}))}`);
 check('sin «moldes aparte»: una pareja', moldes(asim({ formSplitMolds: false })) === 2, `${moldes(asim({ formSplitMolds: false }))}`);
@@ -110,6 +118,34 @@ const placaCon = pieza(hacer({ moldShape: 'heart', formJoin: 'imanes' }), 'sheet
 check('las orejitas de los imanes van unidas a la plancha (no sueltas)', placaCon.length === placaSin.length, `${placaSin.length} → ${placaCon.length} trozos`);
 const lados = hacer({ formSideClips: true });
 check('pinzas laterales: abajo + dos lados', ['clip', 'clip-izq', 'clip-der'].every((id) => !!pieza(lados, id)));
+
+// Tanda 4: perfil, icono, texto de la trasera, contorno del texto.
+const zMedia = (m: Mesh) => { let t = 0; const q = m.positions; for (let i = 2; i < q.length; i += 3) t += q[i]; return t / (q.length / 3); };
+const cupula = (pf: Params['formProfile']) => zMedia(pieza(hacer({ formMold: false, formProfile: pf, holePattern: 'none' }), 'sheet')!.mesh);
+const vS = cupula('suave'), vR = cupula('redondo'), vC = cupula('cojin');
+check('el perfil cambia la cúpula (redondo y cojín, más llenos que suave)', vR > vS + 0.5 && vC > vS + 0.5, `altura media ${vS.toFixed(2)} / ${vR.toFixed(2)} / ${vC.toFixed(2)} mm`);
+for (const pf of ['redondo', 'cojin'] as const) {
+  const ps2 = hacer({ formProfile: pf });
+  const abiertas = ps2.reduce((t, x) => t + aristasAbiertas(x.mesh), 0);
+  check(`perfil ${pf}: planchas y moldes cerrados`, abiertas === 0, `${abiertas}`);
+}
+const sinIcono = pieza(hacer(), 'sheet')!;
+for (const [n, ov] of [['icono corazón delante', { formIcon: 'heart' }], ['icono osito enrejado', { formIcon: 'bear', formIconLattice: true, formIconX: 50 }], ['icono estrella detrás', { formIcon: 'star', formIconSide: 'detras' }]] as const) {
+  const ps2 = hacer(ov as Partial<Params>);
+  const abiertas = ps2.reduce((t, x) => t + aristasAbiertas(x.mesh), 0);
+  const cara = (ov as Partial<Params>).formIconSide === 'detras' ? 'sheet-back' : 'sheet';
+  const partes = pieza(ps2, cara)!.overlayParts?.length ?? 0;
+  const antes = pieza(hacer(), cara)!.overlayParts?.length ?? 0;
+  check(`${n}: una parte más en su cara y todo cerrado`, partes === antes + 1 && abiertas === 0, `${antes} → ${partes} partes, ${abiertas} aristas`);
+}
+const conTexto = hacer({ formBackText: 'Hola Lucas' });
+const trasT = pieza(conTexto, 'sheet-back')!;
+check('texto en la trasera: parte nueva y cerrada', (trasT.overlayParts?.length ?? 0) === 2 && aristasAbiertas(trasT.mesh) === 0, `${trasT.overlayParts?.length}`);
+const letras: Loop[] = [{ pts: [[-8, -2], [8, -2], [8, 2], [-8, 2]] as Pt[], hole: false }];
+const nombreDe = (o: number) => pieza(buildProduct({ ...sil, textLoops: letras }, { ...DEFAULTS, product: 'thermoform2', moldShape: 'circle', formTextOutline: o }), 'sheet')!.textMesh!;
+const t0 = caja(nombreDe(0)), t1 = caja(nombreDe(1));
+check('el contorno del texto lo engorda', t1.w > t0.w + 0.5, `${t0.w.toFixed(1)} → ${t1.w.toFixed(1)} mm`);
+check('sin tocar nada, la plancha sale igual que antes', (sinIcono.overlayParts?.length ?? 0) >= 1);
 
 const ps = hacer();
 const op = { formatos: new Set(['stl' as const]), nombre: 'p', porDefecto: 'x', separar: true, colores: { bg: '#fff', trace: '#000', text: '#f00' } };

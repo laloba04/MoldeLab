@@ -34,12 +34,25 @@ function makeCanvas(w: number, h: number) {
  * distinta en cada ordenador según lo que tuviera instalado.
  */
 let FUENTE: FontStyle = 'redonda';
-const font = (px: number) => fontCss(FUENTE, px);
+let NEGRITA = false;
+let ESPACIO = 0;
+const font = (px: number) => (NEGRITA ? fontCss(FUENTE, px).replace(/^\d+/, '900') : fontCss(FUENTE, px));
+/** Pone la letra en un contexto, con la separación entre letras (Chrome la mide también). */
+function ponerLetra(ctx: CanvasRenderingContext2D, px: number) {
+  ponerLetra(ctx, px);
+  (ctx as unknown as { letterSpacing: string }).letterSpacing = `${(px * ESPACIO).toFixed(2)}px`;
+}
+
+/** Negrita y espacio entre letras (fracción del tamaño de la letra) para lo que se dibuje después. */
+export function useTextStyle(negrita: boolean, espacio: number): void {
+  NEGRITA = !!negrita;
+  ESPACIO = Math.max(0, espacio || 0);
+}
 
 function fit(ctx: CanvasRenderingContext2D, text: string, maxW: number, startPx: number): number {
   let px = startPx;
   do {
-    ctx.font = font(px);
+    ponerLetra(ctx, px);
     if (ctx.measureText(text).width <= maxW) return px;
     px -= 8;
   } while (px > 20);
@@ -76,12 +89,12 @@ export function textImage(text: string, scale: number): ImageData {
   const probe = makeCanvas(8, 8).ctx;
   const px = fit(probe, t, W * (scale / 100), 320);
 
-  probe.font = font(px);
+  ponerLetra(probe, px);
   const m = probe.measureText(t);
   const h = Math.ceil((m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) * 1.5) + 40;
 
   const { c, ctx } = makeCanvas(W, Math.max(h, 120));
-  ctx.font = font(px);
+  ponerLetra(ctx, px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(t, W / 2, c.height / 2);
@@ -96,7 +109,7 @@ export function arcTextImage(text: string, scale: number, curve: number): ImageD
   const t = text.trim() || 'Texto';
   const probe = makeCanvas(8, 8).ctx;
   const px = fit(probe, t, W * (scale / 100), 240);
-  probe.font = font(px);
+  ponerLetra(probe, px);
 
   const arcLen = probe.measureText(t).width * 1.08;
   const theta = (Math.max(10, curve) * Math.PI) / 180;
@@ -106,7 +119,7 @@ export function arcTextImage(text: string, scale: number, curve: number): ImageD
   const h = Math.ceil(sag + px * 2.4);
   const { c, ctx } = makeCanvas(W, Math.max(h, 160));
 
-  ctx.font = font(px);
+  ponerLetra(ctx, px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -190,7 +203,7 @@ export function textLayout(img: ImageData, text: string, scale: number, tx = 0, 
   // que deja el nombre bien grande sin desbordarlo; el deslizador sigue mandando
   // por debajo de ese tope.
   const px = encima ? Math.min(px0, fit(probe, t, imgW * 0.75, px0)) : px0;
-  probe.font = font(px);
+  ponerLetra(probe, px);
   const textH = px * 1.6;
   const textW = probe.measureText(t).width;
 
@@ -255,7 +268,7 @@ export function imageWithText(
   // Antes llegaba al centro y por tanto cruzaba las letras: con el texto pegado
   // al dibujo, esa barra se veía como un pegote atravesándolo todo. Y si el
   // texto ya toca el dibujo no se dibuja ninguna barra, que no hace falta.
-  ctx.font = font(px);
+  ponerLetra(ctx, px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
@@ -317,7 +330,7 @@ export function textOnlyImage(
   if (!L.t) return null;
 
   const { c, ctx } = makeCanvas(L.cw, L.ch);
-  ctx.font = font(L.px);
+  ponerLetra(ctx, L.px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#000';

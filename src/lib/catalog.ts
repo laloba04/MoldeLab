@@ -7,6 +7,7 @@
  */
 
 import type { FieldGroup, Loop, Params, Piece, Product, ProductId, Pt, Silhouette } from '../types';
+import { DEFAULTS } from '../types';
 import { merge } from './mesh';
 import { pointInPolygon, signedArea } from './polygon';
 import { sanitize } from './clipper';
@@ -81,7 +82,7 @@ const THERMOFORM_GROUPS: FieldGroup[] = [
   {
     label: 'Forma',
     hint: 'Silueta, tamaño y el borde liso alrededor.',
-    fields: [...SIZE, 'formSizeBy', 'formFixedH', 'moldShape', 'cornerRadius', 'border'],
+    fields: [...SIZE, 'moldShape', 'cornerRadius', 'border'],
     open: true,
   },
   {
@@ -93,7 +94,63 @@ const THERMOFORM_GROUPS: FieldGroup[] = [
   {
     label: 'Plancha',
     hint: 'Lo que se abomba y el grosor de la lámina.',
-    fields: ['formHeight', 'sheetThickness', 'formBack', 'formRimWidth', 'formRimHeight'],
+    fields: ['formHeight', 'sheetThickness', 'formBack'],
+    open: true,
+  },
+  {
+    label: 'Agujeros',
+    hint: 'El calado de panal que deja pasar la luz.',
+    fields: ['holePattern', 'holeSpacing', 'holeWall', 'holesOnDesign'],
+  },
+  {
+    label: 'Cuello y tuerca',
+    hint: 'La rosca que cierra la bola y la anilla para colgarla.',
+    fields: ['neckRadius', 'neckLength', 'capClearance', 'ringOuter', 'ringInner'],
+  },
+  {
+    label: 'Moldes',
+    hint: 'Las dos mitades para prensar la plancha.',
+    fields: ['formMold', 'formClearance'],
+  },
+  {
+    label: 'Relieve del dibujo',
+    hint: 'Cuánto sobresale el dibujo y su grosor de línea.',
+    fields: ['reliefHeight', 'reliefTaper', 'strokeWidth'],
+  },
+];
+
+/**
+ * Termoformado 2: lo mismo con todos los ajustes nuevos (formas, imanes, icono,
+ * texto detrás, colores, moldes al detalle). Va aparte para que el de siempre
+ * siga igual de sencillo.
+ */
+const THERMOFORM2_GROUPS: FieldGroup[] = [
+  {
+    label: 'Forma',
+    hint: 'Silueta, tamaño y el borde liso alrededor.',
+    fields: [...SIZE, 'formSizeBy', 'formFixedH', 'moldShape', 'cornerRadius', 'border'],
+    open: true,
+  },
+  {
+    label: 'Texto',
+    hint: 'Letra y colocación del nombre.',
+    fields: ['textFont', 'textBold', 'textSpacing', 'formTextOutline', 'textScale', 'textRot', 'textX', 'textY', 'formBackText'],
+    open: true,
+  },
+  {
+    label: 'Icono',
+    hint: 'Un icono en relieve en la cara de delante o la de detrás.',
+    fields: ['formIcon', 'formIconSide', 'formIconLattice', 'formIconSize', 'formIconX', 'formIconY'],
+  },
+  {
+    label: 'Colores',
+    hint: 'De qué color sale cada parte en el 3MF.',
+    fields: ['formColorPlate', 'formColorRim', 'formColorNut', 'formColorMold'],
+  },
+  {
+    label: 'Plancha',
+    hint: 'Lo que se abomba y el grosor de la lámina.',
+    fields: ['formHeight', 'formProfile', 'sheetThickness', 'formBack', 'formRimWidth', 'formRimHeight'],
     open: true,
   },
   {
@@ -117,6 +174,18 @@ const THERMOFORM_GROUPS: FieldGroup[] = [
     fields: ['reliefHeight', 'reliefTaper', 'strokeWidth'],
   },
 ];
+
+/** Lo que solo usa el Termoformado 2. En el de siempre se queda en su valor de fábrica. */
+const SOLO_TERMO2 = THERMOFORM2_GROUPS.flatMap((g) => g.fields).filter(
+  (f) => !THERMOFORM_GROUPS.some((g) => g.fields.includes(f)),
+);
+const clasico = (p: Params): Params => {
+  const q = { ...p } as Record<string, unknown>;
+  for (const f of SOLO_TERMO2) q[f] = DEFAULTS[f];
+  // Como siempre: el borde crecía con la pared entre agujeros.
+  q.formRimWidth = Math.max(2.5, p.holeWall * 3);
+  return q as unknown as Params;
+};
 
 const ROLLER_GROUPS: FieldGroup[] = [
   {
@@ -433,6 +502,18 @@ export const PRODUCTS: Entry[] = [
     imageAndText: true,
     groups: THERMOFORM_GROUPS,
     fields: THERMOFORM_GROUPS.flatMap((g) => g.fields),
+    build: (s, p) => buildThermoform(s.loops, s.detail, clasico(p), s.textLoops),
+  },
+  {
+    id: 'thermoform2',
+    category: 'personalizados',
+    novedad: true,
+    label: 'Termoformado 2',
+    hint: 'El termoformado con todo: más formas, imanes, icono, texto detrás, colores por parte y moldes al detalle.',
+    needsText: true,
+    imageAndText: true,
+    groups: THERMOFORM2_GROUPS,
+    fields: THERMOFORM2_GROUPS.flatMap((g) => g.fields),
     build: (s, p) => buildThermoform(s.loops, s.detail, p, s.textLoops),
   },
   {

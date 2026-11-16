@@ -73,9 +73,11 @@ function sirve(f: Field, p: Params, campos: Field[], hayImagen: boolean): boolea
   }
   // El alto fijo solo con «ancho y alto fijos»; los ajustes de molde, solo con molde.
   if (f === 'formFixedH') return p.formSizeBy === 'fijo';
+  if (['formIconSide', 'formIconLattice', 'formIconSize', 'formIconX', 'formIconY'].includes(f)) return p.formIcon !== 'none';
+  if (f === 'formBackText') return p.formBack;
   if (f === 'formMagnets' || f === 'formMagnetDia' || f === 'formMagnetH' || f === 'formMagnetClear') return p.formJoin === 'imanes';
   if (f === 'clipClearance') return p.formJoin !== 'imanes' || !!p.formSideClips;
-  if (['formSplitMolds', 'formEvenOut', 'formClearance', 'formStepClearance', 'formWall', 'formFloor', 'formMaleBase'].includes(f) && p.product === 'thermoform')
+  if (['formSplitMolds', 'formEvenOut', 'formClearance', 'formStepClearance', 'formWall', 'formFloor', 'formMaleBase'].includes(f) && p.product.startsWith('thermoform'))
     return p.formMold;
   // Lo que se corre cada fila solo cuenta colocando en diagonal.
   if (f === 'rollerShift') return p.rollerLayout === 'diagonal';
@@ -100,6 +102,18 @@ function Control({
 }) {
   const meta = FIELD_META[field];
   if (!meta) return null;
+
+  if ('text' in meta) {
+    const value = (p[field] as unknown as string) ?? '';
+    return (
+      <label className="field">
+        <span className="field-head">
+          <span>{meta.label}</span>
+        </span>
+        <input type="text" value={value} maxLength={40} onChange={(e) => set(field, e.target.value as never)} />
+      </label>
+    );
+  }
 
   if ('toggle' in meta) {
     const value = p[field] as unknown as boolean;

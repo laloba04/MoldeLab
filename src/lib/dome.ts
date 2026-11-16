@@ -27,10 +27,16 @@ import { pointInPolygon } from './polygon';
  * golpe varios milímetros y la plancha salía con hebras; y al prensar de verdad
  * una pared vertical es justo donde el plástico caliente no estira y se rasga.
  */
-export function perfil(t: number): number {
+export function perfil(t: number, tipo: PerfilPared = 'suave'): number {
   const c = Math.min(1, Math.max(0, t));
+  // Redondo y cojín suben más deprisa junto al borde: más volumen, pero ahí es
+  // donde la plancha caliente estira más (ver arriba).
+  if (tipo === 'redondo') return Math.sqrt(1 - (1 - c) ** 2);
+  if (tipo === 'cojin') return 1 - (1 - c) ** 4;
   return c * c * (3 - 2 * c);
 }
+
+export type PerfilPared = 'suave' | 'redondo' | 'cojin';
 
 /**
  * Lo que hace falta saber para abombar sobre una forma.
@@ -57,13 +63,15 @@ export interface Dome {
   ny: number;
   /** La membrana en cada punto de la rejilla. Cero fuera de la forma. */
   u: Float32Array;
+  /** Cómo sube la pared. */
+  tipo?: PerfilPared;
 }
 
 /**
  * Prepara la cúpula de un contorno. Lo de fuera —el borde plano, el cuello— se
  * queda en cero, así que no sube.
  */
-export function domeOf(outer: Pt[], alto: number, celdas = 140): Dome {
+export function domeOf(outer: Pt[], alto: number, celdas = 140, tipo: PerfilPared = 'suave'): Dome {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const [x, y] of outer) {
     if (x < minX) minX = x;
@@ -110,7 +118,7 @@ export function domeOf(outer: Pt[], alto: number, celdas = 140): Dome {
 
   let umax = 0;
   for (let k = 0; k < u.length; k++) if (u[k] > umax) umax = u[k];
-  return { alto, umax, x0, y0, paso, nx, ny, u };
+  return { alto, umax, x0, y0, paso, nx, ny, u, tipo };
 }
 
 /** La membrana en un punto cualquiera, interpolada en la rejilla. */
@@ -136,7 +144,7 @@ export function subida(d: Dome, x: number, y: number): number {
   if (d.umax <= 0) return 0;
   const v = membranaEn(d, x, y);
   if (v <= 0) return 0; // fuera de la cúpula: el borde plano y el cuello no suben
-  return d.alto * perfil(v / d.umax);
+  return d.alto * perfil(v / d.umax, d.tipo);
 }
 
 /**

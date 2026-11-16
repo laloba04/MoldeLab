@@ -4,7 +4,7 @@ import { DEFAULTS, type Piece, type Silhouette } from './types';
 import { autoLevels, loadImageData } from './lib/image';
 import { buildPieces, vectorize } from './lib/pipeline';
 import { byId, productosDe } from './lib/catalog';
-import { arcTextImage, imageWithText, textImage, textOnlyImage, useFont } from './lib/sources';
+import { arcTextImage, imageWithText, textImage, textOnlyImage, useFont, useTextStyle } from './lib/sources';
 import { isEmbedded, saveBlob } from './lib/save';
 import { applyWatermark, canWatermark, rasterizeText } from './lib/watermark';
 import { FONT_STYLES, fontCss, type FontStyle } from './lib/font';
@@ -238,6 +238,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     };
     // La tipografía elegida, antes de componer nada.
     useFont(params.textFont);
+    useTextStyle(params.textBold, params.textSpacing / 100);
 
     // Pequeño debounce: que teclear un nombre no vectorice letra a letra.
     const timer = setTimeout(async () => {
@@ -260,7 +261,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       alive = false;
       clearTimeout(timer);
     };
-  }, [img, product, params.textContent, params.textScale, params.textFont, params.textRot, params.textX, params.textY, params.textCurve, params.product, fontsReady]);
+  }, [img, product, params.textContent, params.textScale, params.textFont, params.textRot, params.textX, params.textY, params.textCurve, params.product, params.textBold, params.textSpacing, fontsReady]);
 
   // Vectorizar es lo caro: solo cuando cambia algo que afecta al contorno.
   const vecKey = [
@@ -385,9 +386,17 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   const colorOf = useCallback(
     (pieceId: string, zone: string): string | undefined => {
       const n = zoneInk[`${pieceId}#${zone}`];
-      return n === undefined ? undefined : palette[n];
+      if (n !== undefined) return palette[n];
+      // Termoformado: el color elegido para cada parte, si no se ha pintado a mano.
+      if (params.product === 'thermoform2') {
+        const c = (v: string | undefined) => (v && v !== 'auto' ? v : undefined);
+        if (pieceId.startsWith('mold-')) return zone === 'base' ? c(params.formColorMold) : undefined;
+        if (pieceId === 'cap' || pieceId.startsWith('clip')) return zone === 'base' ? c(params.formColorNut) : undefined;
+        if (pieceId === 'sheet' || pieceId === 'sheet-back') return zone === 'base' ? c(params.formColorPlate) : zone === 'p0' ? c(params.formColorRim) : undefined;
+      }
+      return undefined;
     },
-    [zoneInk, palette],
+    [zoneInk, palette, params.product, params.formColorMold, params.formColorNut, params.formColorPlate, params.formColorRim],
   );
   const paint = useCallback(
     (pieceId: string, zone: string) => {

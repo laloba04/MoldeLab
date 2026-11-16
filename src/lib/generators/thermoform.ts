@@ -26,7 +26,9 @@ import { emptyMesh, cap, extrudeRegion, loft, merge } from '../mesh';
 import { intersectRegions, offsetRegions, sanitize, subtract, union, type Region } from '../clipper';
 import { boxOf, circle, egg, heart, polygon, roundedRect, star } from '../shapes';
 import { orient, pointInPolygon } from '../polygon';
-import { fitDetailToBase, regionsOf, reliefSolids } from './catalog-parts';
+import { expandLoops, fitDetailToBase, regionsOf, reliefSolids } from './catalog-parts';
+import { textPaths } from '../font';
+import { strokeOpen } from '../clipper';
 import { abombar, domeOf } from '../dome';
 import { FONDO_ROSCA, medioCuelloRoscado, tuercaRoscada } from './rosca';
 import { esFigura, figura, PROPORCION } from '../figuras';
@@ -472,7 +474,8 @@ export function buildThermoform(
       (a, r) => (!a || Math.abs(areaDe(r.outer)) > Math.abs(areaDe(a)) ? r.outer : a),
       null,
     ) ?? encoger(outer, cx, cy, 0.85);
-  const domo = domeOf(cupulaOuter, alto);
+  const tipoPared = p.formProfile ?? 'suave';
+  const domo = domeOf(cupulaOuter, alto, 140, tipoPared);
 
   // --- El espejo -----------------------------------------------------------
   //
@@ -505,7 +508,7 @@ export function buildThermoform(
     return { positions: out };
   };
   const cupulaTrasera = espejoPts(cupulaOuter);
-  const domoTrasera = domeOf(cupulaTrasera, alto);
+  const domoTrasera = domeOf(cupulaTrasera, alto, 140, tipoPared);
   // ¿Es la forma igual a su espejo? Entonces los mismos moldes sirven para las
   // dos planchas; si no, la trasera lleva los suyos.
   const asimetrica = (() => {
@@ -564,11 +567,41 @@ export function buildThermoform(
   const margenDibujo = Math.max(0.8, p.holeWall * 1.2);
   const zonaDibujo = todo.length ? regionsOf(todo, margenDibujo) : [];
 
+  // --- El icono ----------------------------------------------------------------
+  //
+  // Una figura en relieve, delante o detrás. Su tamaño va en % del ancho de la
+  // cúpula y su sitio en % de media cúpula. Maciza tapa el calado de debajo;
+  // enrejada es solo su contorno, con la malla dentro.
+  const icono = (zona: Pt[]): Region[] => {
+    if (!p.formIcon || p.formIcon === 'none') return [];
+    const b = boxOf([{ pts: zona, hole: false }]);
+    const lado = (Math.min(b.w, b.h) * Math.max(5, p.formIconSize ?? 35)) / 100;
+    const ix = b.cx + ((p.formIconX ?? 0) / 100) * (b.w / 2 - lado / 2);
+    const iy = b.cy + ((p.formIconY ?? 0) / 100) * (b.h / 2 - lado / 2);
+    const f = p.formIcon;
+    const pts = esFigura(f)
+      ? figura(f, ix, iy, lado, lado * PROPORCION[f])
+      : f === 'heart'
+        ? corazonRedondo(ix, iy, lado)
+        : f === 'star'
+          ? star(ix, iy, lado, lado * 0.95)
+          : f === 'egg'
+            ? egg(ix, iy, lado * 0.78, lado)
+            : circle(ix, iy, lado / 2, 64);
+    const dentro = offsetRegions([zona], [], -Math.max(0.5, p.border * 0.5));
+    return intersectRegions(sanitize([pts], []), dentro.length ? dentro : sanitize([zona], []));
+  };
+  const iconoRelieve = (r: Region[]): Region[] =>
+    p.formIconLattice ? subtract(r, offsetRegions(r.map((x) => x.outer), [], -1.2)) : r;
+  const enDelante = (p.formIconSide ?? 'delante') !== 'detras';
+  const iconoDelante = enDelante ? icono(cupulaOuter) : [];
+
   // El calado respeta el reborde macizo: por ahí es por donde se agarra la
   // plancha al prensarla, y un borde calado se rompe de la primera.
   const util = offsetRegions([outer], [], -reborde);
-  const sinDibujo =
+  let sinDibujo =
     p.holesOnDesign || !zonaDibujo.length ? util : subtract(util, zonaDibujo);
+  if (iconoDelante.length && !p.formIconLattice) sinDibujo = subtract(sinDibujo, offsetRegions(iconoDelante.map((r) => r.outer), [], margenDibujo));
   const agujeros = calado(p.holePattern, sinDibujo, Math.max(1, p.holeSpacing), Math.max(0.3, p.holeWall));
   const planchaLlena = agujeros.length ? subtract(plano, agujeros) : plano;
 
@@ -612,9 +645,11 @@ export function buildThermoform(
   const cuelloTrasera = medioCuelloRoscado(cx, yNace, rCuello, largoCuello, 0.5, liso, paso);
 
   const relieve = reliefSolids(dibujo, p, grosor - 0.01, p.reliefHeight, [outer]);
-  const relieveNombre = nombre.length
-    ? merge(...reliefSolids(nombre, p, grosor - 0.01, p.reliefHeight * 2.2, [outer]))
+  const nombreGordo = nombre.length && (p.formTextOutline ?? 0) > 0 ? expandLoops(nombre, p.formTextOutline) : nombre;
+  const relieveNombre = nombreGordo.length
+    ? merge(...reliefSolids(nombreGordo, p, grosor - 0.01, p.reliefHeight * 2.2, [outer]))
     : undefined;
+  const solidoIcono = (r: Region[]): Mesh => (r.length ? solid(iconoRelieve(r), grosor - 0.01, grosor + Math.max(0.3, p.reliefHeight)) : emptyMesh());
 
   // Si se pide la pieza YA abombada (sin molde), se deforma aquí: lo mismo que
   // se ve en pantalla es lo que sale en el archivo.
@@ -628,7 +663,7 @@ export function buildThermoform(
   const rebordeMalla = anillo.length && rebordeAlto > 0 ? solid(anillo, grosor - 0.01, grosor + rebordeAlto) : emptyMesh();
 
   const cuerpo = prensar(merge(solid(planchaReg, 0, grosor), cuello, orejasAltas));
-  const partes = [rebordeMalla, ...relieve].filter((m) => m.positions.length).map(prensar);
+  const partes = [rebordeMalla, ...relieve, solidoIcono(iconoDelante)].filter((m) => m.positions.length).map(prensar);
   const capaNombre = relieveNombre ? prensar(relieveNombre) : undefined;
   const overlay = merge(...partes);
   const delantera = merge(cuerpo, overlay, capaNombre ?? emptyMesh());
@@ -644,9 +679,34 @@ export function buildThermoform(
   const rebordeTrasera = anillo.length
     ? prensarTrasera(solid(espejoRegs(anillo), grosor - 0.01, grosor + Math.max(0.01, rebordeAlto)))
     : emptyMesh();
-  const trasera = merge(
-    prensarTrasera(merge(solid(espejoRegs(planchaReg), 0, grosor), cuelloTrasera, orejasAltas.positions.length ? espejoMalla(orejasAltas) : emptyMesh())),
+  // El dibujo de la trasera: un icono y/o un texto propio. Va SIN espejar: la
+  // trasera se junta dándole media vuelta, y un giro no cambia la lectura, así
+  // que se lee bien desde detrás.
+  const iconoDetras = !enDelante ? icono(cupulaTrasera) : [];
+  const textoTras = (p.formBackText ?? '').trim();
+  let letrasTras: Loop[] = [];
+  if (p.formBack && textoTras) {
+    const tp = textPaths(textoTras);
+    if (tp.paths.length) {
+      const trazo = strokeOpen(tp.paths, 0.17);
+      const comoLazos = trazo.flatMap((r) => [{ pts: r.outer, hole: false }, ...r.holes.map((h) => ({ pts: h, hole: true }))]);
+      const dondeTras = offsetRegions([cupulaTrasera], [], -Math.max(1, p.border));
+      // Ocupa como mucho el 70 % del ancho y la mitad del alto de la cúpula.
+      const bT = boxOf([{ pts: cupulaTrasera, hole: false }]);
+      const zonaTexto: Region[] = sanitize([roundedRect(bT.cx, bT.cy - (iconoDetras.length ? bT.h * 0.22 : 0), bT.w * 0.7, bT.h * 0.32, 0)], []);
+      letrasTras = fitDetailToBase(comoLazos, intersectRegions(zonaTexto, dondeTras.length ? dondeTras : sanitize([cupulaTrasera], [])), true);
+    }
+  }
+  const partesTras = [
     rebordeTrasera,
+    letrasTras.length ? prensarTrasera(merge(...reliefSolids(letrasTras, p, grosor - 0.01, p.reliefHeight * 2.2, [cupulaTrasera]))) : emptyMesh(),
+    iconoDetras.length ? prensarTrasera(solidoIcono(iconoDetras)) : emptyMesh(),
+  ].filter((m) => m.positions.length);
+  // Con el icono macizo detrás, la malla de debajo se rellena.
+  const planchaTras = iconoDetras.length && !p.formIconLattice ? union(espejoRegs(planchaReg), intersectRegions(iconoDetras, espejoRegs(plano))) : espejoRegs(planchaReg);
+  const trasera = merge(
+    prensarTrasera(merge(solid(planchaTras, 0, grosor), cuelloTrasera, orejasAltas.positions.length ? espejoMalla(orejasAltas) : emptyMesh())),
+    ...partesTras,
   );
 
   // Con molde, las planchas se imprimen planas pero el visor sabe abombarlas
@@ -677,8 +737,8 @@ export function buildThermoform(
       label: 'Plancha trasera',
       role: 'icing',
       mesh: trasera,
-      overlay: rebordeTrasera.positions.length ? rebordeTrasera : undefined,
-      overlayParts: rebordeTrasera.positions.length ? [rebordeTrasera] : undefined,
+      overlay: partesTras.length ? merge(...partesTras) : undefined,
+      overlayParts: partesTras.length ? partesTras : undefined,
       dome: p.formMold ? domoTrasera : undefined,
       // La marca del taller va aquí, en RELIEVE por la cara de fuera, como el
       // nombre en la delantera: por encima del panal. Para buscarle sitio se le
@@ -808,7 +868,7 @@ export function buildThermoform(
   //
   // Liso también: un bloque macizo hasta el borde con la cara de arriba HUNDIDA
   // —la misma deformación, hacia abajo—, y encima el anillo del escalón.
-  const domoBoca = domeOf(boca, alto + hueco);
+  const domoBoca = domeOf(boca, alto + hueco, 140, tipoPared);
   const borde = suelo + alto + hueco;
   // Las orejitas de los imanes entran en el cuenco con la plancha boca abajo:
   // se les abre un hueco hondo en la pared. Se abren en su sitio y en su espejo,

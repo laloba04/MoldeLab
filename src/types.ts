@@ -195,6 +195,7 @@ export type ProductId =
   | 'qr-plate'
   | 'opener-stamp'
   | 'thermoform'
+  | 'thermoform2'
   | 'figure-box'
   | 'puzzle'
   // Accesorios (novedades)
@@ -424,6 +425,27 @@ export interface Params {
   formMagnetDia: number;
   formMagnetH: number;
   formMagnetClear: number;
+  /** Cómo sube la pared de la cúpula: suave (sale plana del borde), redonda o cojín. */
+  formProfile: 'suave' | 'redondo' | 'cojin';
+  /** Texto más gordo: contorno alrededor del nombre, en mm. */
+  formTextOutline: number;
+  /** Letra en negrita y separación entre letras (en fracción del alto de la letra). */
+  textBold: boolean;
+  textSpacing: number;
+  /** Texto propio en la plancha trasera (letra de trazo). Vacío, sin texto. */
+  formBackText: string;
+  /** Un icono en relieve, en qué cara, macizo o enrejado, tamaño y sitio. */
+  formIcon: string;
+  formIconSide: 'delante' | 'detras';
+  formIconLattice: boolean;
+  formIconSize: number;
+  formIconX: number;
+  formIconY: number;
+  /** Colores por parte: la malla, el borde, tuerca y pinza, y los moldes. 'auto' = como siempre. */
+  formColorPlate: string;
+  formColorRim: string;
+  formColorNut: string;
+  formColorMold: string;
 
   /**
    * Largo del marcapáginas, en milímetros.
@@ -643,6 +665,21 @@ export const DEFAULTS: Params = {
   formMagnetDia: 6,
   formMagnetH: 2,
   formMagnetClear: 0.15,
+  formProfile: 'suave',
+  formTextOutline: 0,
+  textBold: false,
+  textSpacing: 0,
+  formBackText: '',
+  formIcon: 'none',
+  formIconSide: 'delante',
+  formIconLattice: false,
+  formIconSize: 35,
+  formIconX: 0,
+  formIconY: 0,
+  formColorPlate: 'auto',
+  formColorRim: 'auto',
+  formColorNut: 'auto',
+  formColorMold: 'auto',
   cutoutMode: 'lines',
   cutLineWidth: 2,
   cutBridges: 6,
@@ -753,6 +790,7 @@ export const DEFAULTS: Params = {
 export type FieldMeta =
   | { label: string; unit?: string; min: number; max: number; step: number }
   | { toggle: true; label: string }
+  | { text: true; label: string }
   | {
       select: true;
       label: string;
@@ -868,6 +906,93 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   formMagnetDia: { label: 'Diámetro del imán', unit: 'mm', min: 3, max: 12, step: 0.5 },
   formMagnetH: { label: 'Alto del imán', unit: 'mm', min: 1, max: 5, step: 0.5 },
   formMagnetClear: { label: 'Holgura del imán', unit: 'mm', min: 0, max: 0.5, step: 0.05 },
+  formProfile: {
+    select: true,
+    label: 'Perfil de la pared',
+    options: [
+      { value: 'suave', label: 'Suave (sale plana del borde, la que menos se rasga)' },
+      { value: 'redondo', label: 'Redondo' },
+      { value: 'cojin', label: 'Cojín (pared recta, arriba plano)' },
+    ],
+  },
+  formTextOutline: { label: 'Contorno del texto', unit: 'mm', min: 0, max: 1.5, step: 0.1 },
+  textBold: { toggle: true, label: 'Negrita' },
+  textSpacing: { label: 'Espacio entre letras', unit: '%', min: 0, max: 50, step: 1 },
+  formBackText: { text: true, label: 'Texto en la trasera' },
+  formIcon: { select: true, label: 'Icono', options: [
+      { value: 'none', label: 'Ninguno' },
+      { value: 'heart', label: 'Corazón' },
+      { value: 'star', label: 'Estrella' },
+      { value: 'circle', label: 'Círculo' },
+      { value: 'cloud', label: 'Nube' },
+      { value: 'ghost', label: 'Fantasma' },
+      { value: 'pumpkin', label: 'Calabaza' },
+      { value: 'bear', label: 'Osito' },
+      { value: 'tree', label: 'Árbol' },
+      { value: 'bubble', label: 'Bocadillo' },
+      { value: 'shield', label: 'Escudo' },
+      { value: 'egg', label: 'Huevo' },
+    ] },
+  formIconSide: {
+    select: true,
+    label: 'Cara del icono',
+    options: [
+      { value: 'delante', label: 'Delante' },
+      { value: 'detras', label: 'Detrás' },
+    ],
+  },
+  formIconLattice: { toggle: true, label: 'Icono enrejado (solo el contorno, con la malla dentro)' },
+  formIconSize: { label: 'Tamaño del icono', unit: '%', min: 10, max: 90, step: 1 },
+  formIconX: { label: 'Icono a izquierda / derecha', unit: '%', min: -100, max: 100, step: 1 },
+  formIconY: { label: 'Icono abajo / arriba', unit: '%', min: -100, max: 100, step: 1 },
+  formColorPlate: { select: true, label: 'Color de la malla', options: [
+      { value: 'auto', label: 'Como siempre' },
+      { value: '#e94b6a', label: 'Rosa' },
+      { value: '#d62828', label: 'Rojo' },
+      { value: '#1f1f24', label: 'Negro' },
+      { value: '#f5f5f5', label: 'Blanco' },
+      { value: '#9aa0a8', label: 'Gris' },
+      { value: '#2f6fd6', label: 'Azul' },
+      { value: '#2e9e5b', label: 'Verde' },
+      { value: '#e0a526', label: 'Dorado' },
+      { value: '#8a5cd0', label: 'Lila' },
+    ] },
+  formColorRim: { select: true, label: 'Color del borde', options: [
+      { value: 'auto', label: 'Como siempre' },
+      { value: '#e94b6a', label: 'Rosa' },
+      { value: '#d62828', label: 'Rojo' },
+      { value: '#1f1f24', label: 'Negro' },
+      { value: '#f5f5f5', label: 'Blanco' },
+      { value: '#9aa0a8', label: 'Gris' },
+      { value: '#2f6fd6', label: 'Azul' },
+      { value: '#2e9e5b', label: 'Verde' },
+      { value: '#e0a526', label: 'Dorado' },
+      { value: '#8a5cd0', label: 'Lila' },
+    ] },
+  formColorNut: { select: true, label: 'Color de tuerca y pinza', options: [
+      { value: 'auto', label: 'Como siempre' },
+      { value: '#e94b6a', label: 'Rosa' },
+      { value: '#d62828', label: 'Rojo' },
+      { value: '#1f1f24', label: 'Negro' },
+      { value: '#f5f5f5', label: 'Blanco' },
+      { value: '#9aa0a8', label: 'Gris' },
+      { value: '#2f6fd6', label: 'Azul' },
+      { value: '#2e9e5b', label: 'Verde' },
+      { value: '#e0a526', label: 'Dorado' },
+      { value: '#8a5cd0', label: 'Lila' },
+    ] },
+  formColorMold: { select: true, label: 'Color de los moldes', options: [
+      { value: 'auto', label: 'Como siempre' },
+      { value: '#e94b6a', label: 'Rosa' },
+      { value: '#d62828', label: 'Rojo' },
+      { value: '#1f1f24', label: 'Negro' },
+      { value: '#f5f5f5', label: 'Blanco' },
+      { value: '#9aa0a8', label: 'Gris' },
+      { value: '#2f6fd6', label: 'Azul' },
+      { value: '#2e9e5b', label: 'Verde' },
+      { value: '#e0a526', label: 'Dorado' },
+      { value: '#8a5cd0', label: 'Lila' },
+    ] },
   holePattern: {
     select: true,
     label: 'Calado de la plancha',

@@ -916,8 +916,9 @@ export function fitDetailToBase(
 
   if (lo >= 1 && !llenar) return detail; // ya cabía entero a su tamaño
   const s = lo * 0.95; // un pelín de margen para no rozar el borde
+  // Con todo lo que traiga el lazo (la marca de «línea» incluida), solo movido.
   return detail.map((l) => ({
-    hole: l.hole,
+    ...l,
     pts: l.pts.map(([x, y]) => [bc[0] + (x - dbox.cx) * s, bc[1] + (y - dbox.cy) * s] as Pt),
   }));
 }

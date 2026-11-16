@@ -336,15 +336,15 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     const cupulaS = mp(zonaCupula);
 
     // Trozos de dibujo de esta cara, cada uno con su color y su alto.
-    const trozos: { reg: Region[]; alto: number; color?: string; enrejado: boolean }[] = [];
+    const trozos: { reg: Region[]; alto: number; color?: string; enrejado: boolean; img?: boolean }[] = [];
     if (!detras) {
       const manchas = dibujo.filter((l) => !l.line);
       const lineas = dibujo.filter((l) => l.line);
       const rLineas = lineas.length ? regionsOf(lineas) : [];
       const rManchas = manchas.length ? regionsOf(manchas) : [];
       const h = Math.max(0, p.formDesignHeight ?? 0);
-      if (rManchas.length) trozos.push({ reg: intersectRegions(rLineas.length ? subtract(rManchas, rLineas) : rManchas, dentroS), alto: h, enrejado: false });
-      if (rLineas.length) trozos.push({ reg: intersectRegions(rLineas, dentroS), alto: h, enrejado: false });
+      if (rManchas.length) trozos.push({ reg: intersectRegions(rLineas.length ? subtract(rManchas, rLineas) : rManchas, dentroS), alto: h, enrejado: false, img: true });
+      if (rLineas.length) trozos.push({ reg: intersectRegions(rLineas, dentroS), alto: h, enrejado: false, img: true });
     }
     for (const el of elementos.filter((e) => (e.cara === 'detras') === detras)) {
       const reg = regionDe(el, cupulaS);
@@ -415,9 +415,9 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     const cuello = conRosca ? medioCuelloRoscado(cx, yNace, rCuello, largoCuello, detras ? 0.5 : 0, caja.maxY - yNace, paso) : emptyMesh();
 
     const cuerpo = merge(solid(cuerpoReg, 0, t), conVentana(bordeDentro));
-    const partes: { m: Mesh; color?: string }[] = [
+    const partes: { m: Mesh; color?: string; img?: boolean }[] = [
       { m: merge(conVentana(bordeFuera), bordeReg.length ? solid(bordeReg, 0, H) : emptyMesh(), orejas, cuello), color: auto(p.formColorRim) },
-      ...trozos.map((x, i) => ({ m: solid(regTrozos[i], 0, t + x.alto), color: x.color })),
+      ...trozos.map((x, i) => ({ m: solid(regTrozos[i], 0, t + x.alto), color: x.color, img: x.img })),
     ].filter((x) => x.m.positions.length);
     const textMesh = nombreReg.length ? solid(nombreReg, 0, t + Math.max(0, p.formDesignHeight ?? 0)) : undefined;
 
@@ -445,6 +445,7 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
       overlay,
       overlayParts: c.partes.map((x) => x.m),
       partTints: c.partes.map((x) => x.color),
+      deImagen: c.partes.map((x) => !!x.img),
       textMesh: c.textMesh,
       dome: c.domo,
       noMark: true,

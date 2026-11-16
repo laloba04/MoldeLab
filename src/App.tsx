@@ -4,6 +4,7 @@ import { DEFAULTS, type Piece, type Silhouette } from './types';
 import { autoLevels, loadImageData } from './lib/image';
 import { buildPieces, vectorize } from './lib/pipeline';
 import { byId, productosDe } from './lib/catalog';
+import { coloresDeZonas, esColorida } from './lib/coloresImagen';
 import { arcTextImage, imageWithText, textImage, textOnlyImage, useFont, useTextStyle } from './lib/sources';
 import { isEmbedded, saveBlob } from './lib/save';
 import { applyWatermark, canWatermark, rasterizeText } from './lib/watermark';
@@ -127,6 +128,10 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   // zona es 'base' (la placa), 'name' (el nombre) o 'pN' (cada trozo suelto del
   // dibujo). Lo que no esté aquí se queda con el color que le toca por defecto.
   const [zoneInk, setZoneInk] = useState<Record<string, number>>({});
+  // Colores sacados de la imagen: cada trozo del dibujo con el color que tiene
+  // en la imagen. Se enciende solo al subir una imagen con color; lo pintado a
+  // mano manda sobre ellos.
+  const [coloresImagen, setColoresImagen] = useState(false);
   // Color con el que se pinta al tocar la pieza. Sin él, tocar no hace nada y el
   // ratón sigue sirviendo solo para girar el modelo.
   const [brush, setBrush] = useState<number | null>(null);
@@ -153,13 +158,18 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     try {
       const data = await loadImageData(file);
       setImg(data);
+      // Con color: los colores claros son dibujo (salen las manchas) y cada
+      // trozo coge su color de la imagen. En blanco y negro, como siempre.
+      const conColor = esColorida(data);
+      setColoresImagen(conColor);
+      if (conColor) setParams((prev) => (prev.colorAsInk ? prev : { ...prev, colorAsInk: true }));
       setPreview(URL.createObjectURL(file));
     } catch {
       setError('No se ha podido leer la imagen. Prueba con un PNG o un JPG.');
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [setParams]);
 
   // Empezar desde una plantilla: se pinta y entra por el mismo camino que una
   // foto, así que la vista previa y todos los ajustes funcionan igual.
@@ -396,13 +406,17 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
 
   // El color pintado a mano de una zona, si lo tiene. Lo comparten el visor y el
   // 3MF, así que el archivo sale pintado exactamente igual que se ve.
+  const deImagen = useMemo(
+    () => (coloresImagen && silhouette && source ? coloresDeZonas(marked, silhouette, source) : {}),
+    [coloresImagen, silhouette, source, marked],
+  );
   const colorOf = useCallback(
     (pieceId: string, zone: string): string | undefined => {
       const n = zoneInk[`${pieceId}#${zone}`];
       if (n !== undefined) return palette[n];
-      return undefined;
+      return deImagen[`${pieceId}#${zone}`];
     },
-    [zoneInk, palette],
+    [zoneInk, palette, deImagen],
   );
   const paint = useCallback(
     (pieceId: string, zone: string) => {
@@ -675,6 +689,10 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
               brush={brush}
               setBrush={setBrush}
               hayPintadas={Object.keys(zoneInk).length > 0}
+              hayImagen={!!source}
+              coloresImagen={coloresImagen}
+              setColoresImagen={setColoresImagen}
+              detectados={[...new Set(Object.values(deImagen))]}
               quitarPintadas={() => {
                 setZoneInk({});
                 setBrush(null);

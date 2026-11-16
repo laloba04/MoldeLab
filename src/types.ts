@@ -24,6 +24,11 @@ import type { Dome } from './lib/dome';
 export interface Silhouette {
   /** Silueta maciza: perímetro exterior + agujeros pasantes. */
   loops: Loop[];
+  /**
+   * Cómo volver de mm a píxeles de la imagen (para leer sus colores):
+   * píxel x = (x + cx) / mmPerPx, píxel y = -(y + cy) / mmPerPx.
+   */
+  muestreo?: { mmPerPx: number; cx: number; cy: number };
   /** Trazos del dibujo sin rellenar. De aquí sale todo el relieve. */
   detail: Loop[];
   /** Bandas por umbral, de más clara a más oscura. Solo para productos en capas. */
@@ -102,6 +107,11 @@ export interface Piece {
   tint?: string;
   /** Color propio de cada trozo de `overlayParts`, si lo tiene (Termoformado 2). */
   partTints?: (string | undefined)[];
+  /**
+   * Qué trozos del dibujo salen de la imagen (los que se separan y cogen sus
+   * colores). Sin esto, se toman por de la imagen los que no traen color propio.
+   */
+  deImagen?: boolean[];
   /** Ajustes de laminado propios de la pieza (van a su objeto en el proyecto de Bambu). */
   ajustesLaminado?: Record<string, string>;
   /**

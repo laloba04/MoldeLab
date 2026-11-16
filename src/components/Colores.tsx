@@ -20,6 +20,12 @@ export interface ColoresProps {
   brush: number | null;
   setBrush: (f: (b: number | null) => number | null) => void;
   hayPintadas: boolean;
+  /** Hay imagen subida (si no, no hay colores que sacar). */
+  hayImagen: boolean;
+  coloresImagen: boolean;
+  setColoresImagen: (v: boolean) => void;
+  /** Los colores que se han sacado de la imagen, sin repetir. */
+  detectados: string[];
   quitarPintadas: () => void;
   hasTrace: boolean;
   hideTrace: boolean;
@@ -65,6 +71,30 @@ export function Colores(c: ColoresProps) {
           {fila(1, 'Trazo (el dibujo)')}
           {fila(2, hayNombre ? 'El nombre' : 'Tercer color')}
           {fila(3, 'Cuarto color')}
+        </>
+      )}
+      {!c.oneColor && c.hayImagen && (
+        <>
+          <label className="toggle">
+            <input type="checkbox" checked={c.coloresImagen} onChange={(e) => c.setColoresImagen(e.target.checked)} />
+            <span />
+            Colores de la imagen
+          </label>
+          {c.coloresImagen && (
+            <p className="hint">
+              {c.detectados.length ? (
+                <>
+                  Cada trozo del dibujo con su color de la imagen:{' '}
+                  {c.detectados.map((col) => (
+                    <span key={col} className="swatch-mini" title={col} style={{ background: col }} />
+                  ))}
+                  . Lo que pintes a mano manda.
+                </>
+              ) : (
+                'No se ha encontrado ningún trozo del dibujo con color en la imagen.'
+              )}
+            </p>
+          )}
         </>
       )}
       {c.oneColor && <p className="hint">Una sola tinta: sale del laminador sin cambios de filamento.</p>}

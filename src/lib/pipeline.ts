@@ -158,7 +158,7 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
   bands = bands?.map((b) => shiftLoops(b, -box.cx, -box.cy));
   textLoops = textLoops?.length ? shiftLoops(textLoops, -box.cx, -box.cy) : undefined;
 
-  return { loops, detail, bands, textLoops, widthMm: box.w, heightMm: box.h };
+  return { loops, detail, bands, textLoops, widthMm: box.w, heightMm: box.h, muestreo: { mmPerPx, cx: box.cx, cy: box.cy } };
 }
 
 export function buildPieces(s: Silhouette, p: Params): Piece[] {

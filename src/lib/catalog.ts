@@ -6,6 +6,7 @@
  * y el pipeline llama a `build`. Añadir un producto es añadir una entrada aquí.
  */
 
+import { separarTrozos } from './coloresImagen';
 import type { FieldGroup, Loop, Params, Piece, Product, ProductId, Pt, Silhouette } from '../types';
 import { DEFAULTS } from '../types';
 import { merge } from './mesh';
@@ -695,7 +696,11 @@ export const byId = (id: ProductId): Entry =>
 
 export function buildProduct(s: Silhouette, p: Params): Piece[] {
   const entry = byId(p.product);
-  return entry.build(s, p).filter((pc) => pc.mesh.positions.length > 0);
+  const piezas = entry.build(s, p).filter((pc) => pc.mesh.positions.length > 0);
+  // Cada trozo suelto del dibujo, aparte: se pinta (a mano o con los colores de
+  // la imagen) por separado. El rodillo no: sus zonas son las celdas, una copia
+  // del dibujo cada una, y así se pintan.
+  return p.product === 'roller' ? piezas : piezas.map(separarTrozos);
 }
 
 /** Los productos de una página: la de siempre o la de novedades. */

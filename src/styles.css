@@ -1719,3 +1719,13 @@ body {
 .elem .seg button.on, .elem-iconos button.on { opacity: 1; font-weight: 600; border-style: solid; }
 .elem-iconos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .elem-iconos button { justify-content: center; border-style: solid; opacity: 0.65; }
+
+.swatch-mini {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin: 0 0.15em;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  vertical-align: -0.1em;
+}

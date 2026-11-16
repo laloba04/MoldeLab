@@ -44,7 +44,7 @@ const falsos: Record<string, Record<string, unknown>> = {
   'machine/Bambu Lab A1 0.4 nozzle': { name: 'Bambu Lab A1 0.4 nozzle', inherits: 'fdm_machine_common', include: ['Bambu Lab A1 0.4 nozzle template machine_start_gcode'], printable_area: ['0x0', '256x0', '256x256', '0x256'], printable_height: '256', setting_id: 'GM030' },
   'machine/Bambu Lab A1 0.4 nozzle template machine_start_gcode': { name: 'x', machine_start_gcode: 'G28 ; prueba' },
   'process/0.20mm Standard @BBL A1': { name: '0.20mm Standard @BBL A1', layer_height: '0.2', compatible_printers: ['Bambu Lab A1 0.4 nozzle'] },
-  'filament/Bambu PLA Basic @BBL A1': { name: 'Bambu PLA Basic @BBL A1', filament_type: ['PLA'], nozzle_temperature: ['220'] },
+  'filament/Bambu PLA Basic @BBL A1': { name: 'Bambu PLA Basic @BBL A1', filament_type: ['PLA'], nozzle_temperature: ['220'], filament_id: 'GFA00', filament_dev_ams_drying_temperature: ['45', '45', '45', '45', '55', '55', '45', '45'], filament_extruder_variant: ['Direct Drive Standard'] },
 };
 const leerFalso = async (t: string, n: string) => {
   const p = falsos[`${t}/${n}`];
@@ -84,6 +84,12 @@ if (con && sin) {
   check('con el G-code de inicio y la cama del perfil (aplanando herencia e inclusiones)', ajustes.machine_start_gcode === 'G28 ; prueba' && ajustes.printable_height === '256' && ajustes.nozzle_diameter?.[0] === '0.4');
   const nFil = (cfg.match(/key="extruder" value="(\d+)"/g) ?? []).map((x) => Number(/(\d+)"$/.exec(x)![1])).reduce((a, b) => Math.max(a, b), 0);
   check('un filamento por color, con su color', ajustes.filament_colour.length === nFil && ajustes.filament_settings_id.length === nFil && ajustes.filament_type.length === nFil, `${nFil} filamentos`);
+  // Lo que comprueba Bambu al abrir (PresetBundle::load_config_file_config).
+  const nCol = ajustes.filament_colour.length;
+  check('Bambu: filament_self_index uno por filamento (si no, «Invalid configuration file»)', Array.isArray(ajustes.filament_self_index) && ajustes.filament_self_index.length === nCol && ajustes.filament_self_index.length === ajustes.filament_extruder_variant.length && ajustes.filament_self_index.every((x: string, i: number) => x === String(i + 1)));
+  check('Bambu: las listas de varios valores van enteras por filamento', ajustes.filament_dev_ams_drying_temperature.length === 8 * nCol, `${ajustes.filament_dev_ams_drying_temperature.length} valores`);
+  check('Bambu: mapa de filamentos, ids y purgas del tamaño justo', ajustes.filament_map.length === nCol && ajustes.filament_ids.every((x: string) => x === 'GFA00') && ajustes.flush_volumes_matrix.length === nCol * nCol);
+  check('Bambu: todo son textos o listas de textos', Object.values(ajustes).every((v) => typeof v === 'string' || (Array.isArray(v) && v.every((x) => typeof x === 'string'))));
   check('sin datos internos del perfil (herencia, ids, compatibles)', !('inherits' in ajustes) && !('setting_id' in ajustes) && !('compatible_printers' in ajustes));
 }
 

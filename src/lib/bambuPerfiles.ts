@@ -56,13 +56,38 @@ export async function ajustesProyecto(leer: Leer, colores: string[]): Promise<st
   const cfg: Perfil = {};
   for (const [k, v] of Object.entries(maquina)) if (!esMeta(k)) cfg[k] = v;
   for (const [k, v] of Object.entries(proceso)) if (!esMeta(k)) cfg[k] = v;
-  // Los del filamento van uno por filamento: se repite el valor de fábrica.
+  // Los del filamento van filamento tras filamento: la lista ENTERA de fábrica
+  // repetida n veces (hay ajustes con varios valores por filamento, como las
+  // 8 temperaturas de secado; Bambu los lee en bloques).
+  const porFilamento = (v: unknown[]) => Array.from({ length: n }, () => v).flat();
+  const cadaUno = (v: string) => Array.from({ length: n }, () => v);
   for (const [k, v] of Object.entries(filamento)) {
     if (esMeta(k)) continue;
-    cfg[k] = Array.isArray(v) ? Array.from({ length: n }, (_, i) => (v as unknown[])[Math.min(i, v.length - 1)]) : v;
+    cfg[k] = Array.isArray(v) ? porFilamento(v as unknown[]) : v;
   }
-  cfg.filament_colour = colores.length ? colores : ['#FFFFFF'];
-  cfg.filament_settings_id = Array.from({ length: n }, () => FILAMENTO);
+  const colores_ = colores.length ? colores : ['#FFFFFF'];
+  cfg.filament_colour = colores_;
+  cfg.filament_multi_colour = colores_;
+  cfg.filament_settings_id = cadaUno(FILAMENTO);
+  // Lo que guarda Bambu 2.9 en cada proyecto: sin `filament_self_index` no
+  // cuadran los filamentos con las variantes de extrusor y lo da por inválido.
+  cfg.filament_self_index = colores_.map((_, i) => String(i + 1));
+  cfg.filament_map = cadaUno('1');
+  cfg.filament_map_mode = 'Auto For Flush';
+  cfg.filament_ids = cadaUno(typeof filamento.filament_id === 'string' ? filamento.filament_id : '');
+  cfg.filament_nozzle_map = cadaUno('0');
+  cfg.filament_volume_map = cadaUno('0');
+  cfg.filament_colour_type = cadaUno('1');
+  cfg.default_filament_colour = cadaUno('');
+  cfg.filament_diameter_map = cadaUno('0.4');
+  cfg.filament_is_mixed = cadaUno('0');
+  cfg.nozzle_volume_type = ['Standard'];
+  cfg.extruder_nozzle_volume_type = ['Standard'];
+  cfg.curr_bed_type = 'Textured PEI Plate';
+  // Purgas al cambiar de color (Bambu las recalcula con el botón de purga).
+  cfg.flush_volumes_matrix = colores_.flatMap((_, i) => colores_.map((__, j) => (i === j ? '0' : '280')));
+  cfg.flush_volumes_vector = Array.from({ length: 2 * n }, () => '140');
+  cfg.flush_multiplier = ['1'];
   cfg.printer_settings_id = IMPRESORA;
   cfg.print_settings_id = PERFIL;
   cfg.from = 'project';

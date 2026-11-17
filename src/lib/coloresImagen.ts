@@ -182,14 +182,20 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
     const candidatos: [ReturnType<typeof cajaDe>, ReturnType<typeof cajaDe>][] = [[cajaTrozos, cajaDibujo]];
     const grandes = [...trozos].sort((a, b) => b.caja.w * b.caja.h - a.caja.w * a.caja.h).slice(0, 6);
     for (const t of grandes) for (const d of islas) candidatos.push([t.caja, d]);
+    const total = trozos.reduce((t, x) => t + x.pts.length, 0);
+    const areaDibujo = cajaDibujo.w * cajaDibujo.h;
     for (const [c, d] of candidatos)
       for (const giro of [[1, 1], [-1, 1], [1, -1], [-1, -1]] as [number, number][]) {
         const f = encaje(c, d, giro);
         if (!f) continue;
-        const n = nota(f);
+        // Un encaje que encoge los trozos hasta meterlos todos en una mancha
+        // (el campo azul de un escudo) sale con nota casi perfecta y todo del
+        // mismo color. Se pondera por cuánto del dibujo cubren los trozos así.
+        const escala2 = (d.w / c.w) * (d.h / c.h);
+        const cubre = Math.min(1, (cajaTrozos.w * cajaTrozos.h * escala2) / areaDibujo);
+        const n = nota(f) * cubre;
         if (n > puntos) { puntos = n; mejor = f; }
       }
-    const total = trozos.reduce((t, x) => t + x.pts.length, 0);
     if (!mejor || puntos < total * 0.5) continue;
 
     for (const t of trozos) {

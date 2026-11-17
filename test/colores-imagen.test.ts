@@ -142,6 +142,51 @@ for (const id of ['thermoform2', 'relief-plate', 'keychain-relief', 'coaster'] a
 }
 
 {
+  // Un escudo: marco amarillo, campo azul con aspa blanca, letras y corona. La
+  // mancha azul es enorme y las demás pequeñas: un encaje que encoja el dibujo
+  // hasta meterlo entero en una mancha daría nota casi perfecta y saldría todo
+  // de un solo color. Tienen que salir el amarillo, el azul y el rojo, y el amarillo con muchos trozos.
+  const W = 460, H = 580;
+  const data = new Uint8ClampedArray(W * H * 4).fill(255);
+  const put = (x: number, y: number, c: number[]) => {
+    const k = (y * W + x) * 4;
+    [data[k], data[k + 1], data[k + 2]] = c;
+  };
+  const AMA = [250, 226, 1], AZU = [30, 66, 163], BLA = [255, 255, 255], ROJ = [204, 18, 21];
+  for (let y = 10; y < 570; y++)
+    for (let x = 10; x < 450; x++) {
+      const dx = (x - 230) / 220, dy = (y - 230) / 330;
+      if (Math.abs(dx) > 1 || dy > 1 || (dy > 0.1 && Math.hypot(dx, (dy - 0.1) / 0.9) > 1)) continue;
+      const borde = Math.abs(dx) > 0.93 || (dy > 0.1 && Math.hypot(dx, (dy - 0.1) / 0.9) > 0.93) || y < 28;
+      const aspa = Math.abs(x - 230 - (y - 230)) < 36 || Math.abs(x - 230 + (y - 230)) < 36;
+      put(x, y, borde ? AMA : aspa ? BLA : AZU);
+    }
+  const caja = (x0: number, y0: number, x1: number, y1: number, c: number[]) => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) put(x, y, c);
+  };
+  caja(185, 70, 275, 110, ROJ); // corona
+  caja(185, 55, 275, 70, AMA);
+  caja(60, 220, 100, 300, AMA); // letras
+  caja(360, 220, 400, 300, AMA);
+  caja(210, 440, 250, 520, AMA);
+  const escudo = { width: W, height: H, data, colorSpace: 'srgb' } as ImageData;
+  const p = P('thermoform2');
+  const sil = vectorize(escudo, p, null);
+  const piezas = buildProduct(sil, p);
+  const z = coloresDeZonas(piezas, sil, escudo);
+  const cuenta = new Map<string, number>();
+  for (const c of Object.values(z)) cuenta.set(c, (cuenta.get(c) ?? 0) + 1);
+  const hay = (rgb: number[]) => [...cuenta.keys()].some((h) => dist3(h, rgb) < 40);
+  check('escudo: salen amarillo, azul y rojo (cada mancha con su color)', hay(AMA) && hay(AZU) && hay(ROJ), [...cuenta].map(([c, n]) => `${c}×${n}`).join(' '));
+  check('escudo: el amarillo no se queda en un solo trozo', [...cuenta].some(([h, n]) => dist3(h, AMA) < 40 && n >= 3));
+}
+
+function dist3(h: string, c: number[]) {
+  const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return Math.hypot(v[0] - c[0], v[1] - c[1], v[2] - c[2]);
+}
+
+{
   // Ningún producto se rompe ni se inventa colores raros.
   let rotos = 0;
   const raros = new Set<string>();

@@ -318,6 +318,70 @@ export function gruposDeColor(img: ImageData, m: Mask, mismo = 40): { grupo: Int
 }
 
 /**
+ * Las líneas oscuras FINAS entre dos colores (el contorno de un dibujo en
+ * pocos píxeles) pasan a ser de los colores de al lado: cada píxel de la línea
+ * coge el grupo del color más cercano. Sin esto, la línea y las dos rayas del
+ * corte se comen un hueco ancho entre colores y se ve un halo del color de la
+ * placa alrededor de cada letra. Las líneas gruesas (un contorno negro de
+ * verdad) se quedan como trozo propio: solo se tocan las que desaparecerían
+ * al abrir la máscara `r` píxeles.
+ */
+export function absorberLineasFinas(m: Mask, grupo: Int16Array, esLinea: (g: number) => boolean, r: number): void {
+  const { w, h } = m;
+  const oscuro = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) oscuro[i] = m.data[i] && grupo[i] >= 0 && esLinea(grupo[i]) ? 1 : 0;
+  // Apertura: erosión y dilatación en caja de radio r.
+  const caja = (src: Uint8Array, todos: boolean): Uint8Array => {
+    const tmp = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let n = 0;
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = x + dx;
+          if (nx >= 0 && nx < w && src[y * w + nx]) n++;
+        }
+        tmp[y * w + x] = todos ? (n === 2 * r + 1 ? 1 : 0) : n > 0 ? 1 : 0;
+      }
+    }
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let n = 0;
+        for (let dy = -r; dy <= r; dy++) {
+          const ny = y + dy;
+          if (ny >= 0 && ny < h && tmp[ny * w + x]) n++;
+        }
+        out[y * w + x] = todos ? (n === 2 * r + 1 ? 1 : 0) : n > 0 ? 1 : 0;
+      }
+    }
+    return out;
+  };
+  const abierto = caja(caja(oscuro, true), false);
+  const fina = new Uint8Array(w * h);
+  let hay = false;
+  for (let i = 0; i < w * h; i++) if (oscuro[i] && !abierto[i]) { fina[i] = 1; hay = true; }
+  if (!hay) return;
+  // Desde los píxeles de color (no de línea) hacia dentro de la línea fina.
+  let frente: number[] = [];
+  for (let i = 0; i < w * h; i++) if (m.data[i] && grupo[i] >= 0 && !fina[i] && !(esLinea(grupo[i]))) frente.push(i);
+  const hecho = new Uint8Array(w * h);
+  for (const i of frente) hecho[i] = 1;
+  while (frente.length) {
+    const nuevo: number[] = [];
+    for (const i of frente) {
+      const x = i % w, y = (i / w) | 0;
+      for (const j of [x > 0 ? i - 1 : -1, x + 1 < w ? i + 1 : -1, y > 0 ? i - w : -1, y + 1 < h ? i + w : -1]) {
+        if (j < 0 || hecho[j] || !fina[j]) continue;
+        hecho[j] = 1;
+        grupo[j] = grupo[i];
+        nuevo.push(j);
+      }
+    }
+    frente = nuevo;
+  }
+}
+
+/**
  * Corta la máscara entre colores distintos: quita una raya de `ancho` píxeles
  * donde se tocan dos grupos (y ninguno es de los `sinCorte`, p. ej. la línea
  * negra, que ya separa por sí misma). Así cada color sale como trozo propio.

@@ -10,7 +10,7 @@
  */
 
 import type { Loop, Params, Piece, Pt, Silhouette } from '../types';
-import { binarize, cleanupMask, cortarEntreColores, fillEnclosed, gruposDeColor, pad, type Mask } from './image';
+import { binarize, cleanupMask, absorberLineasFinas, cortarEntreColores, fillEnclosed, gruposDeColor, pad, type Mask } from './image';
 import { traceContours } from './contours';
 import { area, dedupe, orient, pointInPolygon, resample, simplify, smooth } from './polygon';
 import { boxOf, shiftLoops } from './shapes';
@@ -118,6 +118,22 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
       const c = gruposColor!.colores[g];
       return lum(c) < umbral && Math.max(...c) - Math.min(...c) < 40;
     };
+    absorberLineasFinas(detailMask, gruposColor.grupo, lineaOscura, Math.max(1, Math.round(0.2 / mmPerPx)));
+    // Un tono que cae justo entre otros dos (el verde-oliva del borde suavizado
+    // entre un azul y un amarillo) no es un color de la imagen: si forma una
+    // franja fina, se reparte entre los colores de al lado.
+    const cols = gruposColor.colores;
+    const mezcla = cols.map((c, g) =>
+      cols.some((a, i) => i !== g && cols.some((b, j) => {
+        if (j <= i || j === g) return false;
+        const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const l2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
+        if (l2 < 1) return false;
+        const t = Math.max(0, Math.min(1, ((c[0] - a[0]) * ab[0] + (c[1] - a[1]) * ab[1] + (c[2] - a[2]) * ab[2]) / l2));
+        return Math.hypot(a[0] + ab[0] * t - c[0], a[1] + ab[1] * t - c[1], a[2] + ab[2] * t - c[2]) < 28;
+      })),
+    );
+    if (mezcla.some(Boolean)) absorberLineasFinas(detailMask, gruposColor.grupo, (g) => mezcla[g], Math.max(1, Math.round(0.45 / mmPerPx)));
     detailMask = cortarEntreColores(detailMask, gruposColor.grupo, ancho);
   }
 

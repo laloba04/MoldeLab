@@ -1333,6 +1333,31 @@ button.chip:hover {
   }
 }
 
+/*
+   En el móvil los botones flotantes del visor van en UNA fila que se desliza con
+   el dedo. Apilados (con la altura de zona tocable de arriba) llegaban a ocupar
+   cinco filas y tapaban el modelo entero.
+*/
+@media (max-width: 860px) {
+  .hud {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* Para que el borde de la fila no corte la sombra del último botón. */
+    padding-bottom: 2px;
+  }
+  .hud::-webkit-scrollbar {
+    display: none;
+  }
+  .hud .chip {
+    flex: none;
+    min-height: 36px;
+    padding: 6px 11px;
+    white-space: nowrap;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

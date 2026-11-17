@@ -212,14 +212,66 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
 
   // Los tonos casi iguales de trozos distintos, a un mismo color: si no, cada
   // mancha blanca saldría de un blanco un poco distinto (y un filamento cada una).
+  // Antes, cada color se pega al más cercano de los colores de verdad de la
+  // imagen (los que ocupan una parte apreciable del dibujo): un trozo fino del
+  // borde cae entre dos colores y saldría de un tono mezclado que no existe.
+  const paleta = paletaDeImagen(img, dibujo);
+  const alPaleta = (c: RGB): RGB => {
+    let mejor = c, d0 = Infinity;
+    for (const q of paleta) {
+      const d = dist(q, c);
+      if (d < d0) { d0 = d; mejor = q; }
+    }
+    return mejor;
+  };
   const finales: RGB[] = [];
   const out: Record<string, string> = {};
-  for (const { clave, c } of crudos) {
+  for (const { clave, c: crudo } of crudos) {
+    const c = alPaleta(crudo);
     let f = finales.find((x) => dist(x, c) < MISMO);
     if (!f) finales.push((f = c));
     out[clave] = hex(f);
   }
   return out;
+}
+
+/**
+ * Los colores de verdad de la imagen: los tonos (agrupados) que ocupan al menos
+ * el 0,2 % del dibujo. Los intermedios del borde suavizado quedan fuera.
+ */
+function paletaDeImagen(img: ImageData, dibujo: Uint8Array): RGB[] {
+  const W = img.width, H = img.height;
+  const paso = Math.max(1, Math.floor((W * H) / 120000));
+  const grupos: { c: RGB; n: number }[] = [];
+  let total = 0;
+  for (let i = 0; i < W * H; i += paso) {
+    if (!dibujo[i]) continue;
+    const k = i * 4;
+    const c: RGB = [img.data[k], img.data[k + 1], img.data[k + 2]];
+    total++;
+    let g = grupos.find((x) => dist(x.c, c) < MISMO);
+    if (!g) grupos.push((g = { c: [...c] as RGB, n: 0 }));
+    g.n++;
+    g.c = g.c.map((v, j) => v + (c[j] - v) / g.n) as RGB;
+  }
+  // De mayor a menor: un tono que cae sobre la línea entre dos colores ya
+  // aceptados es una mezcla del borde suavizado, no un color de la imagen.
+  const paleta: RGB[] = [];
+  for (const g of grupos.filter((x) => x.n >= total * 0.002).sort((a, b) => b.n - a.n)) {
+    let mezcla = false;
+    for (let i = 0; i < paleta.length && !mezcla; i++)
+      for (let j = i + 1; j < paleta.length && !mezcla; j++) {
+        const a = paleta[i], b = paleta[j];
+        const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+        if (l2 < 1) continue;
+        const t = Math.max(0, Math.min(1, ((g.c[0] - a[0]) * ab[0] + (g.c[1] - a[1]) * ab[1] + (g.c[2] - a[2]) * ab[2]) / l2));
+        const q: RGB = [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t];
+        if (dist(q, g.c) < 30) mezcla = true;
+      }
+    if (!mezcla) paleta.push(g.c);
+  }
+  return paleta.length ? paleta : grupos.map((g) => g.c);
 }
 
 /**

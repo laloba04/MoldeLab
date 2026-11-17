@@ -203,9 +203,8 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
       const cs = sitios.map((p) => pixel(p)).filter((c): c is RGB => !!c);
       const c = colorMayoritario(cs);
       if (!c) continue;
-      // Que casi todo el trozo sea de ese color.
-      const iguales = cs.filter((x) => dist(x, c) < MISMO).length;
-      if (iguales < t.pts.length * 0.55) continue;
+      // Un trozo con casi todos sus puntos fuera del dibujo no es del dibujo.
+      if (cs.length < t.pts.length * 0.5) continue;
       crudos.push({ clave: `${pz.id}#p${t.i}`, c });
     }
   }

@@ -245,9 +245,13 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
   const ventanas = sitiosClip.length
     ? sanitize(
         sitiosClip.map(({ pt, n }) => {
-          const c: Pt = [pt[0] + n[0] * vGancho, pt[1] + n[1] * vGancho];
-          const fondo = vDentro - vFuera;
-          const largo = ANCHO_CLIP + 2 * holgClip + 0.4;
+          // La ranura, 0,2 mm más honda (solo hacia dentro: la pared de fuera
+          // no se adelgaza) y 0,3 mm más larga que el gancho y su holgura, para
+          // que entre sin forzar. El gancho no cambia.
+          const extra = 0.2;
+          const c: Pt = [pt[0] + n[0] * (vGancho - extra / 2), pt[1] + n[1] * (vGancho - extra / 2)];
+          const fondo = vDentro - vFuera + extra;
+          const largo = ANCHO_CLIP + 2 * holgClip + 0.7;
           return n[0] ? roundedRect(c[0], c[1], fondo, largo, 0) : roundedRect(c[0], c[1], largo, fondo, 0);
         }),
         [],

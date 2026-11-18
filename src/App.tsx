@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Image as ImageIcon, Wand2 } from 'lucide-react';
-import { DEFAULTS, type Piece, type Silhouette } from './types';
+import { DEFAULTS, type Params, type Piece, type Silhouette } from './types';
 import { autoLevels, loadImageData } from './lib/image';
 import { CANCELADO, piezasAparte, vectorizarAparte } from './lib/calculo';
+import { CAMPOS_COLOR, marcasDeColor, pintarColores } from './lib/coloresPartes';
 import { byId, productosDe } from './lib/catalog';
 import { coloresDeZonas, esColorida } from './lib/coloresImagen';
 import { arcTextImage, imageWithText, textImage, textOnlyImage, useFont, useTextStyle } from './lib/sources';
@@ -73,7 +74,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   const [img, setImg] = useState<ImageData | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [silhouette, setSilhouette] = useState<Silhouette | null>(null);
-  const [pieces, setPieces] = useState<Piece[]>([]);
+  const [piezasCrudas, setPieces] = useState<Piece[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -337,6 +338,18 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, textSource, vecKey]);
 
+  // Los colores de las partes no cambian la forma: se calcula con unas marcas en
+  // su lugar y luego se pintan al momento. Antes, cambiar el color de la malla
+  // rehacía la pieza entera (un minuto en una tablet).
+  const geoKey = JSON.stringify({ ...params, ...marcasDeColor });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const paramsGeo = useMemo(() => ({ ...params, ...marcasDeColor }) as Params, [geoKey]);
+  const pieces = useMemo(
+    () => pintarColores(piezasCrudas, params),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [piezasCrudas, ...CAMPOS_COLOR.map((f) => params[f])],
+  );
+
   // Mallar es barato: se rehace con cada slider. Aquí se apaga el aviso, cuando
   // la silueta ya está vectorizada y las piezas construidas.
   // Con productos pesados (Termoformado 2 con una imagen de colores tarda varios
@@ -348,7 +361,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     setComputing(true);
     let vivo = true;
     const t = setTimeout(() => {
-      piezasAparte(silhouette, params).then(
+      piezasAparte(silhouette, paramsGeo).then(
         (pz) => {
           if (!vivo) return;
           setPieces(pz);
@@ -366,7 +379,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       vivo = false;
       clearTimeout(t);
     };
-  }, [silhouette, params]);
+  }, [silhouette, paramsGeo]);
 
   // ¿Se ha llegado a grabar algo? Si a ese tamaño el texto no cabe entero dentro
   // de la pieza no se pone —medio texto al aire no vale— y sin avisar parecería

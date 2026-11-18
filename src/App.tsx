@@ -93,6 +93,22 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   // Proyecto de Bambu con placas: encendido (probado en Bambu Studio 2.9.1.70
   // con la A1). Si no se pueden bajar los perfiles, sale el 3MF estándar.
   const [porPlacas, setPorPlacas] = useState(true);
+  // La impresora del proyecto de Bambu: se recuerda en este navegador.
+  const [impresora, setImpresora_] = useState<'A1' | 'P2S'>(() => {
+    try {
+      return localStorage.getItem('moldelab-impresora') === 'P2S' ? 'P2S' : 'A1';
+    } catch {
+      return 'A1';
+    }
+  });
+  const setImpresora = (v: 'A1' | 'P2S') => {
+    setImpresora_(v);
+    try {
+      localStorage.setItem('moldelab-impresora', v);
+    } catch {
+      /* sin almacenamiento: solo para esta vez */
+    }
+  };
   const [soloPiezas, setSoloPiezas] = useState<'todas' | 'planchas' | 'moldes'>('todas');
   const [slicer, setSlicer] = useState<Slicer>('bambu');
   const [sending, setSending] = useState(false);
@@ -496,6 +512,7 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
       separar: separate,
       // Solo el Termoformado 2: el de siempre sigue con su 3MF estándar, que ya funciona.
       porPlacas: params.product === 'thermoform2' && porPlacas,
+      impresora,
       soloPiezas: placasDe(marked).size > 1 ? soloPiezas : 'todas',
       colores: { bg: bgColor, trace: traceColor, text: textColor },
       // Sin «todo de un color», las zonas pintadas a mano viajan al archivo.
@@ -787,6 +804,8 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
           hayPlacas={params.product === 'thermoform2' && placasDe(marked).size > 1}
           porPlacas={porPlacas}
           setPorPlacas={setPorPlacas}
+          impresora={impresora}
+          setImpresora={setImpresora}
           soloPiezas={soloPiezas}
           setSoloPiezas={setSoloPiezas}
           slicer={slicer}

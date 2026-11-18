@@ -19,9 +19,15 @@
 export const VERSION_BAMBU = '02.09.01.70';
 const RAIZ = `https://raw.githubusercontent.com/bambulab/BambuStudio/v${VERSION_BAMBU}/resources/profiles/BBL`;
 
-export const IMPRESORA = 'Bambu Lab A1 0.4 nozzle';
-export const PERFIL = '0.20mm Standard @BBL A1';
-export const FILAMENTO = 'Bambu PLA Basic @BBL A1';
+/** Las impresoras del taller: la A1 y la P2S, las dos con boquilla de 0,4. */
+export const IMPRESORAS = {
+  A1: { impresora: 'Bambu Lab A1 0.4 nozzle', perfil: '0.20mm Standard @BBL A1', filamento: 'Bambu PLA Basic @BBL A1' },
+  P2S: { impresora: 'Bambu Lab P2S 0.4 nozzle', perfil: '0.20mm Standard @BBL P2S', filamento: 'Bambu PLA Basic @BBL P2S' },
+} as const;
+export type Impresora = keyof typeof IMPRESORAS;
+export const IMPRESORA = IMPRESORAS.A1.impresora;
+export const PERFIL = IMPRESORAS.A1.perfil;
+export const FILAMENTO = IMPRESORAS.A1.filamento;
 
 type Perfil = Record<string, unknown>;
 export type Leer = (tipo: 'machine' | 'process' | 'filament', nombre: string) => Promise<Perfil>;
@@ -45,7 +51,8 @@ export async function aplanar(leer: Leer, tipo: 'machine' | 'process' | 'filamen
 }
 
 /** El `Metadata/project_settings.config`: impresora + perfil + `n` filamentos con sus colores. */
-export async function ajustesProyecto(leer: Leer, colores: string[]): Promise<string> {
+export async function ajustesProyecto(leer: Leer, colores: string[], cual: Impresora = 'A1'): Promise<string> {
+  const { impresora: IMPRESORA, perfil: PERFIL, filamento: FILAMENTO } = IMPRESORAS[cual];
   const n = Math.max(1, colores.length);
   const [maquina, proceso, filamento] = await Promise.all([
     aplanar(leer, 'machine', IMPRESORA),
@@ -71,7 +78,10 @@ export async function ajustesProyecto(leer: Leer, colores: string[]): Promise<st
   cfg.filament_settings_id = cadaUno(FILAMENTO);
   // Lo que guarda Bambu 2.9 en cada proyecto: sin `filament_self_index` no
   // cuadran los filamentos con las variantes de extrusor y lo da por inválido.
-  cfg.filament_self_index = colores_.map((_, i) => String(i + 1));
+  // Una entrada por filamento Y por variante de extrusor (la P2S tiene tres:
+  // estándar, alto caudal y E3D; la A1, una).
+  const variantes = Array.isArray(filamento.filament_extruder_variant) ? Math.max(1, (filamento.filament_extruder_variant as unknown[]).length) : 1;
+  cfg.filament_self_index = colores_.flatMap((_, i) => Array.from({ length: variantes }, () => String(i + 1)));
   cfg.filament_map = cadaUno('1');
   cfg.filament_map_mode = 'Auto For Flush';
   cfg.filament_ids = cadaUno(typeof filamento.filament_id === 'string' ? filamento.filament_id : '');

@@ -17,6 +17,8 @@ export interface DescargaProps {
   hayPlacas: boolean;
   porPlacas: boolean;
   setPorPlacas: (v: boolean) => void;
+  impresora: 'A1' | 'P2S';
+  setImpresora: (v: 'A1' | 'P2S') => void;
   soloPiezas: 'todas' | 'planchas' | 'moldes';
   setSoloPiezas: (v: 'todas' | 'planchas' | 'moldes') => void;
   slicer: Slicer;
@@ -107,7 +109,16 @@ export function Descarga(d: DescargaProps) {
           <label className="toggle">
             <input type="checkbox" checked={d.porPlacas} onChange={(e) => d.setPorPlacas(e.target.checked)} />
             <span />
-            Proyecto de Bambu con placas (cada pieza en su placa, para la A1)
+            Proyecto de Bambu con placas (cada pieza en su placa)
+          </label>
+        )}
+        {d.hayPlacas && d.formatos.has('3mf') && d.porPlacas && (
+          <label className="color-row slicer-pick">
+            <select value={d.impresora} onChange={(e) => d.setImpresora(e.target.value as 'A1' | 'P2S')}>
+              <option value="A1">Bambu Lab A1</option>
+              <option value="P2S">Bambu Lab P2S</option>
+            </select>
+            Impresora del proyecto
           </label>
         )}
 

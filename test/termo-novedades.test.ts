@@ -165,8 +165,10 @@ check('y queda abajo, en el borde', mClip.y0 < mDel.y0 + 1 && mClip.y1 < mDel.y0
 }
 
 // --- Malla hecha por el laminador -----------------------------------------------
-const maciza = volumen(pieza(hacer({ formLatticeBySlicer: true }), 'sheet')!.mesh);
-const calada = volumen(del.mesh);
+// Solo la plancha (sin borde ni dibujo, que van igual en las dos).
+const vPlancha = (pc: Piece) => volumen(pc.mesh) - (pc.overlayParts ?? []).reduce((a, m) => a + volumen(m), 0);
+const maciza = vPlancha(pieza(hacer({ formLatticeBySlicer: true }), 'sheet')!);
+const calada = vPlancha(del);
 check('con «la malla la hace el laminador», la plancha sale maciza', maciza > calada * 1.2, `${calada.toFixed(0)} → ${maciza.toFixed(0)} mm³`);
 
 // --- Moldes -------------------------------------------------------------------
@@ -253,7 +255,20 @@ check('al abrir en Bambu: un .3mf con 4 placas (mallas, tuerca y clip, cada mold
 // --- Como en las fotos: malla trenzada y tuerca hexagonal ---------------------------
 check('la malla sale trenzada por defecto', INICIAL.holePattern === 'weave');
 check('por defecto la malla la hace el laminador (como el kit), al 25 %', INICIAL.formLatticeBySlicer === true && INICIAL.formSlicerDensity === 25);
-check('y por defecto la plancha sale maciza', volumen(pieza(buildProduct(sil, { ...DEFAULTS, product: 'thermoform2', ...INICIAL } as Params), 'sheet')!.mesh) > volumen(pieza(hacer(), 'sheet')!.mesh) * 1.2);
+check('y por defecto la plancha sale maciza', vPlancha(pieza(buildProduct(sil, { ...DEFAULTS, product: 'thermoform2', ...INICIAL } as Params), 'sheet')!) > vPlancha(pieza(hacer(), 'sheet')!) * 1.2);
+
+// --- El dibujo va encima de la plancha entera, como en el kit -----------------------
+{
+  const pc = pieza(buildProduct(sil, { ...DEFAULTS, product: 'thermoform2', ...INICIAL } as Params), 'sheet')!;
+  const imgs = (pc.overlayParts ?? []).filter((_, i) => pc.deImagen?.[i]);
+  const zMin = Math.min(...imgs.map((m) => Math.min(...Array.from(m.positions).filter((_, k) => k % 3 === 2))));
+  const zMax = Math.max(...imgs.map((m) => Math.max(...Array.from(m.positions).filter((_, k) => k % 3 === 2))));
+  const t = INICIAL.sheetThickness ?? 0.6;
+  check('el dibujo de la imagen va encima de la plancha (no recortado en ella)', imgs.length > 0 && Math.abs(zMin - t) < 1e-6 && Math.abs(zMax - (t + 0.8)) < 1e-6, `${zMin.toFixed(2)}…${zMax.toFixed(2)}`);
+  // La plancha sigue entera por debajo del dibujo: su volumen es el de toda la cara.
+  const sinDibujo = pieza(buildProduct({ ...sil, detail: [] }, { ...DEFAULTS, product: 'thermoform2', ...INICIAL } as Params), 'sheet')!;
+  check('y la plancha sigue entera por debajo', Math.abs(vPlancha(pc) - vPlancha(sinDibujo)) < vPlancha(sinDibujo) * 0.01, `${vPlancha(pc).toFixed(0)} / ${vPlancha(sinDibujo).toFixed(0)} mm³`);
+}
 const tren = hacer({ moldShape: 'bear' });
 check('malla trenzada: todo cerrado', abiertasDe(tren) === 0, `${abiertasDe(tren)}`);
 check('la malla trenzada tiene agujeros', volumen(pieza(tren, 'sheet')!.mesh) < volumen(pieza(hacer({ moldShape: 'bear', formLatticeBySlicer: true }), 'sheet')!.mesh) * 0.9);

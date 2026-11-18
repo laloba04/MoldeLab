@@ -135,6 +135,9 @@ const ANCHO_CLIP = 5.4;
  * - Moldes: capas de 0,28 mm y 10 % de relleno (lo que dicen sus etiquetas).
  * - Tuerca y clip: macizos por fuera y con borde de adherencia (son pequeños).
  */
+/** Grosor del dibujo de la imagen encima de la plancha (el del kit). */
+export const GROSOR_DIBUJO = 0.8;
+
 export function ajustesLaminado(id: string, p: Params): Record<string, string> | undefined {
   if (id === 'sheet' || id === 'sheet-back') {
     if (!p.formLatticeBySlicer) return undefined;
@@ -402,7 +405,10 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
       const r = intersectRegions(x.reg, x.enrejado ? plancha : llena);
       return x.img ? r : limpiar(r);
     });
-    const ocupado = [...regTrozos.flat(), ...nombreReg];
+    // El dibujo de la imagen va ENCIMA de la plancha entera, como en el kit: a ras
+    // (recortado en la plancha) solo se tocaba con la malla por los lados y al
+    // despegarlo de la cama medio dibujo se soltaba.
+    const ocupado = [...regTrozos.filter((_, i) => !trozos[i].img).flat(), ...nombreReg];
     // El hueco que deja el dibujo encaja justo con él (se ha recortado con esta
     // misma plancha), así que solo hace falta repasarlo si hay calado.
     const cuerpoReg = ocupado.length ? (agujeros.length ? limpiar(subtract(plancha, ocupado)) : subtract(plancha, ocupado)) : plancha;
@@ -446,7 +452,11 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     const cuerpo = merge(solid(cuerpoReg, 0, t), conVentana(bordeDentro));
     const partes: { m: Mesh; color?: string; img?: boolean }[] = [
       { m: merge(conVentana(bordeFuera), bordeReg.length ? solid(bordeReg, 0, H) : emptyMesh(), orejas, cuello), color: auto(p.formColorRim) },
-      ...trozos.map((x, i) => ({ m: solid(regTrozos[i], 0, t + x.alto), color: x.color, img: x.img })),
+      ...trozos.map((x, i) => ({
+        m: x.img ? solid(regTrozos[i], t, t + GROSOR_DIBUJO + x.alto) : solid(regTrozos[i], 0, t + x.alto),
+        color: x.color,
+        img: x.img,
+      })),
     ].filter((x) => x.m.positions.length);
     const textMesh = nombreReg.length ? solid(nombreReg, 0, t + Math.max(0, p.formDesignHeight ?? 0)) : undefined;
 

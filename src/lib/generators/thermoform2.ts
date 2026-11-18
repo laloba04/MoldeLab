@@ -269,12 +269,15 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     const e = holgClip;
     const a = 1.0;
     const g = Math.max(0.6, vDentro - vFuera - 2 * e - 0.4) / 2; // medio grueso del gancho
-    const hondoGancho = Math.min(2, H - 0.4);
+    // Impreso: con 2 mm de gancho y las tapas justo hasta él se soltaba. El gancho
+    // baja 3 mm por la ventanita y las tapas pasan 1 mm más allá, hacia dentro.
+    const hondoGancho = Math.min(3, H - 0.4);
+    const brazo = 1.0;
     const rect = (u0: number, u1: number, v0: number, v1: number): Pt[] => [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
     const piezasClip: Pt[][] = [
       rect(-(H + e + a), H + e + a, e, e + a), // el lomo, por fuera del borde
-      rect(H + e, H + e + a, vGancho - g, e + a), // las tapas, por encima de cada borde
-      rect(-(H + e + a), -(H + e), vGancho - g, e + a),
+      rect(H + e, H + e + a, vGancho - g - brazo, e + a), // las tapas, por encima de cada borde
+      rect(-(H + e + a), -(H + e), vGancho - g - brazo, e + a),
       rect(H - hondoGancho, H + e + a, vGancho - g, vGancho + g), // los ganchos, por la ventanita
       rect(-(H + e + a), -(H - hondoGancho), vGancho - g, vGancho + g),
     ];

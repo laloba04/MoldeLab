@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Image as ImageIcon, Wand2 } from 'lucide-react';
 import { DEFAULTS, type Piece, type Silhouette } from './types';
 import { autoLevels, loadImageData } from './lib/image';
-import { buildPieces, vectorize } from './lib/pipeline';
+import { CANCELADO, piezasAparte, vectorizarAparte } from './lib/calculo';
 import { byId, productosDe } from './lib/catalog';
 import { coloresDeZonas, esColorida } from './lib/coloresImagen';
 import { arcTextImage, imageWithText, textImage, textOnlyImage, useFont, useTextStyle } from './lib/sources';
@@ -313,16 +313,27 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
     // Se enciende ANTES del setTimeout: así el navegador pinta el aviso durante
     // esos 60 ms y ya está en pantalla cuando el cálculo bloquea de verdad.
     setComputing(true);
+    let vivo = true;
+    // Se calcula fuera de la página (Worker): mientras tanto se puede seguir
+    // tocando todo, y si se cambia algo el cálculo viejo se tira.
     const t = setTimeout(() => {
-      try {
-        setSilhouette(vectorize(source, params, textSource));
-        setError(null);
-      } catch {
-        setError('El contorno ha salido roto. Sube el umbral o la limpieza.');
-        setComputing(false);
-      }
+      vectorizarAparte(source, params, textSource).then(
+        (s) => {
+          if (!vivo) return;
+          setSilhouette(s);
+          setError(null);
+        },
+        (e) => {
+          if (!vivo || e === CANCELADO) return;
+          setError('El contorno ha salido roto. Sube el umbral o la limpieza.');
+          setComputing(false);
+        },
+      );
     }, 60);
-    return () => clearTimeout(t);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, textSource, vecKey]);
 
@@ -335,16 +346,26 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
   useEffect(() => {
     if (!silhouette) return;
     setComputing(true);
+    let vivo = true;
     const t = setTimeout(() => {
-      try {
-        setPieces(buildPieces(silhouette, params));
-        setError(null);
-      } catch {
-        setError('No se ha podido generar la malla con estos valores.');
-      }
-      setComputing(false);
+      piezasAparte(silhouette, params).then(
+        (pz) => {
+          if (!vivo) return;
+          setPieces(pz);
+          setError(null);
+          setComputing(false);
+        },
+        (e) => {
+          if (!vivo || e === CANCELADO) return;
+          setError('No se ha podido generar la malla con estos valores.');
+          setComputing(false);
+        },
+      );
     }, 120);
-    return () => clearTimeout(t);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
   }, [silhouette, params]);
 
   // ¿Se ha llegado a grabar algo? Si a ese tamaño el texto no cabe entero dentro

@@ -255,6 +255,22 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
       )
     : [];
 
+  // Y, por dentro de la cabeza (dejando un puente de 0,3 mm), un agujero en la
+  // plancha de lo largo de la muesca, como el kit: por ahí pasa la parte de
+  // dentro del clip al meterlo.
+  const agujerosClip = sitiosClip.length
+    ? sanitize(
+        sitiosClip.map(({ pt, n }) => {
+          const v0 = rimW + 0.3;
+          const fondo = 1.85;
+          const c: Pt = [pt[0] - n[0] * (v0 + fondo / 2), pt[1] - n[1] * (v0 + fondo / 2)];
+          const largo = largoMuesca + 0.2;
+          return n[0] ? roundedRect(c[0], c[1], fondo, largo, 0) : roundedRect(c[0], c[1], largo, fondo, 0);
+        }),
+        [],
+      )
+    : [];
+
   /**
    * El clip, de perfil (u = de la juntura hacia fuera, v = hacia fuera del
    * borde): una funda que abraza las dos cabezas, con una raja hacia dentro por
@@ -375,7 +391,7 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     ];
     if (agujeros.length && protegido.length) agujeros = limpiar(subtract(agujeros, protegido));
     agujeros = agujeros.length ? limpiar(intersectRegions(agujeros, offsetRegions(dentroS.map((r) => r.outer), [], -pared))) : agujeros;
-    let plancha = dentroS;
+    let plancha = agujerosClip.length ? limpiar(subtract(dentroS, m(agujerosClip))) : dentroS;
     const llena = plancha;
     if (agujeros.length) plancha = subtract(plancha, agujeros);
 

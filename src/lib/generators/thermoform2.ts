@@ -59,7 +59,9 @@ const mayor = (rs: Region[]): Pt[] | null =>
 function limpiar(rs: Region[]): Region[] {
   if (!rs.length) return rs;
   const o = (x: Region[], d: number) => offsetRegions(x.map((r) => r.outer), x.flatMap((r) => r.holes), d);
-  return o(o(o(o(rs, 0.02), -0.02), -0.02), 0.02);
+  // Cerrar y abrir 0,02 mm: (+d, −d, −d, +d) es lo mismo que (+d, −2d, +d), con
+  // un desplazamiento menos (es de lo que más tarda con un dibujo de muchos trozos).
+  return o(o(o(rs, 0.02), -0.04), 0.02);
 }
 
 /** Regiones a contornos (para las funciones que piden `Loop`). */
@@ -358,17 +360,20 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
 
     // El calado: por dentro del borde, sin tocar las ventanitas ni lo macizo.
     const macizos = [...trozos.filter((x) => !x.enrejado).flatMap((x) => x.reg), ...nombreReg];
-    let zonaCalado = offsetRegions(dentroS.map((r) => r.outer), [], -0.8);
+    // Con la malla del laminador no hay calado: nada de esto hace falta (y con un
+    // dibujo de muchos trozos era lo más lento de todo).
+    const conCalado = !p.formLatticeBySlicer;
+    let zonaCalado = conCalado ? offsetRegions(dentroS.map((r) => r.outer), [], -0.8) : [];
     // Con sus huecos: un dibujo de líneas (un osito de contorno) deja malla por
     // dentro; con solo el contorno de fuera, el interior entero salía macizo.
     const engordar = (rs: Region[], d: number) => offsetRegions(rs.map((r) => r.outer), rs.flatMap((r) => r.holes), d);
-    if (macizos.length) zonaCalado = subtract(zonaCalado, engordar(macizos, Math.max(0.6, p.holeWall)));
-    if (ventanas.length) zonaCalado = subtract(zonaCalado, offsetRegions(m(ventanas).map((r) => r.outer), [], 1));
+    if (conCalado && macizos.length) zonaCalado = subtract(zonaCalado, engordar(macizos, Math.max(0.6, p.holeWall)));
+    if (conCalado && ventanas.length) zonaCalado = subtract(zonaCalado, offsetRegions(m(ventanas).map((r) => r.outer), [], 1));
     // El calado mete una celda si su centro cae dentro, así que una esquina puede
     // pisar un texto: se recortan para dejar siempre pared alrededor de lo macizo.
-    let agujeros = p.formLatticeBySlicer ? [] : calado(p.holePattern, zonaCalado, Math.max(1, p.holeSpacing), Math.max(0.3, p.holeWall));
+    let agujeros = !conCalado ? [] : calado(p.holePattern, zonaCalado, Math.max(1, p.holeSpacing), Math.max(0.3, p.holeWall));
     const pared = Math.max(0.6, p.holeWall);
-    const protegido = [
+    const protegido = !agujeros.length ? [] : [
       ...(macizos.length ? engordar(macizos, pared) : []),
       ...(ventanas.length ? offsetRegions(m(ventanas).map((r) => r.outer), [], 1) : []),
     ];
@@ -380,9 +385,16 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     if (agujeros.length) plancha = subtract(plancha, agujeros);
 
     // Cada trozo a ras: el macizo ocupa su sitio entero; el enrejado, solo la malla.
-    const regTrozos = trozos.map((x) => limpiar(intersectRegions(x.reg, x.enrejado ? plancha : llena)));
+    // El dibujo de la imagen ya sale limpio del vectorizador y solo se recorta
+    // por el borde: no hace falta repasarlo (era de lo que más tardaba).
+    const regTrozos = trozos.map((x) => {
+      const r = intersectRegions(x.reg, x.enrejado ? plancha : llena);
+      return x.img ? r : limpiar(r);
+    });
     const ocupado = [...regTrozos.flat(), ...nombreReg];
-    const cuerpoReg = limpiar(ocupado.length ? subtract(plancha, ocupado) : plancha);
+    // El hueco que deja el dibujo encaja justo con él (se ha recortado con esta
+    // misma plancha), así que solo hace falta repasarlo si hay calado.
+    const cuerpoReg = ocupado.length ? (agujeros.length ? limpiar(subtract(plancha, ocupado)) : subtract(plancha, ocupado)) : plancha;
 
     // El borde: la mitad de dentro, si se pide, del color de la malla.
     const anillo = subtract(sanitize([outerS], []), offsetRegions([outerS], [], -rimW));

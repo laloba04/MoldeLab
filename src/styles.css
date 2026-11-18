@@ -984,8 +984,10 @@ button.ghost:hover {
 .hud {
   position: absolute;
   left: 16px;
+  right: 16px;
   bottom: 16px;
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
@@ -1001,6 +1003,7 @@ button.ghost:hover {
   color: var(--text);
   font-family: var(--mono);
   font-size: 11px;
+  white-space: nowrap;
   cursor: pointer;
 }
 .chip.readout {

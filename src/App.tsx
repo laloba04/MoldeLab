@@ -328,15 +328,23 @@ export default function App({ novedades = false }: { novedades?: boolean }) {
 
   // Mallar es barato: se rehace con cada slider. Aquí se apaga el aviso, cuando
   // la silueta ya está vectorizada y las piezas construidas.
+  // Con productos pesados (Termoformado 2 con una imagen de colores tarda varios
+  // segundos, y en un equipo lento bastante más) cada clic bloquea la página.
+  // Si se tocan varias cosas seguidas, solo se calcula la última, y el aviso se
+  // pinta antes de que empiece el cálculo.
   useEffect(() => {
     if (!silhouette) return;
-    try {
-      setPieces(buildPieces(silhouette, params));
-      setError(null);
-    } catch {
-      setError('No se ha podido generar la malla con estos valores.');
-    }
-    setComputing(false);
+    setComputing(true);
+    const t = setTimeout(() => {
+      try {
+        setPieces(buildPieces(silhouette, params));
+        setError(null);
+      } catch {
+        setError('No se ha podido generar la malla con estos valores.');
+      }
+      setComputing(false);
+    }, 120);
+    return () => clearTimeout(t);
   }, [silhouette, params]);
 
   // ¿Se ha llegado a grabar algo? Si a ese tamaño el texto no cabe entero dentro

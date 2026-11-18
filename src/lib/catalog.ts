@@ -535,7 +535,7 @@ export const PRODUCTS: Entry[] = [
       threadPitch: 2,
       neckLength: 5.5,
       capClearance: 0.2,
-      clipClearance: 0.15,
+      clipClearance: 0.3,
       formWall: 6,
       formFloor: 1.1,
       formMaleBase: 3,

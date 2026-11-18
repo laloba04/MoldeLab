@@ -705,7 +705,7 @@ export const DEFAULTS: Params = {
   formRimWidth: 2.5,
   formRimHeight: 0.6,
   threadPitch: 2,
-  clipClearance: 0.2,
+  clipClearance: 0.15,
   formWall: 4,
   formFloor: 3,
   formMaleBase: 2.5,

@@ -124,7 +124,7 @@ function corteEn(outer: Pt[], cx: number, cy: number, dx: number, dy: number): P
 }
 
 /** Lo ancho del clip (a lo largo del borde). */
-const ANCHO_CLIP = 5;
+const ANCHO_CLIP = 5.4;
 
 /**
  * Los ajustes de laminado de cada pieza, como los guarda el kit original en su
@@ -237,24 +237,19 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     }
   }
   const holgClip = Math.max(0, p.clipClearance ?? 0.15);
-  // Ventanitas del clip: un agujero de arriba abajo en la parte de DENTRO del
-  // borde y un poco de la malla. La pared de fuera del borde (0,6 mm) sigue
-  // entera: el clip la abraza por fuera y mete el gancho por el agujero.
-  const paredFuera = Math.min(0.6, rimW * 0.4);
-  const vDentro = rimW + 1.2; // hasta dónde llega el agujero hacia dentro
-  const vFuera = rimW - paredFuera; // y hacia fuera
-  const vGancho = -(vFuera + vDentro) / 2;
-  const ventanas = sitiosClip.length
+  // El cierre de abajo: en un tramo del borde (la muesca) el borde se rebaja a
+  // una cabeza baja. Con las dos mitades juntas por la cara plana, las dos
+  // cabezas forman un carril más grueso que las planchas; el clip es una funda
+  // con una raja: cada cabeza cabe sola por la raja (se mete de una en una) y,
+  // juntas, ya no salen. Nada de ganchos finos que se doblen.
+  const rajaClip = 2 * t + 0.4; // por la raja pasan las dos planchas juntas
+  const cabeza = Math.min(H, rajaClip - 0.2); // alto de cada cabeza desde la juntura: cabe sola por la raja
+  const largoMuesca = ANCHO_CLIP + 0.6;
+  const muescas = sitiosClip.length
     ? sanitize(
         sitiosClip.map(({ pt, n }) => {
-          // La ranura, 0,2 mm más honda (solo hacia dentro: la pared de fuera
-          // no se adelgaza) y 0,3 mm más larga que el gancho y su holgura, para
-          // que entre sin forzar. El gancho no cambia.
-          const extra = 0.2;
-          const c: Pt = [pt[0] + n[0] * (vGancho - extra / 2), pt[1] + n[1] * (vGancho - extra / 2)];
-          const fondo = vDentro - vFuera + extra;
-          const largo = ANCHO_CLIP + 2 * holgClip + 0.7;
-          return n[0] ? roundedRect(c[0], c[1], fondo, largo, 0) : roundedRect(c[0], c[1], largo, fondo, 0);
+          const fondo = 2 * rimW + 2;
+          return n[0] ? roundedRect(pt[0], pt[1], fondo, largoMuesca, 0) : roundedRect(pt[0], pt[1], largoMuesca, fondo, 0);
         }),
         [],
       )
@@ -262,21 +257,22 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
 
   /**
    * El clip, de perfil (u = de la juntura hacia fuera, v = hacia fuera del
-   * borde): un lomo por fuera de los dos bordes, una tapa por encima de cada
-   * borde y un gancho que baja por la ventanita. Se imprime tumbado.
+   * borde): una funda que abraza las dos cabezas, con una raja hacia dentro por
+   * la que pasan las planchas. Se imprime tumbado.
    */
   const perfilClip = (): Region[] => {
     const e = holgClip;
-    const a = 1.0;
-    const g = Math.max(0.6, vDentro - vFuera - 2 * e - 0.4) / 2; // medio grueso del gancho
-    const hondoGancho = Math.min(2, H - 0.4);
-    const rect = (u0: number, u1: number, v0: number, v1: number): Pt[] => [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+    const W = 0.95;
+    const u1 = cabeza + e; // medio hueco, a lo grueso
+    const vIn = -(rimW + W); // fondo del hueco hacia dentro
+    const r2 = rajaClip / 2;
+    const rect = (u0: number, u1_: number, v0: number, v1: number): Pt[] => [[u0, v0], [u1_, v0], [u1_, v1], [u0, v1]];
     const piezasClip: Pt[][] = [
-      rect(-(H + e + a), H + e + a, e, e + a), // el lomo, por fuera del borde
-      rect(H + e, H + e + a, vGancho - g, e + a), // las tapas, por encima de cada borde
-      rect(-(H + e + a), -(H + e), vGancho - g, e + a),
-      rect(H - hondoGancho, H + e + a, vGancho - g, vGancho + g), // los ganchos, por la ventanita
-      rect(-(H + e + a), -(H - hondoGancho), vGancho - g, vGancho + g),
+      rect(-(u1 + W), u1 + W, e, e + W), // por fuera del borde
+      rect(u1, u1 + W, vIn - W, e + W), // los dos lados
+      rect(-(u1 + W), -u1, vIn - W, e + W),
+      rect(r2, u1 + W, vIn - W, vIn), // por dentro, con la raja en medio
+      rect(-(u1 + W), -r2, vIn - W, vIn),
     ];
     let r: Region[] = [];
     for (const q of piezasClip) r = r.length ? union(r, sanitize([q], [])) : sanitize([q], []);
@@ -368,19 +364,18 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     // dentro; con solo el contorno de fuera, el interior entero salía macizo.
     const engordar = (rs: Region[], d: number) => offsetRegions(rs.map((r) => r.outer), rs.flatMap((r) => r.holes), d);
     if (conCalado && macizos.length) zonaCalado = subtract(zonaCalado, engordar(macizos, Math.max(0.6, p.holeWall)));
-    if (conCalado && ventanas.length) zonaCalado = subtract(zonaCalado, offsetRegions(m(ventanas).map((r) => r.outer), [], 1));
+    if (conCalado && muescas.length) zonaCalado = subtract(zonaCalado, offsetRegions(m(muescas).map((r) => r.outer), [], 1));
     // El calado mete una celda si su centro cae dentro, así que una esquina puede
     // pisar un texto: se recortan para dejar siempre pared alrededor de lo macizo.
     let agujeros = !conCalado ? [] : calado(p.holePattern, zonaCalado, Math.max(1, p.holeSpacing), Math.max(0.3, p.holeWall));
     const pared = Math.max(0.6, p.holeWall);
     const protegido = !agujeros.length ? [] : [
       ...(macizos.length ? engordar(macizos, pared) : []),
-      ...(ventanas.length ? offsetRegions(m(ventanas).map((r) => r.outer), [], 1) : []),
+      ...(muescas.length ? offsetRegions(m(muescas).map((r) => r.outer), [], 1) : []),
     ];
     if (agujeros.length && protegido.length) agujeros = limpiar(subtract(agujeros, protegido));
     agujeros = agujeros.length ? limpiar(intersectRegions(agujeros, offsetRegions(dentroS.map((r) => r.outer), [], -pared))) : agujeros;
-    // La ventanita también atraviesa la malla.
-    let plancha = ventanas.length ? limpiar(subtract(dentroS, m(ventanas))) : dentroS;
+    let plancha = dentroS;
     const llena = plancha;
     if (agujeros.length) plancha = subtract(plancha, agujeros);
 
@@ -401,12 +396,14 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     const medio = offsetRegions([outerS], [], -rimW / 2);
     const bordeFuera = limpiar(p.formRimInnerPlate ? subtract(anillo, medio) : anillo);
     const bordeDentro = limpiar(p.formRimInnerPlate ? intersectRegions(anillo, medio) : []);
-    // El borde, con su ventanita: un agujero de arriba abajo.
-    const vent = ventanas.length ? m(ventanas) : [];
+    // El borde, rebajado en la muesca del clip a la cabeza baja.
+    const mu = muescas.length ? m(muescas) : [];
     const conVentana = (rs: Region[]): Mesh => {
       if (!rs.length) return emptyMesh();
-      const sin = vent.length ? limpiar(subtract(rs, vent)) : rs;
-      return sin.length ? solid(sin, 0, H) : emptyMesh();
+      if (!mu.length) return solid(rs, 0, H);
+      const sin = limpiar(subtract(rs, mu));
+      const cab = limpiar(intersectRegions(rs, mu));
+      return merge(sin.length ? solid(sin, 0, H) : emptyMesh(), cab.length ? solid(cab, 0, cabeza) : emptyMesh());
     };
 
     // Lo que va con el borde (su color y su alto): relleno de la muesca, orejita de colgar.

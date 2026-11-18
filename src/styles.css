@@ -1779,3 +1779,20 @@ body {
   gap: 6px;
   margin-top: 6px;
 }
+
+/*
+   Lista abierta de los desplegables: el navegador la pinta con fondo blanco y,
+   como el texto hereda el color claro de la web, las opciones casi no se leían.
+   Con color-scheme oscuro y colores propios en cada opción se ven bien.
+*/
+select {
+  color-scheme: dark;
+}
+select option {
+  background: var(--bed);
+  color: var(--text);
+}
+select option:checked {
+  background: var(--blade);
+  color: #fff;
+}

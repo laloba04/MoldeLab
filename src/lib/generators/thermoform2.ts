@@ -26,7 +26,7 @@
 import type { ElementoTermo, Loop, Mesh, Params, Piece, Pt } from '../../types';
 import { emptyMesh, merge } from '../mesh';
 import { intersectRegions, offsetRegions, sanitize, strokeOpen, subtract, union, type Region } from '../clipper';
-import { boxOf, circle, egg, roundedRect, star } from '../shapes';
+import { boxOf, circle, egg, heart, roundedRect, star } from '../shapes';
 import { pointInPolygon } from '../polygon';
 import { fitDetailToBase, regionsOf } from './catalog-parts';
 import { abombar, domeOf, type Dome } from '../dome';
@@ -87,6 +87,26 @@ function espejoMalla(m: Mesh, cx: number): Mesh {
     }
   }
   return { positions: out };
+}
+
+/** Corazón clásico (la curva de siempre), de ancho `ancho` y su alto natural. */
+export function corazonClasico(cx: number, cy: number, ancho: number): Pt[] {
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (let i = 0; i < 720; i++) {
+    const t = (i / 720) * Math.PI * 2;
+    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  const a = Math.max(10, ancho);
+  const crudo = heart(cx, cy, a, (a * (y1 - y0)) / 32, 180);
+  // Punta y muesca algo redondeadas (r ≈ 3 % del ancho): una punta afilada no se
+  // termoforma ni se imprime bien, y el bloque del molde hacía un pico raro.
+  const r = Math.max(1, a * 0.03);
+  const o = (x: Region[], d: number) => offsetRegions(x.map((q) => q.outer), x.flatMap((q) => q.holes), d, 'round');
+  const suave = mayor(o(o(o(sanitize([crudo], []), r), -2 * r), r));
+  return suave ?? crudo;
 }
 
 /** Gira unos puntos `grados` alrededor de (cx, cy). */
@@ -245,7 +265,12 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
   }
   const fuente = loops.length ? loops : detail;
   const centro = boxOf(fuente);
-  const base = sanitize([formaDelAdorno(p.moldShape, centro.cx, centro.cy, p.targetWidthMm, p.cornerRadius, fuente)], []);
+  // El corazón del Termoformado 2 es el CLÁSICO (muesca honda y lados curvos): el
+  // redondo del termoformado de siempre (cuadrado + dos círculos) se veía aplastado.
+  const base = sanitize(
+    [p.moldShape === 'heart' ? corazonClasico(centro.cx, centro.cy, p.targetWidthMm) : formaDelAdorno(p.moldShape, centro.cx, centro.cy, p.targetWidthMm, p.cornerRadius, fuente)],
+    [],
+  );
   if (!base.length) return [];
   const principal = mayor(base)!;
   const outer = medir(p.formEvenOut === false ? principal : casiSimetrica(principal), p);

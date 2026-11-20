@@ -12,6 +12,7 @@ import { buildProduct, byId } from '../src/lib/catalog';
 import { armarArchivo } from '../src/lib/exportar';
 import { FIGURAS } from '../src/lib/figuras';
 import { FONDO_ROSCA } from '../src/lib/generators/rosca';
+import { sitioRecto } from '../src/lib/generators/thermoform2';
 import { DEFAULTS, type ElementoTermo, type Loop, type Mesh, type Params, type Piece, type Pt } from '../src/types';
 
 let failures = 0;
@@ -284,3 +285,14 @@ if (failures) {
   console.log(`\n${failures} fallo(s).`);
   process.exitCode = 1;
 } else console.log('\nTodo correcto.');
+
+// --- El clip de abajo no cae en una punta (corazón, rombo, escudo) ------------------
+{
+  const rombo: Pt[] = [[0, -40], [30, 0], [0, 40], [-30, 0]];
+  const s = sitioRecto(rombo, 0, 0, [0, -1], 8.6);
+  const lejosPunta = Math.hypot(s.pt[0], s.pt[1] + 40);
+  check('en el rombo el clip se corre a un lado recto, lejos de la punta', lejosPunta > 6 && Math.abs(s.n[0]) > 0.5, `${lejosPunta.toFixed(1)} mm, n=${s.n.map((v) => v.toFixed(2))}`);
+  const redondo: Pt[] = Array.from({ length: 96 }, (_, i) => [45 * Math.cos((2 * Math.PI * i) / 96), 45 * Math.sin((2 * Math.PI * i) / 96)] as Pt);
+  const c = sitioRecto(redondo, 0, 0, [0, -1], 8.6);
+  check('en el círculo sigue abajo del todo', Math.abs(c.pt[0]) < 1 && c.n[1] < -0.99, `${c.pt.map((v) => v.toFixed(2))}`);
+}

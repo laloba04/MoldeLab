@@ -27,6 +27,7 @@ import type { ElementoTermo, Loop, Mesh, Params, Piece, Pt } from '../../types';
 import { emptyMesh, merge } from '../mesh';
 import { intersectRegions, offsetRegions, sanitize, strokeOpen, subtract, union, type Region } from '../clipper';
 import { boxOf, circle, egg, roundedRect, star } from '../shapes';
+import { pointInPolygon } from '../polygon';
 import { fitDetailToBase, regionsOf } from './catalog-parts';
 import { abombar, domeOf, type Dome } from '../dome';
 import { FONDO_ROSCA, medioCuelloRoscado } from './rosca';
@@ -121,6 +122,72 @@ function corteEn(outer: Pt[], cx: number, cy: number, dx: number, dy: number): P
     if (t > 0 && u >= 0 && u <= 1 && t > mejor) mejor = t;
   }
   return [cx + dx * mejor, cy + dy * mejor];
+}
+
+/**
+ * Dónde va un clip: el sitio del contorno más cercano al corte en la dirección
+ * pedida (abajo, a un lado) en el que el borde es RECTO a lo largo de `largo` mm,
+ * con su normal hacia fuera. En una punta (corazón, rombo, escudo) o en un
+ * entrante (estrella) el clip, que es recto, no puede abrazar el borde: se
+ * corre a un tramo recto cercano y se gira con él.
+ */
+export function sitioRecto(outer: Pt[], cx: number, cy: number, dir: Pt, largo: number): { pt: Pt; n: Pt } {
+  const ideal = corteEn(outer, cx, cy, dir[0], dir[1]);
+  // Contorno remuestreado cada 0,25 mm.
+  const paso = 0.25;
+  const pts: Pt[] = [];
+  for (let i = 0; i < outer.length; i++) {
+    const a = outer[i];
+    const b = outer[(i + 1) % outer.length];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const k = Math.max(1, Math.ceil(l / paso));
+    for (let j = 0; j < k; j++) pts.push([a[0] + ((b[0] - a[0]) * j) / k, a[1] + ((b[1] - a[1]) * j) / k]);
+  }
+  const N = pts.length;
+  const medio = Math.max(2, Math.round(largo / 2 / paso));
+  if (N < 4 * medio) return { pt: ideal, n: dir };
+  let mejor: { pt: Pt; n: Pt; nota: number } | null = null;
+  for (let i = 0; i < N; i++) {
+    const a = pts[(i - medio + N) % N];
+    const b = pts[(i + medio) % N];
+    const tx = b[0] - a[0];
+    const ty = b[1] - a[1];
+    const l = Math.hypot(tx, ty);
+    if (l < largo * 0.9) continue;
+    // ¿Recto? Ningún punto del tramo se separa más de 0,3 mm de la cuerda.
+    let desv = 0;
+    for (let j = -medio; j <= medio && desv <= 0.3; j++) {
+      const q = pts[(i + j + N) % N];
+      desv = Math.max(desv, Math.abs(((q[0] - a[0]) * ty - (q[1] - a[1]) * tx) / l));
+    }
+    if (desv > 0.3) continue;
+    let n: Pt = [ty / l, -tx / l];
+    const c = pts[i];
+    if (pointInPolygon([c[0] + n[0] * 0.5, c[1] + n[1] * 0.5], outer)) n = [-n[0], -n[1]];
+    const cos = n[0] * dir[0] + n[1] * dir[1];
+    if (cos < 0.34) continue; // como mucho ~70° girado
+    // Lejos de una punta: ningún otro tramo del contorno a menos de 6 mm (la
+    // muesca entra unos 3 mm y el lado de enfrente no puede caer dentro).
+    const lejos = medio + Math.round(4 / paso);
+    let cerca = false;
+    for (let j = lejos; j < N - lejos && !cerca; j += 2) {
+      const q = pts[(i + j) % N];
+      cerca = Math.hypot(q[0] - c[0], q[1] - c[1]) < 6;
+    }
+    if (cerca) continue;
+    const nota = Math.hypot(c[0] - ideal[0], c[1] - ideal[1]) + 8 * (1 - cos) + Math.abs(c[0] - cx) * 1e-3;
+    if (!mejor || nota < mejor.nota) mejor = { pt: c, n, nota };
+  }
+  return mejor ? { pt: mejor.pt, n: mejor.n } : { pt: ideal, n: dir };
+}
+
+/** Rectángulo girado: centro, normal (a lo `ancho`) y tangente (a lo `largo`). */
+function rectGirado(c: Pt, n: Pt, ancho: number, largo: number): Pt[] {
+  const t: Pt = [-n[1], n[0]];
+  const a = ancho / 2;
+  const b = largo / 2;
+  const q = (s: number, u: number): Pt => [c[0] + n[0] * s + t[0] * u, c[1] + n[1] * s + t[1] * u];
+  return [q(-a, -b), q(a, -b), q(a, b), q(-a, b)];
 }
 
 /** Lo ancho del clip (a lo largo del borde). */
@@ -233,10 +300,11 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
   // Clips: abajo siempre que haya clip; a los lados si se pide (con «Clips», siempre).
   const sitiosClip: { pt: Pt; n: Pt; lado: 'abajo' | 'izq' | 'der' }[] = [];
   if (!conImanes) {
-    sitiosClip.push({ pt: corteEn(outer, cx, cy, 0, -1), n: [0, -1], lado: 'abajo' });
+    const largoSitio = ANCHO_CLIP + 0.6 + 2; // la muesca y 1 mm de borde recto a cada lado
+    sitiosClip.push({ ...sitioRecto(outer, cx, cy, [0, -1], largoSitio), lado: 'abajo' });
     if (p.formSideClips || union_ === 'clips') {
-      sitiosClip.push({ pt: corteEn(outer, cx, cy, -1, 0), n: [-1, 0], lado: 'izq' });
-      sitiosClip.push({ pt: corteEn(outer, cx, cy, 1, 0), n: [1, 0], lado: 'der' });
+      sitiosClip.push({ ...sitioRecto(outer, cx, cy, [-1, 0], largoSitio), lado: 'izq' });
+      sitiosClip.push({ ...sitioRecto(outer, cx, cy, [1, 0], largoSitio), lado: 'der' });
     }
   }
   const holgClip = Math.max(0, p.clipClearance ?? 0.15);
@@ -252,7 +320,7 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     ? sanitize(
         sitiosClip.map(({ pt, n }) => {
           const fondo = 2 * rimW + 2;
-          return n[0] ? roundedRect(pt[0], pt[1], fondo, largoMuesca, 0) : roundedRect(pt[0], pt[1], largoMuesca, fondo, 0);
+          return rectGirado(pt, n, fondo, largoMuesca);
         }),
         [],
       )
@@ -268,7 +336,7 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
           const fondo = 1.85;
           const c: Pt = [pt[0] - n[0] * (v0 + fondo / 2), pt[1] - n[1] * (v0 + fondo / 2)];
           const largo = largoMuesca + 0.2;
-          return n[0] ? roundedRect(c[0], c[1], fondo, largo, 0) : roundedRect(c[0], c[1], largo, fondo, 0);
+          return rectGirado(c, n, fondo, largo);
         }),
         [],
       )
@@ -515,14 +583,11 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
   if (detras && sitiosClip.length) {
     const clip = solid(perfilClip(), 0, ANCHO_CLIP);
     const w2 = ANCHO_CLIP / 2;
-    for (const { pt, lado } of sitiosClip) {
-      // Perfil (u, v) y lo ancho (z) → mundo: u a lo alto desde la juntura, v hacia fuera, z a lo largo del borde.
-      const montaje =
-        lado === 'abajo'
-          ? [0, 0, 1, pt[0] - w2, 0, -1, 0, pt[1], 1, 0, 0, sube]
-          : lado === 'der'
-            ? [0, 1, 0, pt[0], 0, 0, 1, pt[1] - w2, 1, 0, 0, sube]
-            : [0, -1, 0, pt[0], 0, 0, -1, pt[1] + w2, 1, 0, 0, sube];
+    for (const { pt, n, lado } of sitiosClip) {
+      // Perfil (u, v) y lo ancho (z) → mundo: u a lo alto desde la juntura, v hacia fuera (n),
+      // z a lo largo del borde (t, la normal girada 90°).
+      const t: Pt = [-n[1], n[0]];
+      const montaje = [0, n[0], t[0], pt[0] - t[0] * w2, 0, n[1], t[1], pt[1] - t[1] * w2, 1, 0, 0, sube];
       piezas.push({
         id: lado === 'abajo' ? 'clip' : `clip-${lado}`,
         label: lado === 'abajo' ? 'Clip de abajo' : `Clip del lado (${lado === 'izq' ? 'izquierda' : 'derecha'})`,

@@ -409,7 +409,15 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     dondeDibujo.length ? dondeDibujo : sanitize([zonaCupula], []),
     true,
   );
-  const dibujo = juntos.slice(0, detail.length);
+  // «Tamaño de la imagen»: 100 % = lo que cabe en la cúpula; más, y llega a la
+  // pared y a lo plano (se recorta por dentro del borde).
+  const escalaImg = Math.max(0.3, (p.formImageScale ?? 100) / 100);
+  const dibujo0 = juntos.slice(0, detail.length);
+  const cajaImg = dibujo0.length ? boxOf(dibujo0) : null;
+  const dibujo =
+    cajaImg && escalaImg !== 1
+      ? dibujo0.map((l) => ({ ...l, pts: l.pts.map(([x, y]) => [cajaImg.cx + (x - cajaImg.cx) * escalaImg, cajaImg.cy + (y - cajaImg.cy) * escalaImg] as Pt) }))
+      : dibujo0;
   const nombre0 = juntos.slice(detail.length);
   const nombre = nombre0.length && (p.formTextOutline ?? 0) > 0 ? comoLazos(regionsOf(nombre0, p.formTextOutline)) : nombre0;
 

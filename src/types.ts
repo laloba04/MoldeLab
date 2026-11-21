@@ -495,6 +495,8 @@ export interface Params {
   formSlicerDensity: number;
   /** Termoformado 2: cuánto sobresale el dibujo de la imagen sobre la plancha (0 = a ras). */
   formDesignHeight: number;
+  /** Termoformado 2: tamaño de la imagen, en % de lo que cabe en la cúpula. */
+  formImageScale?: number;
   /** Termoformado 2: modo sencillo (solo diseño, forma y colores). */
   formSimple: boolean;
   /** De qué producto se pusieron ya los valores iniciales (para ponerlos también al abrir con ese producto). */
@@ -739,6 +741,7 @@ export const DEFAULTS: Params = {
   formLatticeBySlicer: false,
   formSlicerDensity: 25,
   formDesignHeight: 0,
+  formImageScale: 100,
   formSimple: false,
   inicialDe: '',
   cutoutMode: 'lines',
@@ -1050,6 +1053,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
   formLatticeBySlicer: { toggle: true, label: 'La malla la hace el laminador (plancha maciza)' },
   formSlicerDensity: { label: 'Densidad de la malla (laminador)', unit: '%', min: 10, max: 50, step: 5 },
   formDesignHeight: { label: 'Altura del dibujo sobre la plancha', unit: 'mm', min: 0, max: 2, step: 0.1 },
+  formImageScale: { label: 'Tamaño de la imagen', unit: '%', min: 50, max: 200, step: 5 },
   formSimple: { toggle: true, label: 'Modo sencillo' },
   inicialDe: { text: true, label: '' },
   formColorMold: { select: true, label: 'Color de los moldes', options: [

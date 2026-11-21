@@ -130,7 +130,7 @@ const THERMOFORM2_GROUPS: FieldGroup[] = [
   {
     label: 'Diseño',
     hint: 'Textos e iconos en cada cara, y la imagen y el nombre delante. Van a ras, dentro de la malla.',
-    fields: ['formElements', 'formDesignHeight', 'textFont', 'textBold', 'textSpacing', 'formTextOutline', 'textScale', 'textRot', 'textX', 'textY'],
+    fields: ['formElements', 'formImageScale', 'formDesignHeight', 'textFont', 'textBold', 'textSpacing', 'formTextOutline', 'textScale', 'textRot', 'textX', 'textY'],
     open: true,
     simple: true,
   },

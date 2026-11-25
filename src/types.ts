@@ -927,7 +927,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
     ],
   },
 
-  formHeight: { label: 'Alto del abombado', unit: 'mm', min: 3, max: 40, step: 1 },
+  formHeight: { label: 'Alto del abombado', unit: 'mm', min: 3, max: 80, step: 1 },
   sheetThickness: { label: 'Grosor de la plancha', unit: 'mm', min: 0.4, max: 2, step: 0.1 },
   holeSpacing: { label: 'Separación del calado', unit: 'mm', min: 2, max: 12, step: 0.5 },
   holeWall: { label: 'Pared entre agujeros', unit: 'mm', min: 0.4, max: 3, step: 0.1 },

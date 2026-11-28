@@ -108,6 +108,7 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
   const ancho = Math.max(2, Math.round(0.3 / mmPerPx));
   let lineaOscura: (g: number) => boolean = () => false;
   let gruposColor: ReturnType<typeof gruposDeColor> | undefined;
+  let porColor: Mask[] | undefined;
   if (p.colorAsInk) {
     detailMask = fillEnclosed(detailMask);
     gruposColor = gruposDeColor(img, detailMask);
@@ -118,6 +119,13 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
       const c = gruposColor!.colores[g];
       return lum(c) < umbral && Math.max(...c) - Math.min(...c) < 40;
     };
+    // El dibujo partido por colores, sin rayas en medio: cada color, su máscara
+    // (se tocan unos con otros). Para quien quiera el dibujo tal cual la imagen.
+    const lleno = detailMask;
+    const g = gruposColor;
+    porColor = g.colores
+      .map((_, k) => ({ data: lleno.data.map((v, i) => (v && g.grupo[i] === k ? 1 : 0)), w: lleno.w, h: lleno.h }))
+      .map((mk) => (p.cleanup > 0 ? cleanupMask(mk, p.cleanup) : mk));
     detailMask = cortarEntreColores(detailMask, gruposColor.grupo, ancho);
   }
 
@@ -192,13 +200,21 @@ export function vectorize(img: ImageData, p: Params, textImg?: ImageData | null)
     textLoops = loopsFromMask(p.cleanup > 0 ? cleanupMask(tb, p.cleanup) : tb, p, mmPerPx, 0, 0.5);
   }
 
+  const hex = (c: number[]) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+  const capas = porColor
+    ?.map((mk, k) => ({ ls: loopsFromMask(mk, p, mmPerPx, minArea * 0.005, 0.5), c: hex(gruposColor!.colores[k]) }))
+    .filter((x) => x.ls.some((l) => !l.hole));
+  let colorLoops = capas?.map((x) => x.ls);
+  const colorLoopsColors = capas?.map((x) => x.c);
+
   const box = boxOf(loops.length ? loops : detail);
+  colorLoops = colorLoops?.map((ls) => shiftLoops(ls, -box.cx, -box.cy));
   loops = shiftLoops(loops, -box.cx, -box.cy);
   detail = shiftLoops(detail, -box.cx, -box.cy);
   bands = bands?.map((b) => shiftLoops(b, -box.cx, -box.cy));
   textLoops = textLoops?.length ? shiftLoops(textLoops, -box.cx, -box.cy) : undefined;
 
-  return { loops, detail, bands, textLoops, widthMm: box.w, heightMm: box.h, muestreo: { mmPerPx, cx: box.cx, cy: box.cy } };
+  return { loops, detail, bands, textLoops, colorLoops, colorLoopsColors, widthMm: box.w, heightMm: box.h, muestreo: { mmPerPx, cx: box.cx, cy: box.cy } };
 }
 
 export function buildPieces(s: Silhouette, p: Params): Piece[] {

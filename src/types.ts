@@ -45,6 +45,14 @@ export interface Silhouette {
    * escala y se centra con la misma caja.
    */
   textLoops?: Loop[];
+  /**
+   * Con los colores de la imagen: el dibujo partido por colores, una lista de
+   * lazos por color, sin rayas entre ellos (se tocan). En las mismas coordenadas
+   * que `detail`.
+   */
+  colorLoops?: Loop[][];
+  /** El color de cada lista de `colorLoops` (#rrggbb). */
+  colorLoopsColors?: string[];
   widthMm: number;
   heightMm: number;
 }
@@ -114,6 +122,8 @@ export interface Piece {
   deImagen?: boolean[];
   /** Trozos que solo rellenan la rendija entre dos colores: cogen color, pero no cuentan para encajar el dibujo en la imagen. */
   rendijas?: boolean[];
+  /** Color que ya se sabe de cada trozo de la imagen (#rrggbb), sin tener que buscarlo en ella. */
+  coloresConocidos?: (string | undefined)[];
   /** Ajustes de laminado propios de la pieza (van a su objeto en el proyecto de Bambu). */
   ajustesLaminado?: Record<string, string>;
   /**

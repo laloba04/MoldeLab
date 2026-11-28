@@ -558,7 +558,7 @@ export const PRODUCTS: Entry[] = [
       formMold: true,
     },
     inicialAlAbrir: true,
-    build: (s, p) => buildThermoform2(s.loops, s.detail, p, s.textLoops),
+    build: (s, p) => buildThermoform2(s.loops, s.detail, p, s.textLoops, s.colorLoops, s.colorLoopsColors),
   },
   {
     id: 'roller',

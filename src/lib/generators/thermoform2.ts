@@ -259,14 +259,14 @@ export function ajustesLaminado(id: string, p: Params): Record<string, string> |
   return undefined;
 }
 
-export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[]): Piece[] {
-  return construir(loops, detail, p, textLoops).map((pc) => {
+export function buildThermoform2(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[], colorLoops?: Loop[][], colorLoopsColors?: string[]): Piece[] {
+  return construir(loops, detail, p, textLoops, colorLoops, colorLoopsColors).map((pc) => {
     const a = ajustesLaminado(pc.id, p);
     return a ? { ...pc, ajustesLaminado: a } : pc;
   });
 }
 
-function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[]): Piece[] {
+function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[], colorLoops?: Loop[][], colorLoopsColors?: string[]): Piece[] {
   if (!(loops.length ? loops : detail).length) return [];
 
   // --- La forma (igual que el termoformado de siempre) ------------------------
@@ -275,6 +275,7 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     if (g) {
       loops = g(loops);
       detail = g(detail);
+      colorLoops = colorLoops?.map(g);
     }
   }
   const fuente = loops.length ? loops : detail;
@@ -432,6 +433,19 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     cajaImg && escalaImg !== 1
       ? dibujo0.map((l) => ({ ...l, pts: l.pts.map(([x, y]) => [cajaImg.cx + (x - cajaImg.cx) * escalaImg, cajaImg.cy + (y - cajaImg.cy) * escalaImg] as Pt) }))
       : dibujo0;
+  // Los colores, con el mismo encaje que el dibujo (escala y sitio): de la caja
+  // del dibujo original a la del dibujo ya colocado.
+  const cajaOrig = detail.length ? boxOf(detail) : null;
+  const cajaPuesta = dibujo.length ? boxOf(dibujo) : null;
+  const porColores =
+    colorLoops?.length && cajaOrig && cajaPuesta && cajaOrig.w > 0
+      ? colorLoops.map((ls) =>
+          ls.map((l) => ({
+            ...l,
+            pts: l.pts.map(([x, y]) => [cajaPuesta.cx + ((x - cajaOrig.cx) * cajaPuesta.w) / cajaOrig.w, cajaPuesta.cy + ((y - cajaOrig.cy) * cajaPuesta.w) / cajaOrig.w] as Pt),
+          })),
+        )
+      : null;
   const nombre0 = juntos.slice(detail.length);
   const nombre = nombre0.length && (p.formTextOutline ?? 0) > 0 ? comoLazos(regionsOf(nombre0, p.formTextOutline)) : nombre0;
 
@@ -472,8 +486,22 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     const cupulaS = mp(zonaCupula);
 
     // Trozos de dibujo de esta cara, cada uno con su color y su alto.
-    const trozos: { reg: Region[]; alto: number; color?: string; enrejado: boolean; img?: boolean; rendija?: boolean }[] = [];
-    if (!detras) {
+    const trozos: { reg: Region[]; alto: number; color?: string; enrejado: boolean; img?: boolean; rendija?: boolean; conocido?: string }[] = [];
+    if (!detras && porColores) {
+      // Tal cual la imagen: un trozo por color, pegados unos a otros (sin las
+      // rayas que separan los colores en el dibujo de siempre). Cada uno se
+      // recorta de lo que ya han cogido los anteriores para no solaparse.
+      const h = Math.max(0, p.formDesignHeight ?? 0);
+      // Cada color se encoge 0,05 mm: los lazos de dos colores vecinos se
+      // solapan un pelo al suavizarlos y dos piezas no pueden pisarse. Restar
+      // cada color de los anteriores hacía lo mismo pero tardaba el triple.
+      for (let k = 0; k < porColores.length; k++) {
+        const r0 = regionsOf(porColores[k]);
+        if (!r0.length) continue;
+        const r = intersectRegions(offsetRegions(r0.map((q) => q.outer), r0.flatMap((q) => q.holes), -0.05), dentroS);
+        if (r.length) trozos.push({ reg: r, alto: h, enrejado: false, img: true, conocido: colorLoopsColors?.[k] });
+      }
+    } else if (!detras) {
       const manchas = dibujo.filter((l) => !l.line);
       const lineas = dibujo.filter((l) => l.line);
       const rLineas = lineas.length ? regionsOf(lineas) : [];
@@ -577,13 +605,14 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     const cuello = conRosca ? medioCuelloRoscado(cx, yNace, rCuello, largoCuello, detras ? 0.5 : 0, caja.maxY - yNace, paso) : emptyMesh();
 
     const cuerpo = merge(solid(cuerpoReg, 0, t), conVentana(bordeDentro));
-    const partes: { m: Mesh; color?: string; img?: boolean; rendija?: boolean }[] = [
+    const partes: { m: Mesh; color?: string; img?: boolean; rendija?: boolean; conocido?: string }[] = [
       { m: merge(conVentana(bordeFuera), bordeReg.length ? solid(bordeReg, 0, H) : emptyMesh(), orejas, cuello), color: auto(p.formColorRim) },
       ...trozos.map((x, i) => ({
         m: x.img ? solid(regTrozos[i], t, t + GROSOR_DIBUJO + x.alto) : solid(regTrozos[i], 0, t + x.alto),
         color: x.color,
         img: x.img,
         rendija: x.rendija,
+        conocido: x.conocido,
       })),
     ].filter((x) => x.m.positions.length);
     const textMesh = nombreReg.length ? solid(nombreReg, 0, t + Math.max(0, p.formDesignHeight ?? 0)) : undefined;
@@ -614,6 +643,7 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
       partTints: c.partes.map((x) => x.color),
       deImagen: c.partes.map((x) => !!x.img),
       rendijas: c.partes.map((x) => !!x.rendija),
+      coloresConocidos: c.partes.map((x) => x.conocido),
       textMesh: c.textMesh,
       dome: c.domo,
       noMark: true,

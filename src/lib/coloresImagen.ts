@@ -146,6 +146,12 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
       .filter((t) => t.pts.length && t.caja.w > 0 && t.caja.h > 0);
     // El encaje, solo con los trozos de verdad (las rendijas rellenas caen sobre
     // el contorno y lo despistan); el color, luego, a todos.
+    // Los trozos cuyo color ya se sabe (el dibujo partido por colores) lo cogen
+    // tal cual, sin buscarlo en la imagen.
+    for (const t of trozos) {
+      const sabido = pz.coloresConocidos?.[t.i];
+      if (sabido) crudos.push({ clave: `${pz.id}#p${t.i}`, c: [1, 3, 5].map((k) => parseInt(sabido.slice(k, k + 2), 16)) as RGB });
+    }
     const todos = trozos;
     const base = trozos.filter((t) => !pz.rendijas?.[t.i]);
     if (!base.length) continue;
@@ -203,6 +209,7 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
     if (!mejor || puntos < total * 0.5) continue;
 
     for (const t of todos) {
+      if (pz.coloresConocidos?.[t.i]) continue;
       const sitios = t.pts.map((p) => mejor!(p));
       const cs = sitios.map((p) => pixel(p)).filter((c): c is RGB => !!c);
       const c = colorMayoritario(cs);
@@ -289,6 +296,7 @@ export function separarTrozos(pc: Piece): Piece {
   const tintes: (string | undefined)[] = [];
   const img: boolean[] = [];
   const rend: boolean[] = [];
+  const conoc: (string | undefined)[] = [];
   let cambia = false;
   partes.forEach((pm, i) => {
     // Lo que no sale de la imagen (un texto, un icono, el borde) se queda entero.
@@ -300,6 +308,7 @@ export function separarTrozos(pc: Piece): Piece {
       tintes.push(pc.partTints?.[i]);
       img.push(esDeImagen(pc, i));
       rend.push(!!pc.rendijas?.[i]);
+      conoc.push(pc.coloresConocidos?.[i]);
     }
   });
   if (!cambia) return pc;
@@ -309,6 +318,7 @@ export function separarTrozos(pc: Piece): Piece {
     partTints: pc.partTints ? tintes : undefined,
     deImagen: pc.deImagen ? img : undefined,
     rendijas: pc.rendijas ? rend : undefined,
+    coloresConocidos: pc.coloresConocidos ? conoc : undefined,
   };
 }
 

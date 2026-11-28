@@ -112,6 +112,8 @@ export interface Piece {
    * colores). Sin esto, se toman por de la imagen los que no traen color propio.
    */
   deImagen?: boolean[];
+  /** Trozos que solo rellenan la rendija entre dos colores: cogen color, pero no cuentan para encajar el dibujo en la imagen. */
+  rendijas?: boolean[];
   /** Ajustes de laminado propios de la pieza (van a su objeto en el proyecto de Bambu). */
   ajustesLaminado?: Record<string, string>;
   /**

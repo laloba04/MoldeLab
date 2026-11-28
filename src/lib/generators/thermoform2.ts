@@ -222,6 +222,20 @@ const ANCHO_CLIP = 5.4;
  * - Moldes: capas de 0,28 mm y 10 % de relleno (lo que dicen sus etiquetas).
  * - Tuerca y clip: macizos por fuera y con borde de adherencia (son pequeños).
  */
+/** Área de una región (con sus huecos), en mm². */
+function areaRegion(r: Region): number {
+  const a = (pts: Pt[]) => {
+    let s = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[(i + 1) % pts.length];
+      s += x0 * y1 - x1 * y0;
+    }
+    return Math.abs(s) / 2;
+  };
+  return a(r.outer) - r.holes.reduce((t, h) => t + a(h), 0);
+}
+
 /** Grosor del dibujo de la imagen encima de la plancha (el del kit). */
 export const GROSOR_DIBUJO = 0.8;
 
@@ -458,7 +472,7 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     const cupulaS = mp(zonaCupula);
 
     // Trozos de dibujo de esta cara, cada uno con su color y su alto.
-    const trozos: { reg: Region[]; alto: number; color?: string; enrejado: boolean; img?: boolean }[] = [];
+    const trozos: { reg: Region[]; alto: number; color?: string; enrejado: boolean; img?: boolean; rendija?: boolean }[] = [];
     if (!detras) {
       const manchas = dibujo.filter((l) => !l.line);
       const lineas = dibujo.filter((l) => l.line);
@@ -467,6 +481,18 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
       const h = Math.max(0, p.formDesignHeight ?? 0);
       if (rManchas.length) trozos.push({ reg: intersectRegions(rLineas.length ? subtract(rManchas, rLineas) : rManchas, dentroS), alto: h, enrejado: false, img: true });
       if (rLineas.length) trozos.push({ reg: intersectRegions(rLineas, dentroS), alto: h, enrejado: false, img: true });
+      // Las rendijas entre colores (donde el vectorizador separa un color de otro,
+      // casi siempre sobre el contorno oscuro del dibujo) dejaban ver la malla: con
+      // un escudo de muchos colores salía lleno de huecos y letras rotas. Se
+      // rellenan, cada rendija como un trozo más que coge el color de la imagen.
+      if (rManchas.length || rLineas.length) {
+        const todo = union(rManchas, rLineas);
+        const rr = 0.8;
+        const gordo = offsetRegions(todo.map((q) => q.outer), todo.flatMap((q) => q.holes), rr, 'round');
+        const cerrado = offsetRegions(gordo.map((q) => q.outer), gordo.flatMap((q) => q.holes), -rr, 'round');
+        const rendijas = intersectRegions(subtract(cerrado, todo), dentroS);
+        for (const r of rendijas) if (areaRegion(r) > 0.04) trozos.push({ reg: [r], alto: h, enrejado: false, img: true, rendija: true });
+      }
     }
     for (const el of elementos.filter((e) => (e.cara === 'detras') === detras)) {
       const reg = regionDe(el, cupulaS);
@@ -551,12 +577,13 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
     const cuello = conRosca ? medioCuelloRoscado(cx, yNace, rCuello, largoCuello, detras ? 0.5 : 0, caja.maxY - yNace, paso) : emptyMesh();
 
     const cuerpo = merge(solid(cuerpoReg, 0, t), conVentana(bordeDentro));
-    const partes: { m: Mesh; color?: string; img?: boolean }[] = [
+    const partes: { m: Mesh; color?: string; img?: boolean; rendija?: boolean }[] = [
       { m: merge(conVentana(bordeFuera), bordeReg.length ? solid(bordeReg, 0, H) : emptyMesh(), orejas, cuello), color: auto(p.formColorRim) },
       ...trozos.map((x, i) => ({
         m: x.img ? solid(regTrozos[i], t, t + GROSOR_DIBUJO + x.alto) : solid(regTrozos[i], 0, t + x.alto),
         color: x.color,
         img: x.img,
+        rendija: x.rendija,
       })),
     ].filter((x) => x.m.positions.length);
     const textMesh = nombreReg.length ? solid(nombreReg, 0, t + Math.max(0, p.formDesignHeight ?? 0)) : undefined;
@@ -586,6 +613,7 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[])
       overlayParts: c.partes.map((x) => x.m),
       partTints: c.partes.map((x) => x.color),
       deImagen: c.partes.map((x) => !!x.img),
+      rendijas: c.partes.map((x) => !!x.rendija),
       textMesh: c.textMesh,
       dome: c.domo,
       noMark: true,

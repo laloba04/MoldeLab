@@ -144,8 +144,12 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
       .filter(({ i, pm }) => esDeImagen(pz, i) && pm.positions.length)
       .map(({ i, pm }) => ({ i, caja: cajaDe(verticesXY(pm.positions)), pts: puntosArriba(pm.positions, 40) }))
       .filter((t) => t.pts.length && t.caja.w > 0 && t.caja.h > 0);
-    if (!trozos.length) continue;
-    const cajaTrozos = cajaDe(trozos.flatMap((t) => [[t.caja.x0, t.caja.y0], [t.caja.x1, t.caja.y1]] as Pt[]));
+    // El encaje, solo con los trozos de verdad (las rendijas rellenas caen sobre
+    // el contorno y lo despistan); el color, luego, a todos.
+    const todos = trozos;
+    const base = trozos.filter((t) => !pz.rendijas?.[t.i]);
+    if (!base.length) continue;
+    const cajaTrozos = cajaDe(base.flatMap((t) => [[t.caja.x0, t.caja.y0], [t.caja.x1, t.caja.y1]] as Pt[]));
 
     type Encaje = (p: Pt) => Pt;
     // Derecho, en espejo, volteado o girado media vuelta.
@@ -162,7 +166,7 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
      */
     const nota = (f: Encaje) => {
       let n = 0;
-      for (const t of trozos) {
+      for (const t of base) {
         const cuenta = new Map<string, number>();
         for (const p of t.pts) {
           const c = pixel(f(p));
@@ -180,9 +184,9 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
     let mejor: Encaje | null = null;
     let puntos = 0;
     const candidatos: [ReturnType<typeof cajaDe>, ReturnType<typeof cajaDe>][] = [[cajaTrozos, cajaDibujo]];
-    const grandes = [...trozos].sort((a, b) => b.caja.w * b.caja.h - a.caja.w * a.caja.h).slice(0, 6);
+    const grandes = [...base].sort((a, b) => b.caja.w * b.caja.h - a.caja.w * a.caja.h).slice(0, 6);
     for (const t of grandes) for (const d of islas) candidatos.push([t.caja, d]);
-    const total = trozos.reduce((t, x) => t + x.pts.length, 0);
+    const total = base.reduce((t, x) => t + x.pts.length, 0);
     const areaDibujo = cajaDibujo.w * cajaDibujo.h;
     for (const [c, d] of candidatos)
       for (const giro of [[1, 1], [-1, 1], [1, -1], [-1, -1]] as [number, number][]) {
@@ -198,7 +202,7 @@ export function coloresDeZonas(piezas: Piece[], sil: Silhouette, img: ImageData)
       }
     if (!mejor || puntos < total * 0.5) continue;
 
-    for (const t of trozos) {
+    for (const t of todos) {
       const sitios = t.pts.map((p) => mejor!(p));
       const cs = sitios.map((p) => pixel(p)).filter((c): c is RGB => !!c);
       const c = colorMayoritario(cs);
@@ -284,6 +288,7 @@ export function separarTrozos(pc: Piece): Piece {
   const nuevas: typeof partes = [];
   const tintes: (string | undefined)[] = [];
   const img: boolean[] = [];
+  const rend: boolean[] = [];
   let cambia = false;
   partes.forEach((pm, i) => {
     // Lo que no sale de la imagen (un texto, un icono, el borde) se queda entero.
@@ -294,6 +299,7 @@ export function separarTrozos(pc: Piece): Piece {
       nuevas.push(trozos.length > 1 ? { positions: c } : pm);
       tintes.push(pc.partTints?.[i]);
       img.push(esDeImagen(pc, i));
+      rend.push(!!pc.rendijas?.[i]);
     }
   });
   if (!cambia) return pc;
@@ -302,6 +308,7 @@ export function separarTrozos(pc: Piece): Piece {
     overlayParts: nuevas,
     partTints: pc.partTints ? tintes : undefined,
     deImagen: pc.deImagen ? img : undefined,
+    rendijas: pc.rendijas ? rend : undefined,
   };
 }
 

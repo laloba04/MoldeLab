@@ -80,7 +80,8 @@ function sirve(f: Field, p: Params, campos: Field[], hayImagen: boolean): boolea
   if (f === 'formMagnets' || f === 'formMagnetDia' || f === 'formMagnetH' || f === 'formMagnetClear') return p.formJoin === 'imanes';
   if (f === 'clipClearance') return p.formJoin !== 'imanes';
   if (p.product === 'thermoform2') {
-    if (['formScrewDia', 'threadPitch', 'neckLength', 'capClearance', 'ringOuter', 'ringInner', 'formSideClips'].includes(f)) return p.formJoin === 'rosca';
+    if (f === 'formSideClips') return p.formJoin === 'rosca';
+    if (['formScrewDia', 'threadPitch', 'neckLength', 'capClearance', 'ringOuter', 'ringInner'].includes(f)) return p.formJoin === 'rosca' || p.formJoin === 'rosca3';
     if (['holePattern', 'holeSpacing', 'holeWall'].includes(f)) return !p.formLatticeBySlicer;
     if (f === 'formSlicerDensity') return p.formLatticeBySlicer;
     // Lo del nombre, solo si hay nombre o imagen; lo del diseño de la imagen, solo con imagen.

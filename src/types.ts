@@ -467,7 +467,7 @@ export interface Params {
   /** Dejar simétrica del todo una forma que lo es casi (una sola pareja de moldes). */
   formEvenOut: boolean;
   /** Cómo se cierran las dos planchas por abajo y los lados: pinza o imanes. La tuerca va siempre (cuelga de ella). */
-  formJoin: 'rosca' | 'clips' | 'imanes';
+  formJoin: 'rosca' | 'rosca3' | 'clips' | 'imanes';
   /** Dos pinzas más para los lados. */
   formSideClips: boolean;
   /** Imanes: cuántos, su diámetro, su alto y la holgura del bolsillo. */
@@ -975,6 +975,7 @@ export const FIELD_META: Record<Field, FieldMeta> = {
     label: 'Unión de las dos mitades',
     options: [
       { value: 'rosca', label: 'Rosca (arriba) + clip (abajo)' },
+      { value: 'rosca3', label: 'Rosca (arriba) + 3 clips (abajo y lados)' },
       { value: 'clips', label: 'Clips' },
       { value: 'imanes', label: 'Imanes' },
     ],

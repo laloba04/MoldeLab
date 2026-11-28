@@ -301,7 +301,7 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[],
   const margenPlano = 2.5; // plano entre el borde y la cúpula: aquí pisa el molde y van las ventanitas
   const tipoPared = p.formProfile ?? 'suave';
   const union_ = p.formJoin ?? 'rosca';
-  const conRosca = union_ === 'rosca';
+  const conRosca = union_ === 'rosca' || union_ === 'rosca3';
   const conImanes = union_ === 'imanes';
 
   // La rosca no puede bajar del plano de la cama: su radio por fuera cabe en el borde.
@@ -337,12 +337,13 @@ function construir(loops: Loop[], detail: Loop[], p: Params, textLoops?: Loop[],
   const dentro = offsetRegions([outer], [], -rimW); // la plancha, por dentro del borde
   const zonaCupula = mayor(offsetRegions([outer], [], -(rimW + margenPlano))) ?? outer;
 
-  // Clips: abajo siempre que haya clip; a los lados si se pide (con «Clips», siempre).
+  // Clips: abajo siempre que haya clip; a los lados si se pide (con «Clips» y con
+  // «Rosca + 3 clips», siempre).
   const sitiosClip: { pt: Pt; n: Pt; lado: 'abajo' | 'izq' | 'der' }[] = [];
   if (!conImanes) {
     const largoSitio = ANCHO_CLIP + 0.6 + 2; // la muesca y 1 mm de borde recto a cada lado
     sitiosClip.push({ ...sitioRecto(outer, cx, cy, [0, -1], largoSitio), lado: 'abajo' });
-    if (p.formSideClips || union_ === 'clips') {
+    if (p.formSideClips || union_ === 'clips' || union_ === 'rosca3') {
       sitiosClip.push({ ...sitioRecto(outer, cx, cy, [-1, 0], largoSitio), lado: 'izq' });
       sitiosClip.push({ ...sitioRecto(outer, cx, cy, [1, 0], largoSitio), lado: 'der' });
     }
